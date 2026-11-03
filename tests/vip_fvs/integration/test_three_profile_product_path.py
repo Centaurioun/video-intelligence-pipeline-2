@@ -595,7 +595,7 @@ def test_coordinator_index_and_query_propagate_all_three_profile_spaces(
     assert indexed["indexed"] == 1
     assert indexed["skipped"] == indexed["reused"] == indexed["failed"] == 0
     assert indexed["snapshot_evidence"] is None
-    assert indexed["runtime"]["fake_embedder_used"] is True
+    assert indexed["runtime"]["fake"] is True
     assert len(engine.index_calls) == 1
     assert engine.query_calls == []
     assert engine.index_calls[0][2] == expected_spec
@@ -1090,7 +1090,7 @@ def test_cli_and_coordinator_refusal_ordering_prevents_downstream_side_effects(
         (
             [
                 "query-local",
-                "--query-modality",
+                "--modality",
                 "image-reference",
                 "--reference-id",
                 "asset-ref:clip-01",
@@ -1104,7 +1104,7 @@ def test_cli_and_coordinator_refusal_ordering_prevents_downstream_side_effects(
                 "--model-profile-json",
                 str(so400m_path),
             ],
-            "QUERY_MODALITY_NOT_EXECUTABLE:image_reference",
+            "QUERY_MODALITY_NOT_EXECUTABLE:IMAGE_REFERENCE",
         ),
     ]
 
