@@ -19,7 +19,6 @@ __pycache__/
 qdrant_storage/
 cache/
 caches/
-graft/
 
 # Models and media are local research/production inputs, not repository assets.
 models/
