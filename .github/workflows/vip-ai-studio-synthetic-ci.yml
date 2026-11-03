@@ -1,0 +1,64 @@
+name: VIP AI Studio — synthetic Python CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vip-ai-studio-synthetic-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate1-synthetic:
+    name: Gate-1 model-free / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.14']
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements/gate0.lock
+
+      - name: Install synthetic test dependencies only
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements/gate0.lock
+          python -m pip install --disable-pip-version-check 'jsonschema==4.26.0' 'numpy>=2.3,<3' 'pillow>=11.1,<13'
+
+      - name: Check Python syntax
+        run: python -m compileall -q src experiments tests
+
+      - name: Run bounded Gate-1 and product-path synthetic regressions
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q \
+            experiments/persistent_local_index/tests/test_model_profile.py \
+            experiments/persistent_local_index/tests/test_siglip2_native.py \
+            experiments/persistent_local_index/tests/test_siglip2_session.py \
+            tests/gate1/compat/test_three_arm_compat.py \
+            tests/vip_fvs/unit/test_semantic_index.py \
+            tests/vip_fvs/unit/test_local_semantic.py \
+            tests/vip_fvs/unit/test_query_modality.py \
+            tests/vip_fvs/integration/test_product_index_query.py \
+            tests/vip_fvs/integration/test_multi_source_retrieval.py \
+            tests/vip_fvs/integration/test_three_profile_product_path.py
