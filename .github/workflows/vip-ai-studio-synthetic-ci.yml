@@ -69,3 +69,47 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           python -m pytest -q tests/vip_fvs/integration/test_three_profile_product_path.py
+
+      - name: Check MEGA-02 deliverables when development files are present
+        run: |
+          delivered=0
+          for file in \
+            src/vip_fvs/query_batch.py \
+            src/vip_fvs/synthetic_profiles.py \
+            src/vip_fvs/batch_retrieval.py \
+            src/vip_fvs/three_arm_batch.py \
+            src/vip_fvs/batch_report.py \
+            tests/vip_fvs/unit/test_query_batch_contract.py \
+            tests/vip_fvs/integration/test_batch_retrieval_three_arm.py \
+            tests/vip_fvs/integration/test_batch_cli_synthetic.py; do
+            if [[ -f "$file" ]]; then delivered=1; fi
+          done
+          if [[ "$delivered" -eq 1 ]]; then
+            for file in \
+              src/vip_fvs/query_batch.py \
+              src/vip_fvs/synthetic_profiles.py \
+              src/vip_fvs/batch_retrieval.py \
+              src/vip_fvs/three_arm_batch.py \
+              src/vip_fvs/batch_report.py \
+              tests/vip_fvs/unit/test_query_batch_contract.py \
+              tests/vip_fvs/integration/test_batch_retrieval_three_arm.py \
+              tests/vip_fvs/integration/test_batch_cli_synthetic.py; do
+              if [[ ! -f "$file" ]]; then
+                echo "::error::MEGA-02 is incomplete: missing $file"
+                exit 1
+              fi
+            done
+          else
+            echo "MEGA-02 is not submitted; existing synthetic suite remains active."
+          fi
+
+      - name: Test MEGA-02 multi-source batch and three-arm synthetic lab
+        if: hashFiles('src/vip_fvs/query_batch.py') != ''
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q \
+            tests/vip_fvs/unit/test_query_batch_contract.py \
+            tests/vip_fvs/integration/test_batch_retrieval_three_arm.py \
+            tests/vip_fvs/integration/test_batch_cli_synthetic.py
