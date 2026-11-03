@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://video-intelligence-pipeline.invalid/schema/vip_fvs/real_receipt.v1.json",
+  "title": "VIP FVS local REAL lifecycle receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "receipt_id", "run_id", "attempt_id", "status", "scope", "source", "authorization", "artifacts", "decision", "plan", "export_eligible", "network_allowed", "model_download_allowed", "NOT_OBSERVED", "refusal", "record_digest"],
+  "properties": {
+    "schema": {"const": "vip_fvs.real_receipt.v1"},
+    "record_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "receipt_id": {"type": "string", "minLength": 1}, "run_id": {"type": "string", "minLength": 1}, "attempt_id": {"type": "string", "minLength": 1},
+    "scope": {"const": "REAL_LOCAL_ONLY"},
+    "status": {"enum": ["PREPARED", "AWAITING_EDITORIAL_DECISION", "DECISION_RECORDED", "PLAN_BUILT", "REJECTED", "MODIFICATION_REQUESTED", "REFUSED"]},
+    "export_eligible": {"const": false},
+    "network_allowed": {"const": false},
+    "model_download_allowed": {"const": false},
+    "NOT_OBSERVED": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "source": {"type": "object", "additionalProperties": false, "required": ["source_revision_id", "source_sha256", "source_byte_count", "selected_stream_index", "timebase", "probe_artifact_ref", "probe_digest"], "properties": {"source_revision_id": {"type": "string", "minLength": 1}, "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "source_byte_count": {"type": "integer", "minimum": 0}, "selected_stream_index": {"type": "integer", "minimum": 0}, "timebase": {"type": "object", "additionalProperties": false, "required": ["num", "den"], "properties": {"num": {"type": "integer", "minimum": 1}, "den": {"type": "integer", "minimum": 1}}}, "probe_artifact_ref": {"type": "string", "minLength": 1}, "probe_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "authorization": {"type": "object", "additionalProperties": false, "required": ["discovery_policy_ref", "refinement_policy_ref", "policy_digest", "scope_digest"], "properties": {"discovery_policy_ref": {"type": "string", "minLength": 1}, "refinement_policy_ref": {"type": "string", "minLength": 1}, "policy_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "scope_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "artifacts": {"type": "object", "additionalProperties": false, "required": ["review_bundle_ref", "review_bundle_digest", "review_bundle_dependency_digest", "probe_ref", "probe_digest"], "properties": {
+      "review_bundle_ref": {"type": "string", "minLength": 1}, "review_bundle_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "review_bundle_dependency_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "probe_ref": {"type": "string", "minLength": 1}, "probe_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+      "decision_ref": {"type": "string", "minLength": 1}, "decision_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "decision_class": {"enum": ["ACCEPT", "REJECT", "MODIFY"]}, "disposition": {"type": "string", "minLength": 1}, "plan_ref": {"type": "string", "minLength": 1}, "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "mapping_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "placement_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    }},
+    "decision": {"type": ["object", "null"], "additionalProperties": false, "required": ["decision_ref", "decision_digest", "decision_class", "disposition"], "properties": {"decision_ref": {"type": "string", "minLength": 1}, "decision_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "decision_class": {"enum": ["ACCEPT", "REJECT", "MODIFY"]}, "disposition": {"type": "string", "minLength": 1}}},
+    "plan": {"type": ["object", "null"], "additionalProperties": false, "required": ["plan_ref", "plan_digest", "mapping_digest", "placement_digest"], "properties": {"plan_ref": {"type": "string", "minLength": 1}, "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "mapping_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "placement_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "refusal": {"type": ["object", "null"], "additionalProperties": false, "required": ["reason_code", "message"], "properties": {"reason_code": {"type": "string", "minLength": 1}, "message": {"type": "string", "minLength": 1}}}
+  }
+}

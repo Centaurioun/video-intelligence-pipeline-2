@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate1.comparison_contract.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "comparison_id",
+    "execution_mode",
+    "question",
+    "estimand",
+    "changed_axis",
+    "pinned_controls",
+    "arm_ids",
+    "operation",
+    "primary_metric",
+    "decision_rule",
+    "validity_rules",
+    "dependency_refs",
+    "policy_eligibility",
+    "tie_rule",
+    "retry_policy",
+    "resource_budget",
+    "owner_approval_ref"
+  ],
+  "properties": {
+    "comparison_id": {"type": "string", "minLength": 1},
+    "execution_mode": {"enum": ["SYNTHETIC", "REAL"]},
+    "question": {"type": "string", "minLength": 1},
+    "estimand": {"type": "string", "minLength": 1},
+    "changed_axis": {"enum": ["capability_revision", "provider_family", "operation", "input_mode", "requested_model", "resolved_backend", "runtime_revision", "config_digest", "space_id", "window_profile_digest", "metric", "normalization"]},
+    "pinned_controls": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(capability_revision|provider_family|operation|input_mode|requested_model|resolved_backend|runtime_revision|config_digest|space_id|window_profile_digest|metric|normalization)$": {"type": "string", "minLength": 1}
+      },
+      "minProperties": 1
+    },
+    "arm_ids": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true
+    },
+    "operation": {"enum": ["embedding"]},
+    "primary_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_id", "k", "min_delta", "require_complete_coverage"],
+      "properties": {
+        "metric_id": {"type": "string", "minLength": 1},
+        "k": {"type": "integer", "minimum": 1},
+        "min_delta": {"type": "number"},
+        "require_complete_coverage": {"type": "boolean"}
+      }
+    },
+    "decision_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["comparison"],
+      "properties": {
+        "comparison": {"enum": ["paired_difference", "difference"]},
+        "threshold": {"type": "number"},
+        "direction": {"enum": ["higher_is_better", "lower_is_better"]}
+      }
+    },
+    "validity_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "require_complete_coverage": {"type": "boolean"},
+        "max_failure_rate": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "dependency_refs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gate0_terminal_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+        "gate0_dependency_state": {"type": "string", "minLength": 1},
+        "spec_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "canonical_contract_blob": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "policy_eligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {"^[A-Za-z0-9._:-]+$": {"type": "string", "minLength": 1}}
+    },
+    "tie_rule": {"type": "string", "minLength": 1},
+    "retry_policy": {"type": "string", "minLength": 1},
+    "resource_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_wall_time_ms": {"type": "number", "minimum": 0},
+        "max_cpu_time_ms": {"type": "number", "minimum": 0},
+        "max_memory_bytes": {"type": "integer", "minimum": 0},
+        "max_attempts": {"type": "integer", "minimum": 1}
+      }
+    },
+    "owner_approval_ref": {"type": "string", "minLength": 1}
+  }
+}

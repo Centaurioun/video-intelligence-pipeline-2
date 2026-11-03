@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate1.policy_decision.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["record_id", "policy_decision_id", "decision", "processing_boundary"],
+  "properties": {
+    "record_id": {"type": "string", "minLength": 1},
+    "policy_decision_id": {"type": "string", "minLength": 1},
+    "decision": {"enum": ["ALLOW", "DENY", "EXPIRED", "REVOKED"]},
+    "processing_boundary": {"enum": ["SYNTHETIC_TEST_ONLY", "LOCAL_ONLY", "PROVIDER_EGRESS"]},
+    "expires_at": {"type": ["string", "null"], "format": "date-time"},
+    "revoked": {"type": "boolean"}
+  }
+}

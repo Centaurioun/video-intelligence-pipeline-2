@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vip_fvs.corpus_separation_ref.v1",
+  "title": "VIP FVS corpus separation evidence reference v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_id", "artifact_schema_version", "canonical_content_sha256", "authorized_root_id", "issuer_policy_ref"],
+  "properties": {
+    "schema_version": {"const": "vip_fvs.corpus_separation_ref.v1"},
+    "artifact_id": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "\\S"},
+    "artifact_schema_version": {"const": "vip_fvs.corpus_separation_evidence.v1"},
+    "canonical_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "authorized_root_id": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "\\S"},
+    "issuer_policy_ref": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "\\S"}
+  }
+}

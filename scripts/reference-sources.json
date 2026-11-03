@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "description": "Pinned, sparse Phase-0 reference checkouts. Paths are deliberate research working copies, not vendored dependencies.",
+  "references": [
+    {
+      "id": "videoduplicatefinder",
+      "clone_url": "https://github.com/Centaurioun/videoduplicatefinder.git",
+      "default_branch": "master",
+      "commit": "657605427548d37f4b49402cd57b152588671c0a",
+      "sparse_patterns": ["/README.md", "/docs/", "/VDF.CLI/Program.cs", "/VDF.CLI/Commands/", "/VDF.CLI/Output/ResultFormatter.cs", "/VDF.Core/ScanEngine.cs", "/VDF.Core/Settings.cs", "/VDF.Core/ScanEngine_AiPartial.cs", "/VDF.Core/ViewModels/DuplicateItem.cs", "/VDF.Core/DuplicateFlags.cs", "/VDF.Core/AI/", "/VDF.Core/DatabaseWrapper.cs", "/VDF.Core/FileEntry.cs", "/VDF.Core/Utils/DatabaseUtils.cs", "/VDF.Core/Chromaprint/", "/VDF.Core/FFTools/", "/VDF.Core/Utils/DriveScanPlanner.cs"]
+    },
+    {
+      "id": "video2reel",
+      "clone_url": "https://github.com/Centaurioun/video2reel.git",
+      "default_branch": "master",
+      "commit": "08ec16911dae1d1b2986c82c96b2cb64a20e677a",
+      "sparse_patterns": ["/NEW_WORKFLOW.md", "/backend/API_DOCUMENTATION.md", "/backend/service/twelvelabs_service.py", "/backend/service/video_editor_service.py", "/backend/routes/api_routes.py", "/backend/requirements.txt", "/backend/.gitignore", "/frontend/app/analyze/page.tsx", "/frontend/lib/api.ts"]
+    },
+    {
+      "id": "indexing_tooling",
+      "clone_url": "https://github.com/Centaurioun/Indexing-Tooling.git",
+      "default_branch": "main",
+      "commit": "9bff310264ebd466c99a569cba9d111c570de003",
+      "sparse_patterns": ["/README.md", "/ADVANCED_DEPLOYMENT_FIXES.md", "/app.py", "/requirements.txt", "/.gitignore"]
+    },
+    {
+      "id": "twelve_labs_content_recommendation",
+      "clone_url": "https://github.com/Centaurioun/Twelve-Labs-Content-Recommendation.git",
+      "default_branch": "master",
+      "commit": "3747cf1e88f153a0a80ce534e9a37e13435ab85a",
+      "sparse_patterns": ["/README.md", "/backend-api/app.py", "/backend-api/ingest_videos.py", "/backend-api/requirements.txt"]
+    },
+    {
+      "id": "twelve_labs_content_intelligence",
+      "clone_url": "https://github.com/Centaurioun/Twelve-Labs-Content-Intelligence.git",
+      "default_branch": "main",
+      "commit": "21f5fa5f970bb7908a4e8043ca17d244a66d9470",
+      "sparse_patterns": ["/README.md", "/app.py", "/static/js/", "/templates/", "/requirements.txt", "/.gitignore"]
+    },
+    {
+      "id": "sage",
+      "clone_url": "https://github.com/Centaurioun/SAGE.git",
+      "default_branch": "main",
+      "commit": "fe6facc507fb7b65e806adc45224b971aca3fc1e",
+      "sparse_patterns": ["/README.md", "/backend/app.py", "/backend/env.example", "/backend/requirements.txt", "/frontend/src/app/analysis/page.tsx", "/frontend/src/app/page.tsx", "/frontend/src/lib/api.ts", "/frontend/package.json", "/docs/LARGE_VIDEO_HANDLING.md", "/docs/UPLOAD_PROCESS.md", "/docs/DEVELOPER_GUIDE.md"]
+    },
+    {
+      "id": "twelve_labs_video_deepresearch",
+      "clone_url": "https://github.com/Hrishikesh332/TwelveLabs-Video-DeepResearch.git",
+      "default_branch": "main",
+      "commit": "07efb1f0c267caa050b5470ca49b60aae9eb1f95",
+      "sparse_patterns": ["/README.md", "/backend/app.py", "/backend/routes/api_routes.py", "/backend/service/twelvelabs_service.py", "/backend/service/sonar_service.py", "/backend/instructions/video_analysis_prompt.md", "/backend/instructions/research_prompt.md", "/backend/requirements.txt", "/backend/.env.example"]
+    },
+    {
+      "id": "twelve_labs_claude_plugin",
+      "clone_url": "https://github.com/twelvelabs-io/twelve-labs-claude-code-plugin.git",
+      "default_branch": "main",
+      "commit": "c9d4936dbee87ecfd4fb8c54f7369d9b83439f14",
+      "sparse_patterns": ["/LICENSE", "/README.md", "/.claude-plugin/", "/.mcp.json", "/.twelvelabs/", "/hooks/", "/commands/"]
+    },
+    {
+      "id": "multi_modal_video_search",
+      "clone_url": "https://github.com/twelvelabs-io/multi-modal-video-search.git",
+      "default_branch": "main",
+      "commit": "9f6dc2edf20e11f40486b31b89aefe83778a633f",
+      "sparse_patterns": ["/README.md", "/app.py", "/auth.py", "/src/bedrock_client.py", "/src/mongodb_client.py", "/src/search_client.py", "/src/compare_client.py", "/src/lambda_function.py", "/lambda/subclip/lambda_function.py", "/scripts/deploy.sh"]
+    },
+    {
+      "id": "video_embeddings_evaluation_framework",
+      "clone_url": "https://github.com/twelvelabs-io/video-embeddings-evaluation-framework.git",
+      "default_branch": "main",
+      "commit": "4efffd37bee3ba8ee75b98cd3409108570027c46",
+      "sparse_patterns": ["/LICENSE", "/README.md", "/knn/", "/linear_probing/", "/temporal_action_localization/README.md", "/temporal_action_localization/libs/core/", "/temporal_action_localization/libs/modeling/", "/temporal_action_localization/libs/utils/metrics.py", "/temporal_action_segmentation/modeling/", "/temporal_action_segmentation/utils/eval.py"]
+    },
+    {
+      "id": "tl_marengo_bedrock_s3",
+      "clone_url": "https://github.com/twelvelabs-io/tl-marengo-bedrock-s3.git",
+      "default_branch": "main",
+      "commit": "b30fdf7cdc19e24f1b7f2fc5f03951c570c4f23c",
+      "sparse_patterns": ["/README.md", "/marengo_s3vectors.ipynb"]
+    },
+    {
+      "id": "crop_seek",
+      "clone_url": "https://github.com/mrnkim/crop-seek.git",
+      "default_branch": "main",
+      "commit": "b57bdbc3e9408f24462dec9f2e9e99fc488bb43d",
+      "sparse_patterns": ["/README.md", "/package.json", "/app/api/", "/components/ImageCropArea.js", "/components/SearchResultList.js"]
+    },
+    {
+      "id": "creator_discovery",
+      "clone_url": "https://github.com/mrnkim/creator-discovery.git",
+      "default_branch": "main",
+      "commit": "80a61f8e49b46a83229155363eb330b55a0aad3f",
+      "sparse_patterns": ["/README.md", "/package.json", "/src/app/api/", "/src/types/brandMentions.ts", "/src/utils/heatmap.ts"]
+    },
+    {
+      "id": "brand_integration_assistant",
+      "clone_url": "https://github.com/mrnkim/brand-integration-assistant-public.git",
+      "default_branch": "main",
+      "commit": "88431c98c64f0ead7621a316a0faf7c0bedb6888",
+      "sparse_patterns": ["/README.md", "/package.json", "/src/app/api/", "/src/scripts/", "/src/types/"]
+    },
+    {
+      "id": "recurser",
+      "clone_url": "https://github.com/aahilshaikh-twlbs/Recurser.git",
+      "default_branch": "main",
+      "commit": "9cda1a291e6aa08eb293d8d93e4b1458e68faa64",
+      "sparse_patterns": ["/LICENSE.md", "/README.md", "/docs/ARCHITECTURE.md", "/docs/FEATURES.md", "/backend/requirements.txt", "/frontend/package.json", "/frontend/src/app/api/", "/frontend/src/app/status/", "/frontend/src/components/ProjectStatus.tsx", "/frontend/src/components/EnhancedTerminal.tsx", "/frontend/src/components/VideoGenerationForm.tsx", "/frontend/src/components/VideoUploadForm.tsx", "/frontend/src/components/PlaygroundEnhanceForm.tsx", "/frontend/src/lib/api.ts"]
+    }
+  ]
+}

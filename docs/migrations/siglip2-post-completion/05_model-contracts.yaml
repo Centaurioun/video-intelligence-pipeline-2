@@ -1,0 +1,158 @@
+schema_version: 1
+document_state:
+  labels:
+    - VERIFIED_CURRENT
+    - OFFICIAL_EXTERNAL
+    - REVERIFY_AT_V1_COMPLETION
+    - NOT_AUTHORIZED_FOR_EXECUTION
+  captured_at: "2026-10-05"
+  repository_snapshot_sha: "6cce8777b6aa9ad672a5ca36428506f78d30db6f"
+authority_parent: "docs/decisions/ADR-0002-post-completion-siglip2-migration-and-benchmark.md"
+human_readable_companion: "docs/migrations/siglip2-post-completion/04_MODEL_CONTRACTS.md"
+
+contracts:
+  vip_v1_base:
+    candidate_label: "VIP V1 Base"
+    model_id: "google/siglip-base-patch16-224"
+    family: "SigLIP"
+    evidence_state: "VERIFIED_CURRENT"
+    local_project_identity:
+      frozen_revision: "7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed"
+      weights_sha256: "2c63cb7d1f2e95ba501893cbb8faeb4ea9a3af295498d35097126228659c2af8"
+      processor_digest: "4806b21bbf8b71362f21a021f2be993f6339e67c212f776f73b03b8f12ea7980"
+      local_runtime_evidence: "MEASURED_BOUNDED_PILOT"
+    representation:
+      fixed_resolution: true
+      image_size: 224
+      patch_size: 16
+      embedding_dimension: 768
+      dtype: "float32"
+      normalization: "l2"
+    text_preprocessing:
+      contract_string: "padding=max_length"
+      lower_case: "NOT_RECORDED_IN_CURRENT_VIP_CONTRACT"
+      max_length: "NOT_RECORDED_IN_CURRENT_VIP_CONTRACT"
+      truncation: "NOT_RECORDED_IN_CURRENT_VIP_CONTRACT"
+    current_loader:
+      model_class: "transformers.SiglipModel"
+      processor_class: "transformers.SiglipProcessor"
+      local_files_only: true
+      trust_remote_code: false
+      safetensors_required_by_current_loader: true
+    semantic_space:
+      interchangeable_with_other_candidates: false
+      reason: "model/revision/weights/processor/preprocessing identity participates in semantic-space identity"
+    refresh_at_v1_completion: true
+
+  vip_v2_base:
+    candidate_label: "VIP V2 Base"
+    model_id: "google/siglip2-base-patch16-224"
+    family: "SigLIP2 FixRes"
+    evidence_state: "OFFICIAL_EXTERNAL"
+    evidence_receipts:
+      - E02
+      - E03
+      - E04
+      - E09
+      - E10
+    local_project_identity:
+      frozen_revision: "NOT_OBSERVED"
+      weights_sha256: "NOT_OBSERVED"
+      processor_digest: "NOT_OBSERVED"
+      local_runtime_evidence: "NOT_OBSERVED"
+    representation:
+      fixed_resolution: true
+      image_size: 224
+      patch_size: 16
+      embedding_dimension: 768
+      embedding_dimension_status: "OFFICIAL_DOC_DEFAULT_PLUS_OFFICIAL_EXPORT_CONFIG_CROSSCHECK_REVERIFY_FROZEN_CHECKPOINT"
+      image_size_status: "OFFICIAL_PREPROCESSOR_CONFIG_224_REVERIFY_FROZEN_CHECKPOINT"
+      patch_size_status: "MODEL_ID_PLUS_OFFICIAL_EXPORT_CONFIG_16_REVERIFY_FROZEN_CHECKPOINT"
+      dtype: "NOT_YET_FROZEN_FOR_VIP"
+      normalization: "INTENDED_L2_REQUIRES_MIGRATION_DESIGN_CONFIRMATION"
+    text_preprocessing:
+      lower_case: true
+      padding: "max_length"
+      max_length: 64
+      truncation: true
+      status: "OFFICIAL_TRANSFORMERS_SIGLIP2_CONTRACT"
+    official_loading_example:
+      model_class: "transformers.AutoModel"
+      processor_class: "transformers.AutoProcessor"
+    semantic_space:
+      interchangeable_with_v1_base: false
+      interchangeable_with_v2_so400m: false
+    unresolved_until_authorized_acquisition:
+      - frozen_revision
+      - weights_sha256
+      - processor_digest
+      - image_preprocessing_digest
+      - exact_local_asset_inventory
+      - local_device_behavior
+      - local_throughput
+      - local_memory
+      - project_specific_retrieval_quality
+    refresh_at_v1_completion: true
+
+  vip_v2_so400m:
+    candidate_label: "VIP V2 So400m"
+    model_id: "google/siglip2-so400m-patch14-384"
+    family: "SigLIP2 FixRes"
+    evidence_state: "OFFICIAL_EXTERNAL"
+    evidence_receipts:
+      - E02
+      - E05
+      - E06
+    local_project_identity:
+      frozen_revision: "NOT_OBSERVED"
+      weights_sha256: "NOT_OBSERVED"
+      processor_digest: "NOT_OBSERVED"
+      local_runtime_evidence: "NOT_OBSERVED"
+    representation:
+      fixed_resolution: true
+      image_size: 384
+      patch_size: 14
+      embedding_dimension: 1152
+      text_hidden_size: 1152
+      text_intermediate_size: 4304
+      text_attention_heads: 16
+      text_hidden_layers: 27
+      text_projection_size: 1152
+      text_vocab_size: 256000
+      vision_hidden_size: 1152
+      vision_intermediate_size: 4304
+      vision_attention_heads: 16
+      vision_hidden_layers: 27
+      dtype: "NOT_YET_FROZEN_FOR_VIP"
+      normalization: "INTENDED_L2_REQUIRES_MIGRATION_DESIGN_CONFIRMATION"
+    text_preprocessing:
+      lower_case: true
+      padding: "max_length"
+      max_length: 64
+      truncation: true
+      status: "OFFICIAL_TRANSFORMERS_SIGLIP2_CONTRACT"
+    official_loading_example:
+      model_class: "transformers.AutoModel"
+      processor_class: "transformers.AutoProcessor"
+    semantic_space:
+      interchangeable_with_v1_base: false
+      interchangeable_with_v2_base: false
+    unresolved_until_authorized_acquisition:
+      - frozen_revision
+      - weights_sha256
+      - processor_digest
+      - image_preprocessing_digest
+      - exact_local_asset_inventory
+      - local_device_behavior
+      - local_throughput
+      - local_memory
+      - project_specific_retrieval_quality
+    refresh_at_v1_completion: true
+
+cross_candidate_rules:
+  mix_embeddings_between_candidates: false
+  compare_raw_cosine_scores_as_cross_model_quality: false
+  preserve_source_native_pts_timebase_authority: true
+  semantic_timestamps_are_edit_boundaries: false
+  public_benchmark_scores_select_project_winner: false
+  project_specific_three_way_benchmark_required: true

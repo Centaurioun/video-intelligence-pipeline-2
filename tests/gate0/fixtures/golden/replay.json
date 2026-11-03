@@ -1,0 +1,14 @@
+{
+  "mode": "frozen-index",
+  "source_revision_ids": [
+    "revision_1"
+  ],
+  "sample_manifest_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "representation_digests": [
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  ],
+  "ranking_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "metrics_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "config_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "frozen_input_digest": "a08190e1b2b17b087bce1e4e23517b436c0af676cb872a266b4123de701279b7"
+}

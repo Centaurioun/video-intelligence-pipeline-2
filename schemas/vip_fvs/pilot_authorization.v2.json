@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "vip_fvs.pilot_authorization.v2",
+  "title": "VIP FVS opt-in pilot authorization v2",
+  "description": "Versioned extension shape. Existing legacy and prepare authorization records remain accepted by their existing parser path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_path", "source_sha256", "purpose", "model_root", "model_revision", "weights_sha256", "runtime_root", "index_root", "output_root", "allowed_stages"],
+  "properties": {
+    "schema_version": {"const": "vip_fvs.pilot_authorization.v2"},
+    "source_path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "source_sha256": {"$ref": "#/$defs/sha256"},
+    "purpose": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "model_root": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "model_revision": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "weights_sha256": {"$ref": "#/$defs/sha256"},
+    "runtime_root": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "index_root": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "output_root": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "allowed_stages": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "pattern": "\\S"}},
+    "authorization_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "source_revision_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "model_identity": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "query_digest": {"$ref": "#/$defs/sha256"},
+    "semantic_space_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "index_digest": {"$ref": "#/$defs/sha256"},
+    "local_only": {"const": true},
+    "expires_at": {"type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"},
+    "revoked": {"type": "boolean"},
+    "selected_stream_index": {"type": "integer", "minimum": 0},
+    "record_digest": {"$ref": "#/$defs/sha256"},
+    "policy_digest": {"$ref": "#/$defs/sha256"},
+    "scope_digest": {"$ref": "#/$defs/sha256"},
+    "corpus_separation_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_id", "artifact_schema_version", "canonical_content_sha256", "authorized_root_id", "issuer_policy_ref"],
+      "properties": {
+        "schema_version": {"const": "vip_fvs.corpus_separation_ref.v1"},
+        "artifact_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "artifact_schema_version": {"const": "vip_fvs.corpus_separation_evidence.v1"},
+        "canonical_content_sha256": {"$ref": "#/$defs/sha256"},
+        "authorized_root_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "issuer_policy_ref": {"type": "string", "minLength": 1, "pattern": "\\S"}
+      }
+    }
+  },
+  "oneOf": [
+    {"not": {"anyOf": [{"required": ["authorization_id"]}, {"required": ["source_revision_id"]}, {"required": ["query_digest"]}, {"required": ["semantic_space_id"]}, {"required": ["model_identity"]}, {"required": ["index_digest"]}, {"required": ["local_only"]}, {"required": ["expires_at"]}, {"required": ["revoked"]}, {"required": ["selected_stream_index"]}, {"required": ["record_digest"]}, {"required": ["policy_digest"]}, {"required": ["scope_digest"]}, {"required": ["corpus_separation_ref"]}, {"required": ["schema_version"]}]}},
+    {"required": ["authorization_id", "source_revision_id", "query_digest", "semantic_space_id", "model_identity", "index_digest", "local_only", "expires_at", "revoked", "selected_stream_index", "record_digest", "policy_digest", "scope_digest"], "not": {"anyOf": [{"required": ["corpus_separation_ref"]}, {"required": ["schema_version"]}]}},
+    {"required": ["authorization_id", "source_revision_id", "query_digest", "semantic_space_id", "model_identity", "index_digest", "local_only", "expires_at", "revoked", "selected_stream_index", "record_digest", "policy_digest", "scope_digest", "corpus_separation_ref", "schema_version"]}
+  ],
+  "$defs": {"sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

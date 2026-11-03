@@ -1,0 +1,170 @@
+schema_version: 5
+portfolio_epoch: remaining-work-execution-atlas-v1
+
+authority:
+  primary_execution_protocol: docs/architecture/THROUGHPUT_FIRST_DEVELOPMENT_PROTOCOL.md
+  current_resource_policy: docs/portfolio/portfolio-v1/resource-policy-v5.yaml
+  atlas_design: docs/superpowers/specs/2026-10-03-remaining-work-execution-atlas-and-parallel-verification-design.md
+  atlas_implementation_plan: docs/superpowers/plans/2026-10-03-remaining-work-execution-atlas-implementation-plan.md
+  canonical_main_integration_requires_explicit_owner_decision: true
+  owner_main_policy_promotion_authorized_2026_10_03: true
+  narrower_explicit_authority_overrides_general_policy: true
+
+execution_model:
+  mode: EXECUTION_PORTFOLIO_PARALLEL
+  frontiers:
+    - BUILD
+    - VERIFY
+    - REPAIR
+  numeric_chapter_order_is_barrier: false
+  default_dependency_bias: SOFT_OR_INDEPENDENT_WHEN_SAFE
+  independent_ready_work_must_not_idle: true
+  stale_in_flight_integration_allowed: false
+
+root_writers:
+  policy: ADAPTIVE_DEPENDENCY_SAFE
+  fixed_quota: false
+  same_branch_writer_roots: 1
+  branch_isolation_required: true
+  roots_may_merge_canonical_main: false
+  historical_four_root_guidance_is_cap: false
+
+worktree_administration:
+  policy: SERIALIZED
+  sibling_topology_mutation_by_roots: false
+
+reasoning_subagents:
+  policy: ADAPTIVE_READY_WORK
+  child_context: SEPARATE_SELF_CONTAINED
+  fixed_quota: false
+  manufacture_work_to_fill_slots: false
+  preferred_hierarchy: ROOT_AREA_LEAD_WORKER
+  flatten_when_nested_delegation_unavailable: true
+  recycle_terminal_slots_immediately: true
+
+superpowers_routing:
+  default_h3_executor: PARALLEL_PORTFOLIO
+  independent_ready_domains: dispatching-parallel-agents
+  behavior_changes: test-driven-development
+  unexpected_failures: systematic-debugging
+  completion_claims: verification-before-completion
+  h3_feature_review: requesting-code-review
+  review_feedback: receiving-code-review
+  stock_subagent_driven_development_default: false
+  per_inner_task_review_default: false
+  h3_review_runs_on_verify_frontier: true
+  h3_review_blocks_independent_build: false
+
+codex:
+  requested_model_family: LUNA
+  reasoning: medium
+  resolve_and_freeze_per_goal: true
+  silent_family_fallback_allowed: false
+  silent_mid_goal_model_change_allowed: false
+
+deepseek:
+  model_policy_source: docs/portfolio/portfolio-v1/DEEPSEEK_HARNESS_CONTROLLER_PROFILE.md
+  inherit_codex_luna_policy: false
+
+resource_leases:
+  LIGHTWEIGHT_CPU_TEST:
+    policy: ADAPTIVE_READY_WORK
+    fixed_quota: false
+  HEAVY_CPU:
+    policy: ADAPTIVE_MEASURED_LEASE
+    initial_max_concurrent: 2
+    calibration_target_max_concurrent: 3
+    fallback_max_concurrent: 1
+  FFMPEG_HEAVY:
+    policy: ADAPTIVE_MEASURED_LEASE
+    initial_max_concurrent: 2
+    calibration_target_max_concurrent: 3
+    fallback_max_concurrent: 1
+    synthetic_or_non_protected_inputs_only_for_calibration: true
+  MODEL_MPS:
+    policy: ADAPTIVE_MEASURED_LEASE
+    initial_max_concurrent: 2
+    fallback_max_concurrent: 1
+    requires_already_authorized_local_model_runtime: true
+    model_download_for_calibration_authorized: false
+  MIXED_HEAVY:
+    policy: CALIBRATE_SEPARATELY
+  ENV_ADMIN:
+    policy: SERIALIZED
+    max_concurrent: 1
+
+resource_failure_policy:
+  fail_soft_by_class: true
+  lower_only_affected_lease_class: true
+  globally_serialize_lightweight_work_on_heavy_failure: false
+  optimize_wall_clock_not_process_count: true
+
+routine_dev_prerequisite_recovery:
+  policy: AUTO_RECOVER_WITHIN_AUTHORITY
+  missing_prerequisite_is_terminal_by_default: false
+  root_owns_environment_continuity: true
+  child_reports_to_root: true
+  recovery_order:
+    - CURRENT_GOAL_ENVIRONMENT
+    - KNOWN_PROJECT_ENVIRONMENTS
+    - COMPATIBLE_LOCAL_OR_CACHED_DEPENDENCY
+    - SERIALIZED_SHARED_PROJECT_ENVIRONMENT
+    - GOAL_LOCAL_ENVIRONMENT
+    - PROJECT_LOCAL_INSTALL_OR_SYNC
+    - RETRY_BLOCKED_COMMAND
+
+environment_admin:
+  shared_environment_mutation: SERIALIZED
+  concurrent_shared_environment_read: true
+  worker_direct_shared_environment_mutation: false
+
+goal_local_environment:
+  creation_authorized: true
+  repair_authorized: true
+  project_user_scope_only: true
+  elevated_privilege_allowed: false
+  commit_environment_artifacts: false
+
+routine_dependency_network:
+  public_registry_retrieval_authorized: true
+  scope: ROUTINE_DEV_PREREQ_ONLY
+  provider_model_activity_authorized: false
+  model_checkpoint_download_authorized: false
+  protected_media_retrieval_authorized: false
+  private_registry_credentials_authorized: false
+  unrelated_network_activity_authorized: false
+
+system_package_manager:
+  automatic_mutation_authorized: false
+  sudo_authorized: false
+  homebrew_mutation_authorized: false
+
+model_checkpoint_download:
+  automatic_authorization: false
+
+tdd:
+  environment_failure_counts_as_behavioral_red: false
+  test_efficacy_recovery_authorized: true
+  chronological_red_may_be_rewritten: false
+
+verification:
+  candidate_generation_binding_required: true
+  exact_candidate_sha_or_tree_required: true
+  stale_result_auto_applies_to_new_candidate: false
+  reuse_requires_mechanically_unaffected_coverage: true
+  verification_debt_visible: true
+
+canonical_main_integration:
+  policy: EXPLICIT_OWNER_DECISION
+  max_concurrent: 1
+
+problem_remediation:
+  default_failed_generation_limit_per_root_cause_family: 3
+  park_affected_descendants_after_exhaustion: true
+  continue_independent_ready_work: true
+  environment_enable_work_consumes_product_generation: false
+  broad_unknown_safety_blast_radius_quarantines_affected_subgraph: true
+
+branch_hygiene:
+  separate_future_task: true
+  deletion_authorized_by_this_policy: false

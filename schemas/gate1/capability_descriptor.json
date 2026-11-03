@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate1.capability_descriptor.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_id",
+    "arm_id",
+    "capability_revision",
+    "provider_family",
+    "operation",
+    "input_mode",
+    "requested_model",
+    "resolved_backend",
+    "runtime_revision",
+    "config_digest",
+    "space_id",
+    "policy_decision_id",
+    "window_profile_digest",
+    "metric",
+    "normalization"
+  ],
+  "properties": {
+    "record_id": {"type": "string", "minLength": 1},
+    "arm_id": {"type": "string", "minLength": 1},
+    "capability_revision": {"type": "string", "minLength": 1},
+    "provider_family": {"type": "string", "minLength": 1},
+    "operation": {"enum": ["embedding"]},
+    "input_mode": {"enum": ["sampled_frames", "native_video", "audio", "transcript", "text", "reference_artifact"]},
+    "requested_model": {"type": "string", "minLength": 1},
+    "resolved_backend": {"type": "string", "minLength": 1},
+    "runtime_revision": {"type": "string", "minLength": 1},
+    "config_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "space_id": {"type": "string", "minLength": 1},
+    "policy_decision_id": {"type": "string", "minLength": 1},
+    "window_profile_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "metric": {"type": "string", "minLength": 1},
+    "normalization": {"type": "string", "minLength": 1}
+  }
+}

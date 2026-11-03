@@ -1,0 +1,2 @@
+{"policy_decision_id":"policy_discover_1","purpose":"DISCOVER","decision":"ALLOW","allowed_artifact_types":["source_manifest","discovery_authorization"],"revision_scope":["rev_synthetic_1"],"expires_at":"2099-01-01T00:00:00Z","revoked":false}
+{"policy_decision_id":"policy_process_1","purpose":"PROCESS","decision":"ALLOW"}

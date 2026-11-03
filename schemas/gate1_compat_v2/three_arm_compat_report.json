@@ -1,0 +1,568 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:vip:gate1:three-arm-compat-report:v2",
+  "title": "Gate-1 synthetic three-arm compatibility report (non-evidence)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "execution_mode",
+    "fixture_id",
+    "code_sha",
+    "contract_digest",
+    "evidence_status",
+    "judgment_evidence_class",
+    "evaluation_scope",
+    "operational_evaluation_status",
+    "compatibility_status",
+    "benchmark_readiness",
+    "pairwise_evaluations",
+    "b07_metric_states",
+    "arm_derivations",
+    "winner_status",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "execution_mode": {
+      "const": "SYNTHETIC"
+    },
+    "fixture_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "code_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "contract_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "evidence_status": {
+      "const": "SYNTHETIC_NOT_MODEL_EVIDENCE"
+    },
+    "judgment_evidence_class": {
+      "const": "NOT_APPLICABLE_SYNTHETIC"
+    },
+    "evaluation_scope": {
+      "const": "SYNTHETIC_PROTOCOL_COMPATIBILITY_ONLY"
+    },
+    "operational_evaluation_status": {
+      "const": "NOT_IMPLEMENTED"
+    },
+    "compatibility_status": {
+      "const": "COMPATIBLE"
+    },
+    "benchmark_readiness": {
+      "const": "NOT_BENCHMARK_READY"
+    },
+    "pairwise_evaluations": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "$ref": "#/$defs/pairEvaluation"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "arm_ids": {
+                "const": [
+                  "VIP_V1_BASE",
+                  "VIP_V2_BASE"
+                ]
+              }
+            },
+            "required": [
+              "arm_ids"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "arm_ids": {
+                "const": [
+                  "VIP_V1_BASE",
+                  "VIP_V2_SO400M"
+                ]
+              }
+            },
+            "required": [
+              "arm_ids"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "arm_ids": {
+                "const": [
+                  "VIP_V2_BASE",
+                  "VIP_V2_SO400M"
+                ]
+              }
+            },
+            "required": [
+              "arm_ids"
+            ]
+          }
+        }
+      ]
+    },
+    "b07_metric_states": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/metricState"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "properties": {
+              "metric_id": {
+                "const": "recall_at_5"
+              },
+              "reason": {
+                "const": "POOLED_GROUND_TRUTH"
+              }
+            },
+            "required": [
+              "metric_id",
+              "reason"
+            ]
+          }
+        },
+        {
+          "contains": {
+            "properties": {
+              "metric_id": {
+                "const": "ndcg_at_10"
+              },
+              "reason": {
+                "const": "METRIC_NOT_IMPLEMENTED"
+              }
+            },
+            "required": [
+              "metric_id",
+              "reason"
+            ]
+          }
+        }
+      ]
+    },
+    "arm_derivations": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "arm_id",
+            "derived_from_arm_id",
+            "synthetic_projection"
+          ],
+          "properties": {
+            "arm_id": {
+              "const": "VIP_V1_BASE"
+            },
+            "derived_from_arm_id": {
+              "const": "arm_a"
+            },
+            "synthetic_projection": {
+              "const": false
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "arm_id",
+            "derived_from_arm_id",
+            "synthetic_projection"
+          ],
+          "properties": {
+            "arm_id": {
+              "const": "VIP_V2_BASE"
+            },
+            "derived_from_arm_id": {
+              "const": "arm_b"
+            },
+            "synthetic_projection": {
+              "const": false
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "arm_id",
+            "derived_from_arm_id",
+            "synthetic_projection"
+          ],
+          "properties": {
+            "arm_id": {
+              "const": "VIP_V2_SO400M"
+            },
+            "derived_from_arm_id": {
+              "const": "arm_b"
+            },
+            "synthetic_projection": {
+              "const": true
+            }
+          }
+        }
+      ],
+      "items": false
+    },
+    "winner_status": {
+      "const": "NOT_EVALUATED"
+    },
+    "limitations": {
+      "const": [
+        "SYNTHETIC_PROTOCOL_COMPATIBILITY_ONLY",
+        "NOT_OPERATIONAL_THREE_ARM_B00_B18_EVALUATION",
+        "NO_MODEL_EVIDENCE",
+        "NO_WINNER_SELECTION",
+        "NO_GATE1_PROMOTION"
+      ]
+    }
+  },
+  "$defs": {
+    "metricState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric_id",
+        "status",
+        "reason"
+      ],
+      "properties": {
+        "metric_id": {
+          "enum": [
+            "recall_at_5",
+            "ndcg_at_10"
+          ]
+        },
+        "status": {
+          "const": "NOT_COMPUTABLE"
+        },
+        "reason": {
+          "enum": [
+            "POOLED_GROUND_TRUTH",
+            "METRIC_NOT_IMPLEMENTED"
+          ]
+        }
+      }
+    },
+    "pairEvaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "arm_ids",
+        "comparison_id",
+        "validity",
+        "benchmark_status",
+        "outcome",
+        "primary_metric_id",
+        "primary_value",
+        "arm_values",
+        "coverage",
+        "failure_class",
+        "conclusion"
+      ],
+      "properties": {
+        "arm_ids": {
+          "oneOf": [
+            {
+              "const": [
+                "VIP_V1_BASE",
+                "VIP_V2_BASE"
+              ]
+            },
+            {
+              "const": [
+                "VIP_V1_BASE",
+                "VIP_V2_SO400M"
+              ]
+            },
+            {
+              "const": [
+                "VIP_V2_BASE",
+                "VIP_V2_SO400M"
+              ]
+            }
+          ]
+        },
+        "comparison_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "validity": {
+          "enum": [
+            "VALID",
+            "INVALID_PROTOCOL"
+          ]
+        },
+        "benchmark_status": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "INVALID_PROTOCOL"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_EVALUATED"
+          ]
+        },
+        "primary_metric_id": {
+          "const": "macro_hit_at_1"
+        },
+        "primary_value": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "arm_values": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "VIP_V1_BASE",
+              "VIP_V2_BASE",
+              "VIP_V2_SO400M"
+            ]
+          },
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "minProperties": 2,
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9._:-]+::(SELECTED|FAILED|OMITTED|QUARANTINED)$"
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "failure_class": {
+          "enum": [
+            null,
+            "RESOURCE_OPERABILITY",
+            "COVERAGE_INCOMPLETE",
+            "QUALITY"
+          ]
+        },
+        "conclusion": {
+          "enum": [
+            "COMPARISON_INVALID_NO_OUTCOME_CLAIM",
+            "SYNTHETIC_VALID_NEGATIVE_EVIDENCE",
+            "SYNTHETIC_DELTA_MEETS_CONFIGURED_THRESHOLD",
+            "SYNTHETIC_DELTA_BELOW_CONFIGURED_THRESHOLD"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "validity": {
+                "const": "VALID"
+              }
+            },
+            "required": [
+              "validity"
+            ]
+          },
+          "then": {
+            "properties": {
+              "benchmark_status": {
+                "enum": [
+                  "PASS",
+                  "FAIL"
+                ]
+              },
+              "outcome": {
+                "enum": [
+                  "PASS",
+                  "FAIL"
+                ]
+              },
+              "primary_value": {
+                "type": "number"
+              },
+              "arm_values": {
+                "minProperties": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "validity": {
+                "const": "INVALID_PROTOCOL"
+              }
+            },
+            "required": [
+              "validity"
+            ]
+          },
+          "then": {
+            "properties": {
+              "benchmark_status": {
+                "const": "INVALID_PROTOCOL"
+              },
+              "outcome": {
+                "const": "NOT_EVALUATED"
+              },
+              "primary_value": {
+                "type": "null"
+              },
+              "arm_values": {
+                "maxProperties": 0
+              },
+              "failure_class": {
+                "type": "null"
+              },
+              "conclusion": {
+                "const": "COMPARISON_INVALID_NO_OUTCOME_CLAIM"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "PASS"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "properties": {
+              "validity": {
+                "const": "VALID"
+              },
+              "benchmark_status": {
+                "const": "PASS"
+              },
+              "failure_class": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "arm_ids": {
+                "const": [
+                  "VIP_V1_BASE",
+                  "VIP_V2_BASE"
+                ]
+              },
+              "validity": {
+                "const": "VALID"
+              }
+            },
+            "required": [
+              "arm_ids",
+              "validity"
+            ]
+          },
+          "then": {
+            "properties": {
+              "arm_values": {
+                "required": [
+                  "VIP_V1_BASE",
+                  "VIP_V2_BASE"
+                ],
+                "maxProperties": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "arm_ids": {
+                "const": [
+                  "VIP_V1_BASE",
+                  "VIP_V2_SO400M"
+                ]
+              },
+              "validity": {
+                "const": "VALID"
+              }
+            },
+            "required": [
+              "arm_ids",
+              "validity"
+            ]
+          },
+          "then": {
+            "properties": {
+              "arm_values": {
+                "required": [
+                  "VIP_V1_BASE",
+                  "VIP_V2_SO400M"
+                ],
+                "maxProperties": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "arm_ids": {
+                "const": [
+                  "VIP_V2_BASE",
+                  "VIP_V2_SO400M"
+                ]
+              },
+              "validity": {
+                "const": "VALID"
+              }
+            },
+            "required": [
+              "arm_ids",
+              "validity"
+            ]
+          },
+          "then": {
+            "properties": {
+              "arm_values": {
+                "required": [
+                  "VIP_V2_BASE",
+                  "VIP_V2_SO400M"
+                ],
+                "maxProperties": 2
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

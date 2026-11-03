@@ -1,0 +1,15 @@
+{
+  "metadata": {
+    "tokenization": "unicode_casefold_non_alphanumeric",
+    "similarity": "token_set_jaccard",
+    "uses_annotations": false
+  },
+  "semantic": {
+    "pooling": "MEAN_TARGET_SLOTS",
+    "normalization": "L2",
+    "metric": "COSINE",
+    "vector_encoding": "float64_le_row_major",
+    "vector_digest_algorithm": "SHA-256",
+    "fallback": "NONE"
+  }
+}

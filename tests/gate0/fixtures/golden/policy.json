@@ -1,0 +1,8 @@
+{
+  "purpose": "PROCESS",
+  "provider_model_boundary": "local_only",
+  "retention_class": "DERIVED_REPLAYABLE",
+  "decision": "ALLOW",
+  "effective_at_use": true,
+  "egress_manifest_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

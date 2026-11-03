@@ -1,0 +1,11 @@
+{
+  "schema_version": "gate0.reviewer-input.v1",
+  "input_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "blind_mapping_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "rows": [
+    {"assertion_id":"assertion-0","query_id":"q0","window_id":"w0","blind_arm_token":"arm-a","reviewer_id":"reviewer-1","grade":2,"ambiguity":"NONE","review_status":"ACCEPTED","assertion":{"version":"v1","text":"synthetic query 0","digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}},
+    {"assertion_id":"assertion-0","query_id":"q0","window_id":"w0","blind_arm_token":"arm-a","reviewer_id":"reviewer-2","grade":2,"ambiguity":"NONE","review_status":"ACCEPTED","assertion":{"version":"v1","text":"synthetic query 0","digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}},
+    {"assertion_id":"assertion-0","query_id":"q0","window_id":"w0","blind_arm_token":"arm-b","reviewer_id":"reviewer-1","grade":2,"ambiguity":"NONE","review_status":"ACCEPTED","assertion":{"version":"v1","text":"synthetic query 0","digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}},
+    {"assertion_id":"assertion-0","query_id":"q0","window_id":"w0","blind_arm_token":"arm-b","reviewer_id":"reviewer-2","grade":2,"ambiguity":"NONE","review_status":"ACCEPTED","assertion":{"version":"v1","text":"synthetic query 0","digest":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}}
+  ]
+}

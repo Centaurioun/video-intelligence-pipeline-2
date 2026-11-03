@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate1.failure_ledger.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_id",
+    "run_id",
+    "comparison_id",
+    "event_type",
+    "attempt_id",
+    "affected_refs",
+    "reason",
+    "occurred_at"
+  ],
+  "properties": {
+    "record_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "comparison_id": {"type": "string", "minLength": 1},
+    "event_type": {"type": "string", "minLength": 1},
+    "attempt_id": {"type": "string", "minLength": 1},
+    "affected_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "reason": {"type": "string", "minLength": 1},
+    "occurred_at": {"type": "string", "minLength": 1},
+    "tombstones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifact_id",
+          "artifact_type",
+          "payload_digest",
+          "producer_ref",
+          "availability",
+          "rebuildability"
+        ],
+        "properties": {
+          "artifact_id": {"type": "string", "minLength": 1},
+          "artifact_type": {"type": "string", "minLength": 1},
+          "payload_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "producer_ref": {"type": "string", "minLength": 1},
+          "availability": {"type": "string", "minLength": 1},
+          "rebuildability": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

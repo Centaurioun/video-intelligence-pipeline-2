@@ -1,0 +1,13 @@
+{
+  "authorization": {
+    "purpose": "DISCOVER",
+    "operations": ["DISCOVER", "HASH", "PROBE"],
+    "allowed_artifacts": ["source_manifest", "discovery_authorization"]
+  },
+  "selected_stream": {
+    "configured": "config",
+    "unique": "unique_probe",
+    "ambiguous_failure": "AMBIGUOUS_STREAM"
+  },
+  "source_preservation": "PRESERVED"
+}

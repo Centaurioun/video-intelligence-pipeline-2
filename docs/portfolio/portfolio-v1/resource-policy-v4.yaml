@@ -1,0 +1,108 @@
+schema_version: 4
+portfolio_epoch: execution-portfolio-v1
+
+authority:
+  primary_execution_protocol: docs/architecture/THROUGHPUT_FIRST_DEVELOPMENT_PROTOCOL.md
+  current_resource_policy: docs/portfolio/portfolio-v1/resource-policy-v4.yaml
+  canonical_main_integration_requires_explicit_owner_decision: true
+  narrower_explicit_authority_overrides_general_policy: true
+
+root_writers:
+  policy: ADAPTIVE_DEPENDENCY_SAFE
+  fixed_quota: false
+  same_branch_writer_roots: 1
+  branch_isolation_required: true
+  roots_may_merge_canonical_main: false
+
+worktree_administration:
+  policy: SERIALIZED
+  sibling_topology_mutation_by_roots: false
+
+reasoning_subagents:
+  policy: ADAPTIVE_READY_WORK
+  child_context: SEPARATE_SELF_CONTAINED
+  fixed_quota: false
+  manufacture_work_to_fill_slots: false
+  preferred_hierarchy: ROOT_AREA_LEAD_WORKER
+  flatten_when_nested_delegation_unavailable: true
+
+codex:
+  requested_model_family: LUNA
+  reasoning: medium
+  resolve_and_freeze_per_goal: true
+  silent_family_fallback_allowed: false
+  silent_mid_goal_model_change_allowed: false
+
+deepseek:
+  model_policy_source: docs/portfolio/portfolio-v1/DEEPSEEK_HARNESS_CONTROLLER_PROFILE.md
+  inherit_codex_luna_policy: false
+
+heavy_local_exec:
+  policy: SERIAL_OR_EXPLICIT_LEASE
+  max_concurrent_without_new_measurement: 1
+
+ffmpeg_or_model_heavy_exec:
+  policy: SERIAL_OR_EXPLICIT_LEASE
+  max_concurrent_without_new_measurement: 1
+
+routine_dev_prerequisite_recovery:
+  policy: AUTO_RECOVER_WITHIN_AUTHORITY
+  missing_prerequisite_is_terminal_by_default: false
+  root_owns_environment_continuity: true
+  child_reports_to_root: true
+  recovery_order:
+    - CURRENT_GOAL_ENVIRONMENT
+    - KNOWN_PROJECT_ENVIRONMENTS
+    - COMPATIBLE_LOCAL_OR_CACHED_DEPENDENCY
+    - SERIALIZED_SHARED_PROJECT_ENVIRONMENT
+    - GOAL_LOCAL_ENVIRONMENT
+    - PROJECT_LOCAL_INSTALL_OR_SYNC
+    - RETRY_BLOCKED_COMMAND
+
+environment_admin:
+  shared_environment_mutation: SERIALIZED
+  concurrent_shared_environment_read: true
+  worker_direct_shared_environment_mutation: false
+
+goal_local_environment:
+  creation_authorized: true
+  repair_authorized: true
+  project_user_scope_only: true
+  elevated_privilege_allowed: false
+  commit_environment_artifacts: false
+
+routine_dependency_network:
+  public_registry_retrieval_authorized: true
+  scope: ROUTINE_DEV_PREREQ_ONLY
+  provider_model_activity_authorized: false
+  model_checkpoint_download_authorized: false
+  protected_media_retrieval_authorized: false
+  private_registry_credentials_authorized: false
+  unrelated_network_activity_authorized: false
+
+system_package_manager:
+  automatic_mutation_authorized: false
+  sudo_authorized: false
+  homebrew_mutation_authorized: false
+
+model_checkpoint_download:
+  automatic_authorization: false
+
+tdd:
+  environment_failure_counts_as_behavioral_red: false
+  test_efficacy_recovery_authorized: true
+  chronological_red_may_be_rewritten: false
+
+canonical_main_integration:
+  policy: EXPLICIT_OWNER_DECISION
+  max_concurrent: 1
+
+problem_remediation:
+  default_failed_generation_limit_per_root_cause_family: 3
+  park_affected_descendants_after_exhaustion: true
+  continue_independent_ready_work: true
+  environment_enable_work_consumes_product_generation: false
+
+branch_hygiene:
+  separate_future_task: true
+  deletion_authorized_by_this_policy: false

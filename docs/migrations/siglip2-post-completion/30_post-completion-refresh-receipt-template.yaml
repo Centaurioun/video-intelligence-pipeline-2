@@ -1,0 +1,78 @@
+schema_version: 1
+template_state: TEMPLATE
+execution_authorized: false
+authority_parent: "docs/decisions/ADR-0002-post-completion-siglip2-migration-and-benchmark.md"
+refresh_protocol: "docs/migrations/siglip2-post-completion/19_POST_COMPLETION_REFRESH_PROTOCOL.md"
+
+refresh:
+  refresh_id: "<UNIQUE_REFRESH_ID>"
+  refreshed_at: "<ISO8601>"
+  operator_or_agent: "<IDENTITY_OR_ROLE>"
+  status: "<PASS_BLOCKED_FAILED>"
+  refresh_base_preparation_sha: "<PREPARATION_PACKAGE_SHA>"
+  canonical_main_sha_at_refresh: "<CURRENT_MAIN_SHA>"
+
+v1_completion:
+  verified_complete: "<TRUE_FALSE>"
+  completion_sha: "<40_CHAR_SHA>"
+  completion_tag_or_none: "<TAG_OR_NONE>"
+  ancestry_verified: "<TRUE_FALSE>"
+  dirty_state_required_for_reproduction: false
+  model_id: "google/siglip-base-patch16-224"
+  model_revision: "<IMMUTABLE_REVISION>"
+  weights_sha256: "<HASH>"
+  processor_digest: "<HASH>"
+  image_preprocessing_digest: "<HASH_OR_CURRENT_CONTRACT_VALUE>"
+  text_preprocessing_contract: "<EXACT_CONTRACT>"
+  semantic_space_id: "<ID>"
+  runtime_receipt_reference: "<NON_SENSITIVE_REFERENCE>"
+
+repository_delta:
+  preparation_snapshot_sha: "<ORIGINAL_SNAPSHOT_SHA>"
+  final_v1_sha: "<V1_COMPLETION_SHA>"
+  model_related_paths_added: []
+  model_related_paths_removed: []
+  model_related_paths_moved: []
+  changed_assumptions: []
+  authorization_boundary_changes: []
+  notes: "<NONE_OR_SUMMARY>"
+
+migration_surface_refresh:
+  baseline_snapshot_updated: "<TRUE_FALSE>"
+  migration_surface_updated: "<TRUE_FALSE>"
+  hardcode_register_updated: "<TRUE_FALSE>"
+  dependency_runtime_record_updated: "<TRUE_FALSE>"
+  test_acceptance_matrix_updated: "<TRUE_FALSE>"
+  staleness_register_updated: "<TRUE_FALSE>"
+
+test_baseline:
+  command_or_receipt: "<REFERENCE>"
+  status: "<PASS_KNOWN_PREEXISTING_FAILURES_BLOCKED>"
+  failure_count: "<INTEGER_OR_NOT_APPLICABLE>"
+  notes: "<NONE_OR_SUMMARY>"
+
+external_sources:
+  source_receipts_refreshed: "<TRUE_FALSE>"
+  upstream_changes_detected: []
+  exact_target_model_identity_frozen: false
+  note: "Target model revision/hashes remain unresolved until separately authorized acquisition."
+
+authorization:
+  migration_code_work_authorized: "<TRUE_FALSE_OR_SCOPE_REFERENCE>"
+  model_acquisition_authorized: "<TRUE_FALSE>"
+  protected_media_execution_authorized: "<TRUE_FALSE>"
+  full_archive_indexing_authorized: false
+
+updated_artifacts:
+  - "<PATH>"
+
+blockers:
+  - "<NONE_OR_BLOCKER>"
+
+readiness:
+  checklist_reference: "docs/migrations/siglip2-post-completion/26_COMPLETION_AND_MIGRATION_READINESS_CHECKLIST.md"
+  readiness_status: "<NOT_RUN_PASS_BLOCKED>"
+
+final_statement:
+  migration_planning_may_resume: "<TRUE_FALSE>"
+  migration_execution_authorized_by_this_receipt: false

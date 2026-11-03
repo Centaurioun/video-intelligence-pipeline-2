@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate2.preregistration.v1",
+  "title": "Gate-2 preregistration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "workload_identity",
+    "configuration_identity",
+    "dependency_generations",
+    "fault_schedule",
+    "metrics",
+    "numeric_bounds",
+    "classification_rule",
+    "evidence_declarations",
+    "run_attempt_identity",
+    "policy_authority",
+    "resource_request",
+    "resource_policy_identity",
+    "baseline",
+    "contract_fingerprints",
+    "freeze_digest"
+  ],
+  "properties": {
+    "schema_version": {"const": "gate2.preregistration.v1"},
+    "workload_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workload_id", "digest"],
+      "properties": {
+        "workload_id": {"$ref": "#/$defs/identifier"},
+        "digest": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "configuration_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config_id", "digest"],
+      "properties": {
+        "config_id": {"$ref": "#/$defs/identifier"},
+        "digest": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "dependency_generations": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/identifier"},
+      "additionalProperties": {"$ref": "#/$defs/identifier"}
+    },
+    "fault_schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seed", "repetitions", "events"],
+      "properties": {
+        "seed": {"type": "integer"},
+        "repetitions": {"type": "integer", "minimum": 1},
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["at", "fault"],
+            "properties": {
+        "at": {"type": "integer", "minimum": 0},
+              "fault": {"type": "string", "minLength": 1, "pattern": "^(?!\\s*(?:[nN][uU][lL][lL]|[nN][oO][nN][eE]|[tT][oO][dD][oO]|[tT][bB][dD]|[xX][xX][xX]|[pP][lL][aA][cC][eE][hH][oO][lL][dD][eE][rR]|[cC][hH][aA][nN][gG][eE][mM][eE])\\s*$)(?!\\s*0{64}\\s*$)[\\s\\S]*\\S[\\s\\S]*$"}
+            }
+          }
+        }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "unit", "aggregation"],
+        "properties": {
+          "name": {"$ref": "#/$defs/identifier"},
+          "unit": {"type": "string", "minLength": 1, "pattern": "^(?!\\s*(?:[nN][uU][lL][lL]|[nN][oO][nN][eE]|[tT][oO][dD][oO]|[tT][bB][dD]|[xX][xX][xX]|[pP][lL][aA][cC][eE][hH][oO][lL][dD][eE][rR]|[cC][hH][aA][nN][gG][eE][mM][eE])\\s*$)(?!\\s*0{64}\\s*$)[\\s\\S]*\\S[\\s\\S]*$"},
+          "aggregation": {"type": "string", "minLength": 1, "pattern": "^(?!\\s*(?:[nN][uU][lL][lL]|[nN][oO][nN][eE]|[tT][oO][dD][oO]|[tT][bB][dD]|[xX][xX][xX]|[pP][lL][aA][cC][eE][hH][oO][lL][dD][eE][rR]|[cC][hH][aA][nN][gG][eE][mM][eE])\\s*$)(?!\\s*0{64}\\s*$)[\\s\\S]*\\S[\\s\\S]*$"}
+        }
+      }
+    },
+    "numeric_bounds": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/identifier"},
+      "additionalProperties": {"type": "number"}
+    },
+    "classification_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "threshold"],
+      "properties": {
+        "rule_id": {"$ref": "#/$defs/identifier"},
+        "threshold": {"type": ["number", "string"], "minLength": 1, "pattern": "^(?!\\s*(?:[nN][uU][lL][lL]|[nN][oO][nN][eE]|[tT][oO][dD][oO]|[tT][bB][dD]|[xX][xX][xX]|[pP][lL][aA][cC][eE][hH][oO][lL][dD][eE][rR]|[cC][hH][aA][nN][gG][eE][mM][eE])\\s*$)(?!\\s*0{64}\\s*$)[\\s\\S]*\\S[\\s\\S]*$"}
+      }
+    },
+    "evidence_declarations": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/identifier"},
+      "additionalProperties": {"$ref": "#/$defs/evidenceClass"}
+    },
+    "run_attempt_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "attempt_id"],
+      "properties": {
+        "run_id": {"$ref": "#/$defs/identifier"},
+        "attempt_id": {"$ref": "#/$defs/identifier"}
+      }
+    },
+    "policy_authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_id", "authority"],
+      "properties": {
+        "policy_id": {"$ref": "#/$defs/identifier"},
+        "authority": {"type": "string", "minLength": 1, "pattern": "^(?!\\s*(?:[nN][uU][lL][lL]|[nN][oO][nN][eE]|[tT][oO][dD][oO]|[tT][bB][dD]|[xX][xX][xX]|[pP][lL][aA][cC][eE][hH][oO][lL][dD][eE][rR]|[cC][hH][aA][nN][gG][eE][mM][eE])\\s*$)(?!\\s*0{64}\\s*$)[\\s\\S]*\\S[\\s\\S]*$"}
+      }
+    },
+    "resource_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_class", "concurrency"],
+      "properties": {
+        "resource_class": {"type": "string", "enum": ["LIGHTWEIGHT_CPU_TEST", "HEAVY_CPU", "FFMPEG_HEAVY", "MODEL_MPS", "MIXED_HEAVY", "ENV_ADMIN"]},
+        "concurrency": {"type": "integer", "minimum": 1}
+      }
+    },
+    "resource_policy_identity": {"$ref": "#/$defs/contractFingerprint"},
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["storage", "index"],
+      "properties": {
+        "storage": {"type": "string", "minLength": 1, "pattern": "^(?!\\s*(?:[nN][uU][lL][lL]|[nN][oO][nN][eE]|[tT][oO][dD][oO]|[tT][bB][dD]|[xX][xX][xX]|[pP][lL][aA][cC][eE][hH][oO][lL][dD][eE][rR]|[cC][hH][aA][nN][gG][eE][mM][eE])\\s*$)(?!\\s*0{64}\\s*$)[\\s\\S]*\\S[\\s\\S]*$"},
+        "index": {"type": "string", "minLength": 1, "pattern": "^(?!\\s*(?:[nN][uU][lL][lL]|[nN][oO][nN][eE]|[tT][oO][dD][oO]|[tT][bB][dD]|[xX][xX][xX]|[pP][lL][aA][cC][eE][hH][oO][lL][dD][eE][rR]|[cC][hH][aA][nN][gG][eE][mM][eE])\\s*$)(?!\\s*0{64}\\s*$)[\\s\\S]*\\S[\\s\\S]*$"}
+      }
+    },
+    "contract_fingerprints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate2_synthetic_candidate", "gate2_reconciliation", "canonical_contracts", "resource_policy_v5", "gate2_protocol_candidate", "gate2_measure_candidate", "gate2_preregistration_schema_candidate", "gate2_measurement_schema_candidate"],
+      "properties": {
+        "gate2_synthetic_candidate": {"$ref": "#/$defs/contractFingerprint"},
+        "gate2_reconciliation": {"$ref": "#/$defs/contractFingerprint"},
+        "canonical_contracts": {"$ref": "#/$defs/contractFingerprint"},
+        "resource_policy_v5": {"$ref": "#/$defs/contractFingerprint"},
+        "gate2_protocol_candidate": {"$ref": "#/$defs/contractFingerprint"},
+        "gate2_measure_candidate": {"$ref": "#/$defs/contractFingerprint"},
+        "gate2_preregistration_schema_candidate": {"$ref": "#/$defs/contractFingerprint"},
+        "gate2_measurement_schema_candidate": {"$ref": "#/$defs/contractFingerprint"}
+      }
+    },
+    "freeze_digest": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "identifier": {"type": "string", "minLength": 1, "description": "Rejects exact whole-token ASCII-case-insensitive placeholders null, none, todo, tbd, xxx, placeholder, changeme, unknown, and example; embedded occurrences are accepted.", "pattern": "^(?!\\s*(?:[nN][uU][lL][lL]|[nN][oO][nN][eE]|[tT][oO][dD][oO]|[tT][bB][dD]|[xX][xX][xX]|[pP][lL][aA][cC][eE][hH][oO][lL][dD][eE][rR]|[cC][hH][aA][nN][gG][eE][mM][eE]|[uU][nN][kK][nN][oO][wW][nN]|[eE][xX][aA][mM][pP][lL][eE])\\s*$)(?!\\s*0{64}\\s*$)(?!\\s)(?!.*\\s$)[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$"},
+    "sha256": {"type": "string", "pattern": "^(?!0{64}$)[0-9a-f]{64}$"},
+    "contractFingerprint": {"type": "string", "pattern": "^(?!0{40}$)(?!0{64}$)(?:[0-9a-f]{40}|[0-9a-f]{64}|sha256:(?!0{64}$)[0-9a-f]{64})$"},
+    "evidenceClass": {"type": "string", "enum": ["MEASURED", "MATCHED", "VISUALLY_OBSERVED", "AUDIO_OBSERVED", "EDITORIAL_INFERENCE"]}
+  }
+}

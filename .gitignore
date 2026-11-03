@@ -1,0 +1,48 @@
+# Full reference checkouts are research inputs, never vendored source.
+external/
+
+# Dependency and virtual-environment outputs.
+node_modules/
+.venv/
+.venv-gate0/
+venv/
+__pycache__/
+*.py[cod]
+
+# Operating-system and editor noise.
+.DS_Store
+
+# Local databases, vector stores, and analysis caches.
+*.db
+*.sqlite
+*.sqlite3
+qdrant_storage/
+cache/
+caches/
+graft/
+
+# Models and media are local research/production inputs, not repository assets.
+models/
+model_weights/
+media/
+videos/
+proxies/
+renders/
+output/
+outputs/
+temp/
+tmp/
+
+# Credentials: retain a documented placeholder only.
+.env
+.env.*
+!.env.example
+
+# Prototype build output.
+prototypes/google-video-analyzer/dist/
+
+# Isolated implementation worktrees.
+.worktrees/
+
+# Disposable exact bootstrap artifacts.
+.gate0-bootstrap/

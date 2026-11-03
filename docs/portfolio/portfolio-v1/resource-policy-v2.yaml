@@ -1,0 +1,38 @@
+schema_version: 2
+portfolio_epoch: portfolio-v1
+logical_controller_count: 4
+preferred_gate_executor: DEEPSEEK_HARNESS
+allowed_admin_or_fallback_executor: CODEX
+same_gate_simultaneous_writer_controllers: 1
+max_simultaneous_candidate_writer_controllers: 2
+canonical_integration_budget: 1
+heavy_local_exec:
+  policy: SERIAL_OR_EXPLICIT_LEASE
+  max_concurrent_without_new_measurement: 1
+ffmpeg_or_model_heavy_exec:
+  policy: SERIAL_OR_EXPLICIT_LEASE
+  max_concurrent_without_new_measurement: 1
+reasoning_subagents:
+  policy: ADAPTIVE_READY_WORK
+  preferred_runtime: DEEPSEEK_HARNESS
+  parent_role: CONTROLLER_SCHEDULER_INTEGRATOR_VERIFIER
+  child_context: SEPARATE_SELF_CONTAINED
+  one_shot_preferred_for_bounded_work: true
+  continuable_children_only_when_followup_needed: true
+writer_children:
+  require_exclusive_path_ownership_or_isolated_worktree: true
+  controller_only_integration: true
+  temporary_worktree_cleanup_after_durability: true
+goal_policy:
+  durable_goal_per_gate_root_session: 1
+  completion_semantics: CURRENT_AUTHORIZED_DEPENDENCY_SAFE_FRONTIER
+  allowed_terminal_states:
+    - GOAL_COMPLETE_CURRENT_FRONTIER
+    - GOAL_PARKED_UPSTREAM_DEPENDENCY
+    - GOAL_BLOCKED_AUTHORIZATION
+    - GOAL_BLOCKED_TECHNICAL
+    - GOAL_NEEDS_ARCHITECTURE_REVIEW
+  manufacture_work_to_remain_active: false
+writer_expansion:
+  allowed_sequence: [2, 3, 4]
+  requirement: MEASURED_ACCEPTED_MILESTONE_THROUGHPUT_WITHOUT_UNACCEPTABLE_CONTENTION_OR_REWORK

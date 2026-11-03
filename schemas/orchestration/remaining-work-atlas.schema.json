@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schemas/orchestration/remaining-work-atlas.schema.json",
+  "title": "Remaining Work Atlas",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "active_finish_line",
+    "baseline_total_weight",
+    "contract_registry",
+    "resource_leases",
+    "nodes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "remaining-work-atlas.v1"
+    },
+    "active_finish_line": {
+      "const": "VERIFICATION_COMPLETE_FOR_CURRENT_AUTHORIZED_LOCAL_FIRST_SCOPE"
+    },
+    "baseline_total_weight": {
+      "const": 100
+    },
+    "contract_registry": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "resource_leases": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "LIGHTWEIGHT_CPU_TEST",
+        "HEAVY_CPU",
+        "FFMPEG_HEAVY",
+        "MODEL_MPS",
+        "ENV_ADMIN"
+      ],
+      "properties": {
+        "LIGHTWEIGHT_CPU_TEST": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "HEAVY_CPU": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "FFMPEG_HEAVY": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "MODEL_MPS": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "MIXED_HEAVY": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ENV_ADMIN": {
+          "type": "integer",
+          "const": 1
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    }
+  },
+  "$defs": {
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node_id",
+        "kind"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "INDEPENDENT",
+            "SOFT_BUILD_DEPENDENCY",
+            "HARD_BUILD_DEPENDENCY",
+            "HARD_VERIFY_DEPENDENCY"
+          ]
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "fingerprint"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fingerprint": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "candidate_generation": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "sha",
+        "tree",
+        "prompt_core_version",
+        "overlay_version",
+        "contract_fingerprints"
+      ],
+      "properties": {
+        "sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        },
+        "tree": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        },
+        "prompt_core_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "overlay_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contract_fingerprints": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "level",
+        "title",
+        "parent_id",
+        "weight",
+        "state",
+        "candidate_generation",
+        "dependencies",
+        "consumed_contracts",
+        "produced_contracts",
+        "write_domain",
+        "resource_class",
+        "executor_mode",
+        "prompt_core_ref",
+        "prompt_core_sha256",
+        "overlay_ref",
+        "verification_ref",
+        "problem_ids",
+        "unlocks"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "level": {
+          "enum": [
+            "H0",
+            "H1",
+            "H2",
+            "H3"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0
+        },
+        "state": {
+          "enum": [
+            "PLANNED",
+            "READY",
+            "BUILDING",
+            "BUILD_GREEN",
+            "VERIFY_READY",
+            "VERIFYING",
+            "VERIFIED",
+            "REPAIRING",
+            "PARKED",
+            "DIRTY_BY_CONTRACT_DELTA",
+            "STALE_IN_FLIGHT",
+            "SUPERSEDED"
+          ]
+        },
+        "candidate_generation": {
+          "$ref": "#/$defs/candidate_generation"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependency"
+          }
+        },
+        "consumed_contracts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/contract"
+          }
+        },
+        "produced_contracts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/contract"
+          }
+        },
+        "write_domain": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "resource_class": {
+          "enum": [
+            "LIGHTWEIGHT_CPU_TEST",
+            "HEAVY_CPU",
+            "FFMPEG_HEAVY",
+            "MODEL_MPS",
+            "MIXED_HEAVY",
+            "ENV_ADMIN"
+          ]
+        },
+        "executor_mode": {
+          "enum": [
+            "PARALLEL_PORTFOLIO",
+            "SERIAL_TIGHT_COUPLING",
+            "PER_TASK_REVIEW_REQUIRED",
+            "VERIFY_ONLY",
+            "REPAIR_CELL"
+          ]
+        },
+        "prompt_core_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt_core_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "overlay_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verification_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "problem_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "unlocks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "const": "H3"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "weight": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

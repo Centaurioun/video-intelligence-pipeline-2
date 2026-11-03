@@ -1,0 +1,20 @@
+{
+  "source_path": "/Users/yusuf/Movies/kolaj-1-uzun.mp4",
+  "source_sha256": "3834a376ecdb0358377fbc62f914f651a21e8486f9a23c179b22a1b889fae139",
+  "purpose": "bounded developer-local semantic retrieval pilot",
+  "model_root": "/Users/yusuf/.codex/model-acquisition/gate0/google--siglip-base-patch16-224/7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed",
+  "model_revision": "7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed",
+  "weights_sha256": "2c63cb7d1f2e95ba501893cbb8faeb4ea9a3af295498d35097126228659c2af8",
+  "runtime_root": "/Users/yusuf/.codex/runtime-roots/run-20260913-macos-stage-a-py314-continuation/venv",
+  "index_root": "/Users/yusuf/.local/share/video-intelligence-pipeline/pilots/2026-09-21-kolaj-1-uzun/index",
+  "output_root": "/Users/yusuf/.local/share/video-intelligence-pipeline/pilots/2026-09-21-kolaj-1-uzun/output",
+  "allowed_stages": [
+    "decode",
+    "thumbnail",
+    "embed",
+    "index",
+    "query",
+    "refine",
+    "report"
+  ]
+}

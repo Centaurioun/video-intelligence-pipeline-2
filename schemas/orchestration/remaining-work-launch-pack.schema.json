@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schemas/orchestration/remaining-work-launch-pack.schema.json",
+  "title": "Remaining Work Launch Pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "batch_id",
+    "generated_at_head",
+    "launch_bootstrap",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "remaining-work-launch-pack.v1"
+    },
+    "batch_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at_head": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "task_id",
+          "prompt_ref",
+          "core_ref",
+          "overlay_ref",
+          "lane",
+          "write_mode",
+          "executor_mode",
+          "resource_class"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string"
+          },
+          "prompt_ref": {
+            "type": "string"
+          },
+          "executor_mode": {
+            "enum": [
+              "PARALLEL_PORTFOLIO",
+              "SERIAL_TIGHT_COUPLING",
+              "PER_TASK_REVIEW_REQUIRED",
+              "VERIFY_ONLY",
+              "REPAIR_CELL"
+            ]
+          },
+          "resource_class": {
+            "enum": [
+              "LIGHTWEIGHT_CPU_TEST",
+              "HEAVY_CPU",
+              "FFMPEG_HEAVY",
+              "MODEL_MPS",
+              "MIXED_HEAVY",
+              "ENV_ADMIN"
+            ]
+          },
+          "lane": {
+            "enum": [
+              "BUILD",
+              "VERIFY",
+              "REPAIR"
+            ]
+          },
+          "state": {
+            "type": "string"
+          },
+          "write_mode": {
+            "enum": [
+              "WRITE",
+              "READ_ONLY"
+            ]
+          },
+          "core_ref": {
+            "type": "string"
+          },
+          "overlay_ref": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "fresh_codex_default": {
+      "type": "boolean"
+    },
+    "instruction": {
+      "type": "string"
+    },
+    "launch_bootstrap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "sha256",
+        "ref",
+        "metadata_ref",
+        "preflight_script_ref"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "metadata_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "preflight_script_ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

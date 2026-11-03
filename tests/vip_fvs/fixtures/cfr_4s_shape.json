@@ -1,0 +1,39 @@
+{
+  "schema_version": "vip_fvs.fixture.v1",
+  "fixture_id": "cfr_4s_shape",
+  "source_kind": "synthetic",
+  "generation": {
+    "method": "deterministic JSON recipe",
+    "tool": "vip_fvs fixture materializer",
+    "tool_version": "1",
+    "check_in_method": "recipe and timing oracle only"
+  },
+  "container": "synthetic-decoder/raw",
+  "stream": {
+    "index": 0,
+    "type": "video",
+    "time_base": {"num": 1, "den": 25},
+    "media_timescale": 25,
+    "origin_pts_ticks": 0
+  },
+  "pts_ticks": [0, 13, 25, 38, 50, 63, 75, 88],
+  "tail_duration_ticks": 12,
+  "duration_ticks": 100,
+  "duration_seconds": {"num": 4, "den": 1},
+  "frames": [
+    {"frame_id": "cfr_4s_shape_f0", "presentation_ordinal": 0, "pts_ticks": 0},
+    {"frame_id": "cfr_4s_shape_f1", "presentation_ordinal": 1, "pts_ticks": 13},
+    {"frame_id": "cfr_4s_shape_f2", "presentation_ordinal": 2, "pts_ticks": 25},
+    {"frame_id": "cfr_4s_shape_f3", "presentation_ordinal": 3, "pts_ticks": 38},
+    {"frame_id": "cfr_4s_shape_f4", "presentation_ordinal": 4, "pts_ticks": 50},
+    {"frame_id": "cfr_4s_shape_f5", "presentation_ordinal": 5, "pts_ticks": 63},
+    {"frame_id": "cfr_4s_shape_f6", "presentation_ordinal": 6, "pts_ticks": 75},
+    {"frame_id": "cfr_4s_shape_f7", "presentation_ordinal": 7, "pts_ticks": 88}
+  ],
+  "expected": {
+    "window": {"start": {"num": 0, "den": 1}, "end": {"num": 4, "den": 1}, "endpoint": "half_open"},
+    "target_offsets": [{"num": 0, "den": 1}, {"num": 1, "den": 2}, {"num": 1, "den": 1}, {"num": 3, "den": 2}, {"num": 2, "den": 1}, {"num": 5, "den": 2}, {"num": 3, "den": 1}, {"num": 7, "den": 2}],
+    "selected_frame_ids": ["cfr_4s_shape_f0", "cfr_4s_shape_f1", "cfr_4s_shape_f2", "cfr_4s_shape_f3", "cfr_4s_shape_f4", "cfr_4s_shape_f5", "cfr_4s_shape_f6", "cfr_4s_shape_f7"],
+    "coverage_status": "SUCCEEDED"
+  }
+}

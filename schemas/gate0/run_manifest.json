@@ -1,0 +1,1671 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "gate_owner_id",
+    "source_revision_ids",
+    "config_digest",
+    "dependency_lock_digest",
+    "policy_decision_ids",
+    "thresholds",
+    "runtime",
+    "sandbox",
+    "invocations",
+    "blinding",
+    "stage_transitions",
+    "attempts",
+    "artifact_envelopes",
+    "representations",
+    "repeat_comparisons",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "gate0.run_manifest.v1"
+    },
+    "run_id": {
+      "$ref": "#/$defs/id"
+    },
+    "gate_owner_id": {
+      "$ref": "#/$defs/id"
+    },
+    "source_revision_ids": {
+      "$ref": "#/$defs/ids"
+    },
+    "config_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "dependency_lock_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "policy_decision_ids": {
+      "$ref": "#/$defs/ids"
+    },
+    "thresholds": {
+      "$ref": "#/$defs/thresholds"
+    },
+    "runtime": {
+      "$ref": "#/$defs/runtime"
+    },
+    "sandbox": {
+      "$ref": "#/$defs/sandbox"
+    },
+    "invocations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/invocation"
+      }
+    },
+    "blinding": {
+      "$ref": "#/$defs/blinding"
+    },
+    "stage_transitions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/transition"
+      }
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/attempt"
+      }
+    },
+    "artifact_envelopes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/envelope"
+      }
+    },
+    "representations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/representation"
+      }
+    },
+    "repeat_comparisons": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/repeat"
+      }
+    },
+    "stop_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/run_status"
+    },
+    "spec_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "evidence_class": {
+      "enum": [
+        "MEASURED",
+        "SYNTHETIC_FIXTURE"
+      ]
+    },
+    "corpus_kind": {
+      "enum": [
+        "generated_synthetic_media_not_experiment_evidence",
+        "synthetic_fixture_not_experiment_evidence"
+      ]
+    },
+    "evidence_class_boundary": {
+      "$ref": "#/$defs/evidence_class_boundary"
+    },
+    "synthetic_input": {
+      "$ref": "#/$defs/synthetic_input"
+    },
+    "selected_streams": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/selected_stream"
+      }
+    },
+    "stage_inputs": {
+      "$ref": "#/$defs/stage_inputs"
+    },
+    "label_isolation": {
+      "$ref": "#/$defs/label_isolation"
+    },
+    "host_sandbox_observation": {
+      "const": "NOT_OBSERVED"
+    },
+    "sandbox_observation_source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inventory_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "media_measurements": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/media_measurement"
+      }
+    },
+    "media_tools": {
+      "$ref": "#/$defs/media_tools"
+    },
+    "media_measurement_origin": {
+      "const": "LOCAL_GENERATED_MEDIA_NOT_AUTHORIZED_CORPUS"
+    },
+    "split_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "split_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "query_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "label_version": {
+      "$ref": "#/$defs/digest"
+    },
+    "query_version_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "gold_version_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "sample_manifest_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "target_counts": {
+      "$ref": "#/$defs/target_counts"
+    },
+    "windows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/window_evidence"
+      }
+    },
+    "representation_digests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/digest"
+      }
+    },
+    "ranking_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "baseline_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "metrics_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "judgments_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "replay_comparison": {
+      "$ref": "#/$defs/replay_comparison"
+    },
+    "review_input": {
+      "$ref": "#/$defs/review_input"
+    },
+    "metric_snapshot": {
+      "$ref": "#/$defs/metric_snapshot"
+    },
+    "threshold_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "run_decision": {
+      "$ref": "#/$defs/run_decision"
+    },
+    "frozen_input": {
+      "$ref": "#/$defs/frozen_input"
+    },
+    "frozen_input_digests": {
+      "$ref": "#/$defs/frozen_input_digests"
+    },
+    "model_processor_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "arms": {
+      "description": "Closed per-run arm registry (D8). Declared at prepare time for every scored arm; not part of the frozen 18-key required surface. Duplicate arm ids or unknown representation kinds are contract violations.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/arm"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "uniqueItems": true
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "stage_status": {
+      "enum": [
+        "PLANNED",
+        "RUNNING",
+        "SUCCEEDED",
+        "PARTIAL",
+        "FAILED",
+        "CANCELLED",
+        "BLOCKED"
+      ]
+    },
+    "run_status": {
+      "enum": [
+        "PLANNED",
+        "RUNNING",
+        "SUCCEEDED",
+        "PARTIAL",
+        "FAILED",
+        "CANCELLED",
+        "BLOCKED",
+        "REPORTED"
+      ]
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bwrap_path",
+        "bwrap_version",
+        "bwrap_digest",
+        "interpreter_path",
+        "interpreter_version",
+        "interpreter_digest",
+        "read_only_mounts",
+        "writable_mounts",
+        "clearenv",
+        "net_unshared",
+        "argv_digest",
+        "mount_policy_digest",
+        "child_network_sentinel"
+      ],
+      "properties": {
+        "bwrap_path": {
+          "type": "string"
+        },
+        "bwrap_version": {
+          "type": "string"
+        },
+        "bwrap_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "interpreter_path": {
+          "type": "string"
+        },
+        "interpreter_version": {
+          "type": "string"
+        },
+        "interpreter_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "read_only_mounts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "writable_mounts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "clearenv": {
+          "const": true
+        },
+        "net_unshared": {
+          "const": true
+        },
+        "argv_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "mount_policy_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "child_network_sentinel": {
+          "const": true
+        }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semantic_hit_at_10_num",
+        "semantic_hit_at_10_den",
+        "paired_lift_num",
+        "paired_lift_den",
+        "family_hit_at_10_num",
+        "family_hit_at_10_den"
+      ],
+      "properties": {
+        "semantic_hit_at_10_num": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "semantic_hit_at_10_den": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "paired_lift_num": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "paired_lift_den": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "family_hit_at_10_num": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "family_hit_at_10_den": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "python_version",
+        "os_release_digest",
+        "runtime_executable_digest",
+        "dependency_lock_digest",
+        "config_digest",
+        "blas_thread_control_digest",
+        "tool_environment_digest"
+      ],
+      "properties": {
+        "python_version": {
+          "type": "string"
+        },
+        "os_release_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "runtime_executable_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "dependency_lock_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "config_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "blas_thread_control_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "tool_environment_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "payload_digest",
+        "artifact_type"
+      ],
+      "properties": {
+        "artifact_id": {
+          "$ref": "#/$defs/id"
+        },
+        "payload_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "artifact_type": {
+          "enum": [
+            "source_manifest.json",
+            "discovery_authorizations.jsonl",
+            "policy_decisions.jsonl",
+            "split_manifest.json",
+            "queries.jsonl",
+            "gold_events.jsonl",
+            "window_judgments.jsonl",
+            "window_sample_manifest.jsonl",
+            "run_manifest.json",
+            "ranked_candidates.jsonl",
+            "runtime_and_failure_ledger.json",
+            "metrics.json",
+            "gate_decision.md"
+          ]
+        }
+      }
+    },
+    "envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "artifact_type",
+        "schema_version",
+        "digest_algorithm",
+        "payload_digest",
+        "producer_attempt_id",
+        "input_artifact_refs",
+        "policy_decision_id",
+        "retention_class",
+        "availability_status",
+        "created_at"
+      ],
+      "properties": {
+        "artifact_id": {
+          "$ref": "#/$defs/id"
+        },
+        "artifact_type": {
+          "enum": [
+            "source_manifest.json",
+            "discovery_authorizations.jsonl",
+            "policy_decisions.jsonl",
+            "split_manifest.json",
+            "queries.jsonl",
+            "gold_events.jsonl",
+            "window_judgments.jsonl",
+            "window_sample_manifest.jsonl",
+            "run_manifest.json",
+            "ranked_candidates.jsonl",
+            "runtime_and_failure_ledger.json",
+            "metrics.json",
+            "gate_decision.md"
+          ]
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "digest_algorithm": {
+          "const": "SHA-256"
+        },
+        "payload_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "producer_attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "input_artifact_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ref"
+          },
+          "uniqueItems": true
+        },
+        "policy_decision_id": {
+          "$ref": "#/$defs/id"
+        },
+        "retention_class": {
+          "enum": [
+            "SOURCE_REFERENCE",
+            "DERIVED_REPLAYABLE",
+            "DERIVED_RESTRICTED",
+            "AUDIT_MINIMUM",
+            "TOMBSTONE"
+          ]
+        },
+        "availability_status": {
+          "enum": [
+            "AVAILABLE",
+            "QUARANTINED",
+            "CLEANUP_PENDING",
+            "CLEANED",
+            "TOMBSTONED"
+          ]
+        },
+        "created_at": {
+          "$ref": "#/$defs/at"
+        }
+      }
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "invocation_id",
+        "attempt_id",
+        "runtime_digest",
+        "provider_status"
+      ],
+      "properties": {
+        "invocation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "runtime_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "provider_status": {
+          "enum": [
+            "SUCCESS",
+            "PARTIAL",
+            "FAILED",
+            "UNSUPPORTED",
+            "ESCALATED"
+          ]
+        },
+        "requested_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolved_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "processor_digest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "output_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ref"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempt_id",
+        "run_id",
+        "stage",
+        "idempotency_key",
+        "input_digest",
+        "config_digest",
+        "started_at",
+        "exit_code",
+        "stage_status",
+        "output_artifact_refs",
+        "failure_refs",
+        "tool_environment_digest"
+      ],
+      "properties": {
+        "attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "run_id": {
+          "$ref": "#/$defs/id"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "$ref": "#/$defs/id"
+        },
+        "input_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "config_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "started_at": {
+          "$ref": "#/$defs/at"
+        },
+        "ended_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/at"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "stage_status": {
+          "$ref": "#/$defs/stage_status"
+        },
+        "output_artifact_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ref"
+          }
+        },
+        "failure_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "tool_environment_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "policy_decision_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retry_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transition_id",
+        "run_id",
+        "attempt_id",
+        "stage",
+        "from_status",
+        "to_status",
+        "input_digest",
+        "config_digest",
+        "event_time",
+        "failure_event_ids"
+      ],
+      "properties": {
+        "transition_id": {
+          "$ref": "#/$defs/id"
+        },
+        "run_id": {
+          "$ref": "#/$defs/id"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "from_status": {
+          "$ref": "#/$defs/stage_status"
+        },
+        "to_status": {
+          "$ref": "#/$defs/stage_status"
+        },
+        "input_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "config_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "event_time": {
+          "$ref": "#/$defs/at"
+        },
+        "failure_event_ids": {
+          "$ref": "#/$defs/ids"
+        },
+        "policy_decision_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "blinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mapping_version",
+        "blind_mapping_digest",
+        "token_map",
+        "reviewer_count",
+        "reviewer_visible_fields",
+        "reviewer_hidden_fields",
+        "access_scope"
+      ],
+      "properties": {
+        "mapping_version": {
+          "type": "string"
+        },
+        "blind_mapping_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "token_map": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "blind_arm_token",
+              "arm_id"
+            ],
+            "properties": {
+              "blind_arm_token": {
+                "$ref": "#/$defs/id"
+              },
+              "arm_id": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          }
+        },
+        "reviewer_count": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "reviewer_visible_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reviewer_hidden_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "access_scope": {
+          "const": "T08_only"
+        },
+        "reviewer_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "representation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "space_id",
+        "representation_id",
+        "revision_id",
+        "window_id",
+        "sampling_manifest_digest",
+        "model_identity",
+        "processor_digest",
+        "preprocessing_digest",
+        "pooling",
+        "dimension",
+        "dtype",
+        "normalization",
+        "metric",
+        "generation_attempt_id",
+        "representation_status"
+      ],
+      "properties": {
+        "space_id": {
+          "$ref": "#/$defs/id"
+        },
+        "representation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision_id": {
+          "$ref": "#/$defs/id"
+        },
+        "window_id": {
+          "$ref": "#/$defs/id"
+        },
+        "sampling_manifest_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "model_identity": {
+          "type": "string"
+        },
+        "processor_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "preprocessing_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "pooling": {
+          "enum": [
+            "MEAN_TARGET_SLOTS"
+          ]
+        },
+        "dimension": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "dtype": {
+          "enum": [
+            "float32",
+            "float64"
+          ]
+        },
+        "normalization": {
+          "enum": [
+            "L2"
+          ]
+        },
+        "metric": {
+          "enum": [
+            "COSINE"
+          ]
+        },
+        "generation_attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "representation_status": {
+          "enum": [
+            "SUCCEEDED",
+            "FAILED",
+            "ZERO_VECTOR",
+            "NON_FINITE"
+          ]
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "vector_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "vector_digest_algorithm": {
+          "const": "SHA-256"
+        },
+        "vector_encoding": {
+          "const": "float64_le_row_major"
+        },
+        "vector_length": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "accumulation_order": {
+          "type": "string"
+        }
+      }
+    },
+    "repeat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comparison_id",
+        "attempt_id",
+        "mode",
+        "expected_input_digest",
+        "observed_input_digest",
+        "equal",
+        "evidence_state",
+        "source_revision_ids",
+        "metrics_digest",
+        "created_at"
+      ],
+      "properties": {
+        "comparison_id": {
+          "$ref": "#/$defs/id"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "mode": {
+          "enum": [
+            "frozen-index",
+            "full-pipeline"
+          ]
+        },
+        "expected_input_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "observed_input_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "equal": {
+          "type": "boolean"
+        },
+        "evidence_state": {
+          "type": "string"
+        },
+        "source_revision_ids": {
+          "$ref": "#/$defs/ids"
+        },
+        "metrics_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "created_at": {
+          "$ref": "#/$defs/at"
+        },
+        "first_difference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "rational": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer"
+        },
+        "denominator": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "tool_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "executable",
+        "version",
+        "configuration",
+        "version_stdout_digest",
+        "identity_digest"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "ffmpeg",
+            "ffprobe"
+          ]
+        },
+        "executable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string"
+        },
+        "configuration": {
+          "type": "string"
+        },
+        "version_stdout_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "identity_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "not_observed_tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "executable",
+        "status",
+        "detail"
+      ],
+      "properties": {
+        "role": {
+          "const": "ffmpeg"
+        },
+        "executable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "const": "NOT_OBSERVED"
+        },
+        "detail": {
+          "type": "string"
+        }
+      }
+    },
+    "media_measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision_id",
+        "source_kind",
+        "evidence_class",
+        "locator",
+        "source_byte_count",
+        "source_digest",
+        "probe_ref",
+        "probe_raw_output_digest",
+        "selected_stream_index",
+        "selection_source",
+        "time_base",
+        "origin_pts_ticks",
+        "presentation_pts_ticks_first",
+        "presentation_pts_ticks_last",
+        "frame_count",
+        "decoded_frame_count",
+        "window_count",
+        "measured_duration",
+        "probe_tool",
+        "frame_evidence_tool"
+      ],
+      "properties": {
+        "revision_id": {
+          "$ref": "#/$defs/id"
+        },
+        "source_kind": {
+          "const": "LOCAL_GENERATED_MEDIA"
+        },
+        "evidence_class": {
+          "const": "MEASURED"
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_byte_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "probe_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "probe_raw_output_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "selected_stream_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selection_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "time_base": {
+          "$ref": "#/$defs/rational"
+        },
+        "origin_pts_ticks": {
+          "type": "integer"
+        },
+        "presentation_pts_ticks_first": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "presentation_pts_ticks_last": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "frame_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "decoded_frame_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "window_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "measured_duration": {
+          "$ref": "#/$defs/rational"
+        },
+        "probe_tool": {
+          "$ref": "#/$defs/tool_identity"
+        },
+        "frame_evidence_tool": {
+          "$ref": "#/$defs/tool_identity"
+        }
+      }
+    },
+    "media_tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ffmpeg",
+        "ffmpeg_used_for_sampling",
+        "ffprobe",
+        "frame_evidence"
+      ],
+      "properties": {
+        "ffmpeg": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/tool_identity"
+            },
+            {
+              "$ref": "#/$defs/not_observed_tool"
+            }
+          ]
+        },
+        "ffmpeg_used_for_sampling": {
+          "const": false
+        },
+        "ffprobe": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/tool_identity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frame_evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/tool_identity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "metric_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "absent_query_diagnostic.metadata",
+        "absent_query_diagnostic.semantic",
+        "family_hit_at_10.metadata.appearance",
+        "family_hit_at_10.metadata.interaction",
+        "family_hit_at_10.metadata.scene_composition_camera_movement",
+        "family_hit_at_10.metadata.visible_action",
+        "family_hit_at_10.semantic.appearance",
+        "family_hit_at_10.semantic.interaction",
+        "family_hit_at_10.semantic.scene_composition_camera_movement",
+        "family_hit_at_10.semantic.visible_action",
+        "hit_at_10.metadata",
+        "hit_at_10.semantic",
+        "paired_lift.semantic_minus_metadata"
+      ],
+      "properties": {
+        "absent_query_diagnostic.metadata": {
+          "$ref": "#/$defs/rational"
+        },
+        "absent_query_diagnostic.semantic": {
+          "$ref": "#/$defs/rational"
+        },
+        "family_hit_at_10.metadata.appearance": {
+          "$ref": "#/$defs/rational"
+        },
+        "family_hit_at_10.metadata.interaction": {
+          "$ref": "#/$defs/rational"
+        },
+        "family_hit_at_10.metadata.scene_composition_camera_movement": {
+          "$ref": "#/$defs/rational"
+        },
+        "family_hit_at_10.metadata.visible_action": {
+          "$ref": "#/$defs/rational"
+        },
+        "family_hit_at_10.semantic.appearance": {
+          "$ref": "#/$defs/rational"
+        },
+        "family_hit_at_10.semantic.interaction": {
+          "$ref": "#/$defs/rational"
+        },
+        "family_hit_at_10.semantic.scene_composition_camera_movement": {
+          "$ref": "#/$defs/rational"
+        },
+        "family_hit_at_10.semantic.visible_action": {
+          "$ref": "#/$defs/rational"
+        },
+        "hit_at_10.metadata": {
+          "$ref": "#/$defs/rational"
+        },
+        "hit_at_10.semantic": {
+          "$ref": "#/$defs/rational"
+        },
+        "paired_lift.semantic_minus_metadata": {
+          "$ref": "#/$defs/rational"
+        }
+      }
+    },
+    "evidence_class_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "media_sampling",
+        "embedding",
+        "ground_truth",
+        "experiment_result"
+      ],
+      "properties": {
+        "media_sampling": {
+          "enum": [
+            "MEASURED",
+            "SYNTHETIC_FIXTURE"
+          ]
+        },
+        "embedding": {
+          "const": "SYNTHETIC_FIXTURE"
+        },
+        "ground_truth": {
+          "const": "SYNTHETIC_FIXTURE"
+        },
+        "experiment_result": {
+          "const": "NOT_OBSERVED"
+        }
+      }
+    },
+    "frozen_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_revision_ids",
+        "sample_manifest_digest",
+        "representation_digests",
+        "ranking_digest",
+        "metrics_digest",
+        "config_digest"
+      ],
+      "properties": {
+        "source_revision_ids": {
+          "$ref": "#/$defs/ids"
+        },
+        "sample_manifest_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "representation_digests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "ranking_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "metrics_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "config_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "frozen_input_digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frozen-index",
+        "full-pipeline"
+      ],
+      "properties": {
+        "frozen-index": {
+          "$ref": "#/$defs/digest"
+        },
+        "full-pipeline": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "label_isolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ranker_inputs",
+        "ranker_excludes"
+      ],
+      "properties": {
+        "ranker_inputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "ranker_excludes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "stage_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prepare",
+        "rank",
+        "evaluate"
+      ],
+      "properties": {
+        "prepare": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "rank": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "evaluate": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "synthetic_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "corpus",
+        "labels",
+        "query_vectors"
+      ],
+      "properties": {
+        "corpus": {
+          "type": "string",
+          "minLength": 1
+        },
+        "labels": {
+          "type": "string",
+          "minLength": 1
+        },
+        "query_vectors": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "target_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "failed",
+        "omitted",
+        "planned",
+        "quarantined",
+        "succeeded"
+      ],
+      "properties": {
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "omitted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "planned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "quarantined": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "succeeded": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "window_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "end",
+        "mapping_ref",
+        "origin",
+        "revision_id",
+        "start",
+        "time_base",
+        "window_id",
+        "window_index"
+      ],
+      "properties": {
+        "end": {
+          "$ref": "#/$defs/rational"
+        },
+        "mapping_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "origin": {
+          "$ref": "#/$defs/rational"
+        },
+        "revision_id": {
+          "$ref": "#/$defs/id"
+        },
+        "start": {
+          "$ref": "#/$defs/rational"
+        },
+        "time_base": {
+          "$ref": "#/$defs/rational"
+        },
+        "window_id": {
+          "$ref": "#/$defs/id"
+        },
+        "window_index": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "selected_stream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision_id",
+        "stream_index",
+        "selection_source"
+      ],
+      "properties": {
+        "revision_id": {
+          "$ref": "#/$defs/id"
+        },
+        "stream_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selection_source": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "review_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "digest"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "full_pipeline_digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sample_manifest_digest",
+        "representation_digests",
+        "ranking_digest",
+        "baseline_digest"
+      ],
+      "properties": {
+        "sample_manifest_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "representation_digests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "ranking_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "baseline_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "replay_comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "first_difference",
+        "differences",
+        "full_pipeline",
+        "frozen_index_equal"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "EQUAL",
+            "INVALID_PROTOCOL"
+          ]
+        },
+        "first_difference": {
+          "anyOf": [
+            {
+              "enum": [
+                "sample_manifest_digest",
+                "representation_digests",
+                "ranking_digest",
+                "baseline_digest",
+                "metrics_digest"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "differences": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "sample_manifest_digest",
+              "representation_digests",
+              "ranking_digest",
+              "baseline_digest",
+              "metrics_digest"
+            ]
+          }
+        },
+        "full_pipeline": {
+          "$ref": "#/$defs/full_pipeline_digests"
+        },
+        "frozen_index_equal": {
+          "type": "boolean"
+        }
+      }
+    },
+    "run_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "benchmark_status",
+        "gate_decision",
+        "stop_reason",
+        "stop_reason_detail"
+      ],
+      "properties": {
+        "benchmark_status": {
+          "enum": [
+            "VALID",
+            "NOT_RUN",
+            "INVALID_PROTOCOL"
+          ]
+        },
+        "gate_decision": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_RUN",
+            "INVALID_PROTOCOL"
+          ]
+        },
+        "stop_reason": {
+          "enum": [
+            "NONE",
+            "NOT_RUN",
+            "INVALID_PROTOCOL"
+          ]
+        },
+        "stop_reason_detail": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "arm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "arm_id",
+        "representation_kind"
+      ],
+      "properties": {
+        "arm_id": {
+          "$ref": "#/$defs/id"
+        },
+        "representation_kind": {
+          "enum": [
+            "metadata_floor",
+            "embedding"
+          ]
+        }
+      }
+    }
+  }
+}

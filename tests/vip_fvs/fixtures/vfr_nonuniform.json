@@ -1,0 +1,37 @@
+{
+  "schema_version": "vip_fvs.fixture.v1",
+  "fixture_id": "vfr_nonuniform",
+  "source_kind": "synthetic",
+  "generation": {
+    "method": "deterministic JSON recipe",
+    "tool": "vip_fvs fixture materializer",
+    "tool_version": "1",
+    "check_in_method": "recipe and timing oracle only"
+  },
+  "container": "synthetic-decoder/raw",
+  "stream": {
+    "index": 0,
+    "type": "video",
+    "time_base": {"num": 1, "den": 1000},
+    "media_timescale": 1000,
+    "origin_pts_ticks": 0
+  },
+  "pts_ticks": [0, 40, 80, 160, 280],
+  "tail_duration_ticks": 500,
+  "duration_ticks": 780,
+  "duration_seconds": {"num": 39, "den": 50},
+  "frames": [
+    {"frame_id": "vfr_nonuniform_f0", "presentation_ordinal": 0, "pts_ticks": 0},
+    {"frame_id": "vfr_nonuniform_f1", "presentation_ordinal": 1, "pts_ticks": 40},
+    {"frame_id": "vfr_nonuniform_f2", "presentation_ordinal": 2, "pts_ticks": 80},
+    {"frame_id": "vfr_nonuniform_f3", "presentation_ordinal": 3, "pts_ticks": 160},
+    {"frame_id": "vfr_nonuniform_f4", "presentation_ordinal": 4, "pts_ticks": 280}
+  ],
+  "expected": {
+    "presentation_deltas_ticks": [40, 40, 80, 120],
+    "nonuniform": true,
+    "nominal_fps_shortcut": "forbidden",
+    "source_native_binding": "pts_ticks_and_time_base",
+    "coverage_status": "SUCCEEDED"
+  }
+}

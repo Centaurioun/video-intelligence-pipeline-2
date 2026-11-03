@@ -1,0 +1,204 @@
+schema_version: 1
+document_state:
+  labels:
+    - OFFICIAL_EXTERNAL
+    - REVERIFY_AT_V1_COMPLETION
+    - NOT_AUTHORIZED_FOR_EXECUTION
+  captured_at: "2026-10-05"
+authority_parent: "docs/decisions/ADR-0002-post-completion-siglip2-migration-and-benchmark.md"
+
+sources:
+  - source_id: E01
+    title: "SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic Understanding, Localization, and Dense Features"
+    authority: "PRIMARY_RESEARCH_PAPER"
+    url: "https://arxiv.org/abs/2502.14786"
+    retrieved_at: "2026-10-05"
+    supports:
+      - "SigLIP2 builds on SigLIP with an expanded training recipe."
+      - "Authors report improvements over SigLIP counterparts across scales in image-text retrieval and other core capabilities."
+      - "SigLIP2 explicitly targets multilingual understanding, localization, and dense features."
+      - "Released scale families include ViT-B and So400m."
+    does_not_support:
+      - "VIP-specific retrieval superiority."
+      - "Local MPS speed or memory."
+      - "Exact edit-boundary authority."
+    refresh_required: true
+
+  - source_id: E02
+    title: "SigLIP2 — Transformers Documentation"
+    authority: "OFFICIAL_LIBRARY_DOCUMENTATION"
+    url: "https://huggingface.co/docs/transformers/model_doc/siglip2"
+    retrieved_at: "2026-10-05"
+    supports:
+      - "SigLIP2 retrieval/text embedding is supported in Transformers."
+      - "Default text preprocessing lowercases input text."
+      - "Default text preprocessing uses padding=max_length, max_length=64, truncation=True."
+      - "AutoProcessor can apply the trained preprocessing."
+      - "FixRes is documented as fixed-resolution and backwards compatible with SigLIP."
+      - "Current Siglip2Config documentation gives hidden_size default 768 for the Base configuration class."
+    refresh_required: true
+
+  - source_id: E03
+    title: "google/siglip2-base-patch16-224"
+    authority: "OFFICIAL_MODEL_REPOSITORY"
+    url: "https://huggingface.co/google/siglip2-base-patch16-224"
+    files_url: "https://huggingface.co/google/siglip2-base-patch16-224/tree/main"
+    retrieved_at: "2026-10-05"
+    supports:
+      - "Official model identity is google/siglip2-base-patch16-224."
+      - "Repository currently exposes Safetensors/config/preprocessor/tokenizer assets."
+      - "Current tokenizer asset filename includes tokenizer.model."
+      - "Repository displays Apache-2.0 license."
+    runtime_identity_warning: "Public main is mutable and is not the future frozen VIP model revision."
+    refresh_required: true
+
+  - source_id: E04
+    title: "google/siglip2-base-patch16-224 config.json"
+    authority: "OFFICIAL_MODEL_CONFIG"
+    url: "https://huggingface.co/google/siglip2-base-patch16-224/blob/main/config.json"
+    retrieved_at: "2026-10-05"
+    supports:
+      - "model_type=siglip."
+      - "text model_type=siglip_text_model."
+      - "text vocab_size=256000."
+      - "vision model_type=siglip_vision_model."
+      - "serialized config records transformers_version=4.49.0.dev0."
+    caution: "Omitted Base geometry fields inherit library defaults; verify exact frozen checkpoint/runtime before hard-coding."
+    refresh_required: true
+
+  - source_id: E05
+    title: "google/siglip2-so400m-patch14-384"
+    authority: "OFFICIAL_MODEL_REPOSITORY"
+    url: "https://huggingface.co/google/siglip2-so400m-patch14-384"
+    files_url: "https://huggingface.co/google/siglip2-so400m-patch14-384/tree/main"
+    retrieved_at: "2026-10-05"
+    supports:
+      - "Official model identity is google/siglip2-so400m-patch14-384."
+      - "Repository currently exposes Safetensors/config/preprocessor/tokenizer assets."
+      - "Repository displays Apache-2.0 license."
+    runtime_identity_warning: "Public main is mutable and is not the future frozen VIP model revision."
+    refresh_required: true
+
+  - source_id: E06
+    title: "google/siglip2-so400m-patch14-384 config.json"
+    authority: "OFFICIAL_MODEL_CONFIG"
+    url: "https://huggingface.co/google/siglip2-so400m-patch14-384/blob/main/config.json"
+    retrieved_at: "2026-10-05"
+    supports:
+      - "vision image_size=384."
+      - "vision patch_size=14."
+      - "vision hidden_size=1152."
+      - "text hidden_size=1152."
+      - "text projection_size=1152."
+      - "text and vision num_hidden_layers=27."
+      - "text and vision num_attention_heads=16."
+      - "text vocab_size=256000."
+    refresh_required: true
+
+  - source_id: E07
+    title: "MPS backend — PyTorch documentation"
+    authority: "OFFICIAL_LIBRARY_DOCUMENTATION"
+    url: "https://docs.pytorch.org/docs/stable/notes/mps.html"
+    retrieved_at: "2026-10-05"
+    supports:
+      - "PyTorch exposes the mps device on supported Apple systems."
+      - "MPS build and availability can be checked explicitly."
+      - "Models and tensors can be moved to the mps device."
+    refresh_required: true
+
+  - source_id: E08
+    title: "MPS Environment Variables — PyTorch documentation"
+    authority: "OFFICIAL_LIBRARY_DOCUMENTATION"
+    url: "https://docs.pytorch.org/docs/stable/mps_environment_variables.html"
+    retrieved_at: "2026-10-05"
+    supports:
+      - "MPS allocator/runtime behavior is configurable through environment variables."
+      - "PYTORCH_ENABLE_MPS_FALLBACK=1 enables CPU fallback for unsupported MPS operations."
+    migration_implication:
+      - "Benchmark runtime receipts should capture relevant MPS environment variables."
+      - "No-silent-fallback verification must include process environment as well as code path."
+    refresh_required: true
+
+  - source_id: E09
+    title: "google/siglip2-base-patch16-224 preprocessor_config.json"
+    authority: "OFFICIAL_MODEL_PREPROCESSOR_CONFIG"
+    url: "https://huggingface.co/google/siglip2-base-patch16-224/blob/main/preprocessor_config.json"
+    retrieved_at: "2026-10-05"
+    supports:
+      - "Image preprocessing size is 224x224."
+      - "Normalization and rescaling are enabled."
+      - "Image mean and std are each [0.5, 0.5, 0.5]."
+      - "Current public processor metadata identifies SiglipImageProcessor / SiglipProcessor."
+    runtime_identity_warning: "Public main is mutable; freeze exact acquired processor bytes later."
+    refresh_required: true
+
+  - source_id: E10
+    title: "google/siglip2-base-patch16-224 official ONNX export config"
+    authority: "OFFICIAL_MODEL_EXPORT_CONFIG_AUXILIARY"
+    url: "https://huggingface.co/google/siglip2-base-patch16-224/blob/5ffaac51d5e2f3367f7dab0cad4be4cb07c0caa2/onnx/config.json"
+    retrieved_at: "2026-10-05"
+    supports:
+      - "Expanded Base geometry cross-check: hidden/projection width 768."
+      - "Expanded Base geometry cross-check: image_size=224."
+      - "Expanded Base geometry cross-check: patch_size=16."
+      - "Expanded Base geometry cross-check: 12 layers / 12 attention heads."
+    caution: "Auxiliary export config is not the future VIP runtime checkpoint identity."
+    refresh_required: true
+
+rules:
+  public_main_is_runtime_identity: false
+  external_claim_is_local_measured_evidence: false
+  paper_results_select_vip_winner: false
+  reverify_before_migration_implementation: true
+
+amendments:
+  - amendment_id: "E01-E10-refresh-2026-10-11"
+    recorded_at: "2026-10-11"
+    report: "docs/agent-runs/run-20261011-vip-v2-task0-final-gap-reconciliation/source-refresh.json"
+    method: "GET only for the exact recorded official source URLs and directly necessary same-site PyTorch 2.14 documentation redirects; no model or checkpoint files."
+    sources:
+      - source_id: "E01"
+        status: "SUPPORTED"
+        revision: "arXiv:2502.14786v1"
+        note: "Same paper identity and general claims; no VIP-specific retrieval or runtime conclusion."
+      - source_id: "E02"
+        status: "SUPPORTED_WITH_CONFIGURATION_CONTEXT"
+        revision: "Rolling Transformers documentation; no immutable commit exposed"
+        note: "Lowercase/fixed-length preprocessing remains documented; Siglip2TextConfig defaults are not checkpoint-specific."
+      - source_id: "E03"
+        status: "SUPPORTED"
+        revision: "Mutable main target 75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2"
+        note: "Base model identity, Apache-2.0 display, and current tokenizer/model asset listing remain present."
+      - source_id: "E04"
+        status: "SUPPORTED"
+        revision: "Mutable main target 75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2"
+        note: "model_type siglip, text_model_type siglip_text_model, text vocab_size 256000 and transformers_version 4.49.0.dev0."
+      - source_id: "E05"
+        status: "SUPPORTED"
+        revision: "Mutable main target e8e487298228002f3d8a82e0cd5c8ea9c567f57f"
+        note: "SO400M model identity and current tokenizer/model asset listing remain present."
+      - source_id: "E06"
+        status: "SUPPORTED_WITH_MAIN_ADVANCEMENT"
+        revision: "Mutable main target e8e487298228002f3d8a82e0cd5c8ea9c567f57f"
+        note: "Current config retains 384/14/1152 geometry; public main is newer than design pin c65677ac77ca25276518923f7c58cbf5d81ea602."
+      - source_id: "E07"
+        status: "SUPPORTED"
+        revision: "PyTorch 2.14 documentation via same-site stable redirect"
+        note: "MPS availability/build checks and device use remain documented."
+      - source_id: "E08"
+        status: "SUPPORTED"
+        revision: "PyTorch 2.14 documentation via same-site stable redirect"
+        note: "PYTORCH_ENABLE_MPS_FALLBACK=1 remains documented to permit CPU fallback."
+      - source_id: "E09"
+        status: "SUPPORTED"
+        revision: "Mutable main target 75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2"
+        note: "224 sizing, resize/rescale, normalization and 0.5 mean/std remain; rescale factor is 1/255."
+      - source_id: "E10"
+        status: "SUPPORTED"
+        revision: "Pinned source commit 5ffaac51d5e2f3367f7dab0cad4be4cb07c0caa2"
+        note: "Auxiliary config still cross-checks 768/224/16; it is not a frozen VIP runtime identity."
+    global_conclusion:
+      public_main_is_runtime_identity: false
+      external_claim_is_local_measured_evidence: false
+      v2_design_change_supported: false
+      v1_token_warning_explained: false

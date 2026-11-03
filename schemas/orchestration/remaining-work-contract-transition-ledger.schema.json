@@ -1,0 +1,356 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schemas/orchestration/remaining-work-contract-transition-ledger.schema.json",
+  "title": "Remaining Work Contract Transition Ledger v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "sequence",
+    "genesis_anchor",
+    "previous_snapshot",
+    "baseline",
+    "edges",
+    "digest"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "remaining-work-contract-transition-ledger.v1"
+    },
+    "contract_id": {
+      "const": "persistent_index_indexer"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "genesis_anchor": {
+      "$ref": "#/$defs/genesis_anchor"
+    },
+    "previous_snapshot": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/previous_snapshot"
+        }
+      ]
+    },
+    "baseline": {
+      "$ref": "#/$defs/baseline"
+    },
+    "edges": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "$ref": "#/$defs/edge"
+      },
+      "prefixItems": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/edge"
+            },
+            {
+              "properties": {
+                "edge_id": {
+                  "const": "persistent_index_indexer:1"
+                },
+                "ordinal": {
+                  "const": 1
+                },
+                "predecessor_fingerprint": {
+                  "const": "b61db24259cf53f76b687ea572c24bee0037295b"
+                },
+                "result_fingerprint": {
+                  "const": "f5c936dc039890ad6411cde7218a82e0a2879dd7"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/edge"
+            },
+            {
+              "properties": {
+                "edge_id": {
+                  "const": "persistent_index_indexer:2"
+                },
+                "ordinal": {
+                  "const": 2
+                },
+                "predecessor_fingerprint": {
+                  "const": "f5c936dc039890ad6411cde7218a82e0a2879dd7"
+                },
+                "result_fingerprint": {
+                  "const": "8400a3fb52945a539995b041f72f1c1370f64d40"
+                }
+              }
+            },
+            {
+              "required": [
+                "predecessor_producer",
+                "dependency_evidence"
+              ]
+            }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "sequence": {
+            "const": 1
+          }
+        },
+        "required": [
+          "sequence"
+        ]
+      },
+      "then": {
+        "properties": {
+          "previous_snapshot": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "previous_snapshot": {
+            "$ref": "#/$defs/previous_snapshot"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "source_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)[A-Za-z0-9._/-]+$"
+    },
+    "genesis_anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit_sha",
+        "tree_sha"
+      ],
+      "properties": {
+        "commit_sha": {
+          "const": "0f5b2c22965870578a4f57bd5fdcf84569c07a89"
+        },
+        "tree_sha": {
+          "const": "6f90ab49e1ecea10b2f416e047891f594e17f447"
+        }
+      }
+    },
+    "previous_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit_sha",
+        "digest"
+      ],
+      "properties": {
+        "commit_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fingerprint",
+        "kind",
+        "source_path",
+        "commit_sha",
+        "tree_sha",
+        "blob_sha"
+      ],
+      "properties": {
+        "fingerprint": {
+          "const": "b61db24259cf53f76b687ea572c24bee0037295b"
+        },
+        "kind": {
+          "const": "GIT_BLOB"
+        },
+        "source_path": {
+          "const": "experiments/persistent_local_index/indexer.py"
+        },
+        "commit_sha": {
+          "const": "0f5b2c22965870578a4f57bd5fdcf84569c07a89"
+        },
+        "tree_sha": {
+          "const": "6f90ab49e1ecea10b2f416e047891f594e17f447"
+        },
+        "blob_sha": {
+          "const": "b61db24259cf53f76b687ea572c24bee0037295b"
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "edge_id",
+        "contract_id",
+        "ordinal",
+        "predecessor_fingerprint",
+        "result_fingerprint",
+        "producer_task_id",
+        "candidate_commit_sha",
+        "candidate_tree_sha",
+        "source_path",
+        "source_blob_sha",
+        "verification_ref"
+      ],
+      "properties": {
+        "edge_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contract_id": {
+          "const": "persistent_index_indexer"
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2
+        },
+        "predecessor_fingerprint": {
+          "$ref": "#/$defs/sha1"
+        },
+        "result_fingerprint": {
+          "$ref": "#/$defs/sha1"
+        },
+        "producer_task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidate_commit_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "candidate_tree_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "source_path": {
+          "$ref": "#/$defs/source_path"
+        },
+        "source_blob_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "predecessor_producer": {
+          "$ref": "#/$defs/predecessor_producer"
+        },
+        "dependency_evidence": {
+          "$ref": "#/$defs/dependency_evidence"
+        },
+        "verification_ref": {
+          "$ref": "#/$defs/immutable_evidence_ref"
+        }
+      }
+    },
+    "predecessor_producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_id",
+        "candidate_commit_sha",
+        "candidate_tree_sha",
+        "result_fingerprint"
+      ],
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidate_commit_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "candidate_tree_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "result_fingerprint": {
+          "$ref": "#/$defs/sha1"
+        }
+      }
+    },
+    "dependency_evidence": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/immutable_evidence_ref"
+        },
+        {
+          "type": "object",
+          "required": [
+            "predecessor_task_id",
+            "predecessor_candidate_commit_sha"
+          ],
+          "properties": {
+            "predecessor_task_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "predecessor_candidate_commit_sha": {
+              "$ref": "#/$defs/sha1"
+            }
+          }
+        }
+      ]
+    },
+    "immutable_evidence_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit_sha",
+        "source_path",
+        "blob_sha"
+      ],
+      "properties": {
+        "commit_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "source_path": {
+          "$ref": "#/$defs/source_path"
+        },
+        "blob_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "predecessor_task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "predecessor_candidate_commit_sha": {
+          "$ref": "#/$defs/sha1"
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

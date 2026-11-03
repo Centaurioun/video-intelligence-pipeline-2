@@ -1,0 +1,530 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schemas/orchestration/remaining-work-contract-transition-ledger.v2.schema.json",
+  "title": "Remaining Work Contract Transition Ledger v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "sequence",
+    "genesis_anchor",
+    "previous_snapshot",
+    "baseline",
+    "edges",
+    "digest"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "remaining-work-contract-transition-ledger.v2"
+    },
+    "contract_id": {
+      "const": "persistent_index_indexer"
+    },
+    "sequence": {
+      "const": 2
+    },
+    "genesis_anchor": {
+      "$ref": "#/$defs/genesis_anchor"
+    },
+    "previous_snapshot": {
+      "$ref": "#/$defs/previous_snapshot"
+    },
+    "baseline": {
+      "$ref": "#/$defs/baseline"
+    },
+    "edges": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": false,
+      "prefixItems": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/edge"
+            },
+            {
+              "properties": {
+                "edge_id": {
+                  "const": "persistent_index_indexer:1"
+                },
+                "ordinal": {
+                  "const": 1
+                },
+                "predecessor_fingerprint": {
+                  "const": "b61db24259cf53f76b687ea572c24bee0037295b"
+                },
+                "result_fingerprint": {
+                  "const": "f5c936dc039890ad6411cde7218a82e0a2879dd7"
+                }
+              }
+            },
+            {
+              "properties": {
+                "edge_id": {
+                  "const": "persistent_index_indexer:1"
+                },
+                "contract_id": {
+                  "const": "persistent_index_indexer"
+                },
+                "ordinal": {
+                  "const": 1
+                },
+                "predecessor_fingerprint": {
+                  "const": "b61db24259cf53f76b687ea572c24bee0037295b"
+                },
+                "result_fingerprint": {
+                  "const": "f5c936dc039890ad6411cde7218a82e0a2879dd7"
+                },
+                "producer_task_id": {
+                  "const": "H3-B01"
+                },
+                "candidate_commit_sha": {
+                  "const": "4bbb267c654dbe3c251041da4b297d7ef1f48556"
+                },
+                "candidate_tree_sha": {
+                  "const": "ad288a556200e2f0aac31cca9c2b1987db079aad"
+                },
+                "source_path": {
+                  "const": "experiments/persistent_local_index/indexer.py"
+                },
+                "source_blob_sha": {
+                  "const": "f5c936dc039890ad6411cde7218a82e0a2879dd7"
+                },
+                "verification_ref": {
+                  "const": {
+                    "commit_sha": "4bbb267c654dbe3c251041da4b297d7ef1f48556",
+                    "source_path": "experiments/persistent_local_index/indexer.py",
+                    "blob_sha": "f5c936dc039890ad6411cde7218a82e0a2879dd7"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/edge"
+            },
+            {
+              "properties": {
+                "edge_id": {
+                  "const": "persistent_index_indexer:2"
+                },
+                "ordinal": {
+                  "const": 2
+                },
+                "predecessor_fingerprint": {
+                  "const": "f5c936dc039890ad6411cde7218a82e0a2879dd7"
+                },
+                "result_fingerprint": {
+                  "const": "8400a3fb52945a539995b041f72f1c1370f64d40"
+                }
+              }
+            },
+            {
+              "required": [
+                "predecessor_producer",
+                "dependency_evidence"
+              ]
+            },
+            {
+              "properties": {
+                "edge_id": {
+                  "const": "persistent_index_indexer:2"
+                },
+                "contract_id": {
+                  "const": "persistent_index_indexer"
+                },
+                "ordinal": {
+                  "const": 2
+                },
+                "predecessor_fingerprint": {
+                  "const": "f5c936dc039890ad6411cde7218a82e0a2879dd7"
+                },
+                "result_fingerprint": {
+                  "const": "8400a3fb52945a539995b041f72f1c1370f64d40"
+                },
+                "producer_task_id": {
+                  "const": "H3-B02"
+                },
+                "candidate_commit_sha": {
+                  "const": "f7f415648e4e7521502efe8da7fd0f352d8fc7bc"
+                },
+                "candidate_tree_sha": {
+                  "const": "bf65b439798ab9484b77135406fdbf36256f98aa"
+                },
+                "source_path": {
+                  "const": "experiments/persistent_local_index/indexer.py"
+                },
+                "source_blob_sha": {
+                  "const": "8400a3fb52945a539995b041f72f1c1370f64d40"
+                },
+                "predecessor_producer": {
+                  "const": {
+                    "task_id": "H3-B01",
+                    "candidate_commit_sha": "4bbb267c654dbe3c251041da4b297d7ef1f48556",
+                    "candidate_tree_sha": "ad288a556200e2f0aac31cca9c2b1987db079aad",
+                    "result_fingerprint": "f5c936dc039890ad6411cde7218a82e0a2879dd7"
+                  }
+                },
+                "dependency_evidence": {
+                  "const": {
+                    "commit_sha": "0f5b2c22965870578a4f57bd5fdcf84569c07a89",
+                    "source_path": ".orchestration/remaining-work/prompts/H3-B02/overlay.json",
+                    "blob_sha": "50c754c3be5b09a5b71fdcf9d2748563f3922240",
+                    "predecessor_task_id": "H3-B01",
+                    "predecessor_candidate_commit_sha": "4bbb267c654dbe3c251041da4b297d7ef1f48556"
+                  }
+                },
+                "verification_ref": {
+                  "const": {
+                    "commit_sha": "f7f415648e4e7521502efe8da7fd0f352d8fc7bc",
+                    "source_path": "experiments/persistent_local_index/indexer.py",
+                    "blob_sha": "8400a3fb52945a539995b041f72f1c1370f64d40"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/edge"
+            },
+            {
+              "properties": {
+                "edge_id": {
+                  "const": "persistent_index_indexer:3"
+                },
+                "ordinal": {
+                  "const": 3
+                },
+                "predecessor_fingerprint": {
+                  "const": "8400a3fb52945a539995b041f72f1c1370f64d40"
+                },
+                "result_fingerprint": {
+                  "const": "875122c70f9b35bd6fae2a68d734f602bb7aeb84"
+                },
+                "producer_task_id": {
+                  "const": "H3-C02"
+                },
+                "candidate_commit_sha": {
+                  "const": "44a7d4d931d5219efc781f8da54fab850ba8bcc1"
+                },
+                "candidate_tree_sha": {
+                  "const": "5206b1f5c326596a02ec2295202db374f8d42ce5"
+                },
+                "source_path": {
+                  "const": "experiments/persistent_local_index/indexer.py"
+                },
+                "source_blob_sha": {
+                  "const": "875122c70f9b35bd6fae2a68d734f602bb7aeb84"
+                },
+                "predecessor_producer": {
+                  "$ref": "#/$defs/c03_predecessor_producer"
+                },
+                "dependency_evidence": {
+                  "$ref": "#/$defs/c03_dependency_evidence"
+                }
+              },
+              "required": [
+                "predecessor_producer",
+                "dependency_evidence"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "sequence": {
+          "const": 2
+        },
+        "previous_snapshot": {
+          "$ref": "#/$defs/previous_snapshot"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "source_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)[A-Za-z0-9._/-]+$"
+    },
+    "genesis_anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit_sha",
+        "tree_sha"
+      ],
+      "properties": {
+        "commit_sha": {
+          "const": "0f5b2c22965870578a4f57bd5fdcf84569c07a89"
+        },
+        "tree_sha": {
+          "const": "6f90ab49e1ecea10b2f416e047891f594e17f447"
+        }
+      }
+    },
+    "previous_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit_sha",
+        "digest"
+      ],
+      "properties": {
+        "commit_sha": {
+          "$ref": "#/$defs/sha1",
+          "const": "2cd6095587a957575f02c2b996e881ee26c6285a"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256",
+          "const": "2e79189cf7f27b494d1912b90eec595fdadb90d84af0605dcd8ba3f78a07311f"
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fingerprint",
+        "kind",
+        "source_path",
+        "commit_sha",
+        "tree_sha",
+        "blob_sha"
+      ],
+      "properties": {
+        "fingerprint": {
+          "const": "b61db24259cf53f76b687ea572c24bee0037295b"
+        },
+        "kind": {
+          "const": "GIT_BLOB"
+        },
+        "source_path": {
+          "const": "experiments/persistent_local_index/indexer.py"
+        },
+        "commit_sha": {
+          "const": "0f5b2c22965870578a4f57bd5fdcf84569c07a89"
+        },
+        "tree_sha": {
+          "const": "6f90ab49e1ecea10b2f416e047891f594e17f447"
+        },
+        "blob_sha": {
+          "const": "b61db24259cf53f76b687ea572c24bee0037295b"
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "edge_id",
+        "contract_id",
+        "ordinal",
+        "predecessor_fingerprint",
+        "result_fingerprint",
+        "producer_task_id",
+        "candidate_commit_sha",
+        "candidate_tree_sha",
+        "source_path",
+        "source_blob_sha",
+        "verification_ref"
+      ],
+      "properties": {
+        "edge_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contract_id": {
+          "const": "persistent_index_indexer"
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "predecessor_fingerprint": {
+          "$ref": "#/$defs/sha1"
+        },
+        "result_fingerprint": {
+          "$ref": "#/$defs/sha1"
+        },
+        "producer_task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidate_commit_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "candidate_tree_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "source_path": {
+          "$ref": "#/$defs/source_path"
+        },
+        "source_blob_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "predecessor_producer": {
+          "$ref": "#/$defs/predecessor_producer"
+        },
+        "dependency_evidence": {
+          "$ref": "#/$defs/dependency_evidence"
+        },
+        "verification_ref": {
+          "$ref": "#/$defs/immutable_evidence_ref"
+        }
+      }
+    },
+    "predecessor_producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_id",
+        "candidate_commit_sha",
+        "candidate_tree_sha",
+        "result_fingerprint"
+      ],
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidate_commit_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "candidate_tree_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "result_fingerprint": {
+          "$ref": "#/$defs/sha1"
+        }
+      }
+    },
+    "dependency_evidence": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/immutable_evidence_ref"
+        },
+        {
+          "type": "object",
+          "required": [
+            "predecessor_task_id",
+            "predecessor_candidate_commit_sha"
+          ],
+          "properties": {
+            "predecessor_task_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "predecessor_candidate_commit_sha": {
+              "$ref": "#/$defs/sha1"
+            }
+          }
+        }
+      ]
+    },
+    "immutable_evidence_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit_sha",
+        "source_path",
+        "blob_sha"
+      ],
+      "properties": {
+        "commit_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "source_path": {
+          "$ref": "#/$defs/source_path"
+        },
+        "blob_sha": {
+          "$ref": "#/$defs/sha1"
+        },
+        "predecessor_task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "predecessor_candidate_commit_sha": {
+          "$ref": "#/$defs/sha1"
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "c03_predecessor_producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_id",
+        "candidate_commit_sha",
+        "candidate_tree_sha",
+        "result_fingerprint"
+      ],
+      "properties": {
+        "task_id": {
+          "const": "H3-B02"
+        },
+        "candidate_commit_sha": {
+          "const": "f7f415648e4e7521502efe8da7fd0f352d8fc7bc"
+        },
+        "candidate_tree_sha": {
+          "const": "bf65b439798ab9484b77135406fdbf36256f98aa"
+        },
+        "result_fingerprint": {
+          "const": "8400a3fb52945a539995b041f72f1c1370f64d40"
+        }
+      }
+    },
+    "c03_dependency_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit_sha",
+        "source_path",
+        "blob_sha",
+        "predecessor_task_id",
+        "predecessor_candidate_commit_sha"
+      ],
+      "properties": {
+        "commit_sha": {
+          "const": "2cd6095587a957575f02c2b996e881ee26c6285a"
+        },
+        "source_path": {
+          "const": ".orchestration/remaining-work/prompts/H3-C02/overlay-verify-batch008.json"
+        },
+        "blob_sha": {
+          "const": "8fbeb4301b9245968108975cc27a7fbb27d863e2"
+        },
+        "predecessor_task_id": {
+          "const": "H3-B02"
+        },
+        "predecessor_candidate_commit_sha": {
+          "const": "f7f415648e4e7521502efe8da7fd0f352d8fc7bc"
+        }
+      }
+    }
+  }
+}

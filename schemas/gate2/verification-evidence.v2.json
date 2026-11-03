@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate2.verification-evidence.v2",
+  "title": "Gate-2 synthetic verification evidence with reason provenance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version", "dependency_heads", "preregistration_path", "preregistration_digest",
+    "freeze_digest", "workload_digest", "config_digest", "fault_schedule_digest",
+    "metric_definitions", "decision_digest", "candidate", "observations"
+  ],
+  "properties": {
+    "version": {"const": "f03-evidence.v2"},
+    "dependency_heads": {"$ref": "#/$defs/dependencyHeads"},
+    "preregistration_path": {"type": "string", "minLength": 1},
+    "preregistration_digest": {"$ref": "#/$defs/sha256"},
+    "freeze_digest": {"$ref": "#/$defs/sha256"},
+    "workload_digest": {"$ref": "#/$defs/sha256"},
+    "config_digest": {"$ref": "#/$defs/sha256"},
+    "fault_schedule_digest": {"$ref": "#/$defs/sha256"},
+    "metric_definitions": {"type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/metricDefinition"}},
+    "decision_digest": {"$ref": "#/$defs/sha256"},
+    "candidate": {"$ref": "#/$defs/head"},
+    "observations": {"type": "array", "items": {"$ref": "#/$defs/observation"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "head": {
+      "type": "object", "additionalProperties": false, "required": ["sha", "tree"],
+      "properties": {"sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}
+    },
+    "dependencyHeads": {
+      "type": "object", "additionalProperties": false, "required": ["F01", "F02"],
+      "properties": {"F01": {"$ref": "#/$defs/head"}, "F02": {"$ref": "#/$defs/head"}}
+    },
+    "metricDefinition": {
+      "type": "object", "additionalProperties": false, "required": ["unit", "repetitions"],
+      "properties": {"unit": {"type": "string", "minLength": 1}, "min": {"type": "number"}, "max": {"type": "number"}, "repetitions": {"type": "integer", "minimum": 1}}
+    },
+    "evidenceIdentity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["metric_id", "repetition", "status", "value", "unit", "dependency_id", "evidence_class", "carrier_path", "carrier_sha256", "dependency_heads", "candidate", "preregistration_digest", "freeze_digest", "workload_digest", "config_digest", "fault_schedule_digest"],
+      "properties": {
+        "metric_id": {"type": "string", "minLength": 1}, "repetition": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["MEASURED", "NOT_OBSERVED"]}, "value": {"type": ["number", "null"]},
+        "unit": {"type": "string", "minLength": 1},
+        "dependency_id": {"enum": ["F01", "F02", "F01+F02"]},
+        "evidence_class": {"enum": ["MEASURED", "MATCHED", "VISUALLY_OBSERVED", "AUDIO_OBSERVED", "EDITORIAL_INFERENCE", null]},
+        "carrier_path": {"type": ["string", "null"]}, "carrier_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "dependency_heads": {"$ref": "#/$defs/dependencyHeads"}, "candidate": {"$ref": "#/$defs/head"},
+        "preregistration_digest": {"$ref": "#/$defs/sha256"}, "freeze_digest": {"$ref": "#/$defs/sha256"},
+        "workload_digest": {"$ref": "#/$defs/sha256"}, "config_digest": {"$ref": "#/$defs/sha256"},
+        "fault_schedule_digest": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "reasonProvenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "state", "reason_code", "evidence_identity"],
+      "properties": {
+        "schema_version": {"const": "gate2.reason-provenance.v1"},
+        "state": {"enum": ["MEASURED", "UNAVAILABLE", "INFERRED"]},
+        "reason_code": {"enum": ["OBSERVED", "SOURCE_UNAVAILABLE", "CONTEXT_INFERENCE"]},
+        "evidence_identity": {"$ref": "#/$defs/evidenceIdentity"}
+      },
+      "allOf": [
+        {"if": {"properties": {"state": {"const": "MEASURED"}}}, "then": {"properties": {"reason_code": {"const": "OBSERVED"}}}},
+        {"if": {"properties": {"state": {"const": "UNAVAILABLE"}}}, "then": {"properties": {"reason_code": {"const": "SOURCE_UNAVAILABLE"}}}},
+        {"if": {"properties": {"state": {"const": "INFERRED"}}}, "then": {"properties": {"reason_code": {"const": "CONTEXT_INFERENCE"}}}}
+      ]
+    },
+    "observation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["metric_id", "status", "value", "unit", "evidence_class", "carrier_path", "carrier_sha256", "dependency_id", "dependency_heads", "candidate", "preregistration_digest", "freeze_digest", "workload_digest", "config_digest", "fault_schedule_digest", "repetition", "reason_provenance"],
+      "properties": {
+        "metric_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["MEASURED", "NOT_OBSERVED"]},
+        "value": {"type": ["number", "null"]}, "unit": {"type": "string", "minLength": 1},
+        "evidence_class": {"enum": ["MEASURED", "MATCHED", "VISUALLY_OBSERVED", "AUDIO_OBSERVED", "EDITORIAL_INFERENCE", null]},
+        "carrier_path": {"type": ["string", "null"]}, "carrier_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "dependency_id": {"enum": ["F01", "F02", "F01+F02"]},
+        "dependency_heads": {"$ref": "#/$defs/dependencyHeads"}, "candidate": {"$ref": "#/$defs/head"},
+        "preregistration_digest": {"$ref": "#/$defs/sha256"}, "freeze_digest": {"$ref": "#/$defs/sha256"},
+        "workload_digest": {"$ref": "#/$defs/sha256"}, "config_digest": {"$ref": "#/$defs/sha256"},
+        "fault_schedule_digest": {"$ref": "#/$defs/sha256"}, "repetition": {"type": "integer", "minimum": 1},
+        "reason_provenance": {"$ref": "#/$defs/reasonProvenance"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "MEASURED"}}},
+          "then": {
+            "properties": {
+              "reason_provenance": {"properties": {"state": {"const": "MEASURED"}}},
+              "evidence_class": {"const": "MEASURED"},
+              "value": {"type": "number"},
+              "carrier_path": {"type": "string", "minLength": 1},
+              "carrier_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "NOT_OBSERVED"}}},
+          "then": {
+            "properties": {
+              "reason_provenance": {"properties": {"state": {"enum": ["UNAVAILABLE", "INFERRED"]}}},
+              "evidence_class": {"type": "null"},
+              "value": {"type": "null"},
+              "carrier_path": {"type": "null"},
+              "carrier_sha256": {"type": "null"}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate1.judgment.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["record_id", "query_id", "candidate_id", "relevant", "reviewer_id", "synthetic", "evidence_class"],
+  "properties": {
+    "record_id": {"type": "string", "minLength": 1},
+    "query_id": {"type": "string", "minLength": 1},
+    "candidate_id": {"type": "string", "minLength": 1},
+    "relevant": {"type": "boolean"},
+    "reviewer_id": {"type": "string", "minLength": 1},
+    "synthetic": {"type": "boolean"},
+    "evidence_class": {
+      "enum": ["MEASURED", "MATCHED", "VISUALLY_OBSERVED", "AUDIO_OBSERVED", "EDITORIAL_INFERENCE"]
+    }
+  }
+}

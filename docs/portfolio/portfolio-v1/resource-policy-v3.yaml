@@ -1,0 +1,57 @@
+schema_version: 3
+portfolio_epoch: execution-portfolio-v1
+
+authority:
+  primary_execution_protocol: docs/architecture/THROUGHPUT_FIRST_DEVELOPMENT_PROTOCOL.md
+  canonical_main_integration_requires_explicit_owner_decision: true
+
+root_writers:
+  policy: ADAPTIVE_DEPENDENCY_SAFE
+  fixed_quota: false
+  same_branch_writer_roots: 1
+  branch_isolation_required: true
+  roots_may_merge_canonical_main: false
+
+worktree_administration:
+  policy: SERIALIZED
+  sibling_topology_mutation_by_roots: false
+
+reasoning_subagents:
+  policy: ADAPTIVE_READY_WORK
+  child_context: SEPARATE_SELF_CONTAINED
+  fixed_quota: false
+  manufacture_work_to_fill_slots: false
+  preferred_hierarchy: ROOT_AREA_LEAD_WORKER
+  flatten_when_nested_delegation_unavailable: true
+
+codex:
+  requested_model_family: LUNA
+  reasoning: medium
+  resolve_and_freeze_per_goal: true
+  silent_family_fallback_allowed: false
+  silent_mid_goal_model_change_allowed: false
+
+deepseek:
+  model_policy_source: docs/portfolio/portfolio-v1/DEEPSEEK_HARNESS_CONTROLLER_PROFILE.md
+  inherit_codex_luna_policy: false
+
+heavy_local_exec:
+  policy: SERIAL_OR_EXPLICIT_LEASE
+  max_concurrent_without_new_measurement: 1
+
+ffmpeg_or_model_heavy_exec:
+  policy: SERIAL_OR_EXPLICIT_LEASE
+  max_concurrent_without_new_measurement: 1
+
+canonical_main_integration:
+  policy: EXPLICIT_OWNER_DECISION
+  max_concurrent: 1
+
+problem_remediation:
+  default_failed_generation_limit_per_root_cause_family: 3
+  park_affected_descendants_after_exhaustion: true
+  continue_independent_ready_work: true
+
+branch_hygiene:
+  separate_future_task: true
+  deletion_authorized_by_this_policy: false

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://video-intelligence-pipeline.invalid/schema/vip_fvs/source_snapshot.v1.json",
+  "title": "VIP FVS verified source snapshot evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "snapshot_id",
+    "snapshot_path",
+    "manifest_path",
+    "snapshot_sha256",
+    "source_byte_count",
+    "source_locator",
+    "authorization_id",
+    "source_revision_id",
+    "snapshot_manifest_sha256",
+    "max_source_bytes",
+    "max_store_bytes"
+  ],
+  "properties": {
+    "snapshot_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "snapshot_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "manifest_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "snapshot_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source_byte_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "source_locator": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authorization_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_revision_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "snapshot_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "max_source_bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_store_bytes": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

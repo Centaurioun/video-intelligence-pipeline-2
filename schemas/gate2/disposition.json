@@ -1,0 +1,19 @@
+{
+  "$id": "gate2.disposition",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["disposition", "mechanism_eligible", "smallest_missing_mechanism", "mechanisms", "notes", "disposition_digest", "production_eligible", "gate_promotion", "mechanism_adopted", "scope"],
+  "properties": {
+    "disposition": {"type": "string", "enum": ["BR-1", "BR-2", "BR-3", "BR-4", "BR-5", "BR-6", "BR-7", "BR-8", "BR-9"]},
+    "mechanism_eligible": {"type": "boolean"},
+    "smallest_missing_mechanism": {"type": ["string", "null"]},
+    "mechanisms": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name", "eligible_later", "adopted"], "properties": {"name": {"type": "string", "minLength": 1}, "eligible_later": {"type": "boolean"}, "adopted": {"const": false}}}},
+    "notes": {"type": "array", "items": {"type": "string"}},
+    "disposition_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "production_eligible": {"const": false},
+    "gate_promotion": {"const": false},
+    "mechanism_adopted": {"const": false},
+    "scope": {"const": "synthetic/generated"}
+  }
+}

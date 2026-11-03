@@ -1,0 +1,55 @@
+{
+  "schema_version": "gate0.v1",
+  "target_schedule": [{"tick": 0, "numerator": 0, "denominator": 2}, {"tick": 1, "numerator": 1, "denominator": 2}, {"tick": 2, "numerator": 2, "denominator": 2}, {"tick": 3, "numerator": 3, "denominator": 2}, {"tick": 4, "numerator": 4, "denominator": 2}, {"tick": 5, "numerator": 5, "denominator": 2}, {"tick": 6, "numerator": 6, "denominator": 2}, {"tick": 7, "numerator": 7, "denominator": 2}],
+  "selection_rule": "first_presentation_order_frame_half_open_rational",
+  "aggregation": "target_slots_ascending_tick",
+  "fixtures": {
+    "cfr_4s": {"expected_rows": [
+      {"tick":0,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"cfr_4s_f0","raw_pts":{"ticks":0,"time_base_num":1,"time_base_den":25},"normalized_pts":{"numerator":0,"denominator":1}},
+      {"tick":1,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"cfr_4s_f1","raw_pts":{"ticks":13,"time_base_num":1,"time_base_den":25},"normalized_pts":{"numerator":13,"denominator":25}},
+      {"tick":2,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"cfr_4s_f2","raw_pts":{"ticks":25,"time_base_num":1,"time_base_den":25},"normalized_pts":{"numerator":1,"denominator":1}},
+      {"tick":3,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"cfr_4s_f3","raw_pts":{"ticks":38,"time_base_num":1,"time_base_den":25},"normalized_pts":{"numerator":38,"denominator":25}},
+      {"tick":4,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"cfr_4s_f4","raw_pts":{"ticks":50,"time_base_num":1,"time_base_den":25},"normalized_pts":{"numerator":2,"denominator":1}},
+      {"tick":5,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"cfr_4s_f5","raw_pts":{"ticks":63,"time_base_num":1,"time_base_den":25},"normalized_pts":{"numerator":63,"denominator":25}},
+      {"tick":6,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"cfr_4s_f6","raw_pts":{"ticks":75,"time_base_num":1,"time_base_den":25},"normalized_pts":{"numerator":3,"denominator":1}},
+      {"tick":7,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"cfr_4s_f7","raw_pts":{"ticks":88,"time_base_num":1,"time_base_den":25},"normalized_pts":{"numerator":88,"denominator":25}}
+    ]},
+    "vfr_nonunit": {"expected_rows": [
+      {"tick":0,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"vfr_nonunit_f0","raw_pts":{"ticks":100,"time_base_num":1001,"time_base_den":30000},"normalized_pts":{"numerator":0,"denominator":1}},
+      {"tick":1,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":2,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":3,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":4,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":5,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":6,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":7,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"}
+    ]},
+    "vfr_negative": {"expected_rows": [
+      {"tick":0,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"vfr_negative_f0","raw_pts":{"ticks":-20,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":0,"denominator":1}},
+      {"tick":1,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"vfr_negative_f1","raw_pts":{"ticks":-10,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":1,"denominator":1}},
+      {"tick":2,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"vfr_negative_f1","raw_pts":{"ticks":-10,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":1,"denominator":1}},
+      {"tick":3,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"vfr_negative_f2","raw_pts":{"ticks":0,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":2,"denominator":1}},
+      {"tick":4,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"vfr_negative_f2","raw_pts":{"ticks":0,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":2,"denominator":1}},
+      {"tick":5,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"vfr_negative_f3","raw_pts":{"ticks":7,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":27,"denominator":10}},
+      {"tick":6,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"vfr_negative_f4","raw_pts":{"ticks":19,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":39,"denominator":10}},
+      {"tick":7,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"vfr_negative_f4","raw_pts":{"ticks":19,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":39,"denominator":10}}
+    ]},
+    "duplicate_pts": {"expected_rows": [
+      {"tick":0,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"duplicate_pts_f0","raw_pts":{"ticks":0,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":0,"denominator":1}},
+      {"tick":1,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"duplicate_pts_f2","raw_pts":{"ticks":5,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":1,"denominator":2}},
+      {"tick":2,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"duplicate_pts_f3","raw_pts":{"ticks":10,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":1,"denominator":1}},
+      {"tick":3,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":4,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":5,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":6,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":7,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"}
+    ]},
+    "missing_pts": {"expected_rows": [
+      {"tick":0,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"missing_pts_f0","raw_pts":{"ticks":0,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":0,"denominator":1}},
+      {"tick":1,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"missing_pts_f2","raw_pts":{"ticks":10,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":1,"denominator":1}},
+      {"tick":2,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"missing_pts_f2","raw_pts":{"ticks":10,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":1,"denominator":1}},
+      {"tick":3,"pts_status":"MISSING","coverage_status":"FAILED"},{"tick":4,"pts_status":"MISSING","coverage_status":"FAILED"},{"tick":5,"pts_status":"MISSING","coverage_status":"FAILED"},{"tick":6,"pts_status":"MISSING","coverage_status":"FAILED"},{"tick":7,"pts_status":"MISSING","coverage_status":"FAILED"}
+    ]},
+    "tie_oracle": {"expected_rows": [
+      {"tick":0,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"tie_oracle_f0","raw_pts":{"ticks":0,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":0,"denominator":1}},
+      {"tick":1,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"tie_oracle_f2","raw_pts":{"ticks":5,"time_base_num":1,"time_base_den":10},"normalized_pts":{"numerator":1,"denominator":2}},
+      {"tick":2,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":3,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":4,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":5,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":6,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":7,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"}
+    ]},
+    "boundary_end": {"expected_rows": [
+      {"tick":0,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"boundary_end_f0","raw_pts":{"ticks":0,"time_base_num":1,"time_base_den":2},"normalized_pts":{"numerator":0,"denominator":1}},
+      {"tick":1,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"boundary_end_f1","raw_pts":{"ticks":1,"time_base_num":1,"time_base_den":2},"normalized_pts":{"numerator":1,"denominator":2}},
+      {"tick":2,"pts_status":"VALID","coverage_status":"SELECTED","selected_frame_id":"boundary_end_f2","raw_pts":{"ticks":2,"time_base_num":1,"time_base_den":2},"normalized_pts":{"numerator":1,"denominator":1}},
+      {"tick":3,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":4,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":5,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":6,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"},{"tick":7,"pts_status":"NO_COVERAGE","coverage_status":"FAILED"}
+    ]}
+  }
+}

@@ -1,0 +1,295 @@
+schema_version: 1
+package_id: siglip2-post-completion-preparation
+authority_parent: docs/decisions/ADR-0002-post-completion-siglip2-migration-and-benchmark.md
+design_spec: docs/superpowers/specs/2026-10-05-siglip2-post-completion-preparation-pack-design.md
+implementation_plan: docs/superpowers/plans/2026-10-05-siglip2-post-completion-preparation-pack-implementation-plan.md
+package_state: COMPLETE
+migration_pack_state: COMPLETE
+benchmark_pack_state: COMPLETE
+final_consistency_audit:
+  state: COMPLETE
+  audit_base_main_sha: b79e290a15f95e690561feec13da05a43e9eaa81
+  artifact_count: 45
+  migration_artifact_count: 29
+  benchmark_artifact_count: 16
+  planned_artifact_count: 0
+  corrections:
+    - docs/migrations/siglip2-post-completion/00_README_AND_ENTRYPOINT.md
+    - docs/migrations/siglip2-post-completion/02_PACKAGE_MANIFEST.yaml
+    - docs/migrations/siglip2-post-completion/28_CHANGELOG.md
+six_cycle_hardening_review:
+  state: COMPLETE
+  review_base_main_sha: aac950c8d12438b61755dcf53e3521ce3e5eede1
+  artifact_count_after: 49
+  migration_artifact_count_after: 31
+  benchmark_artifact_count_after: 18
+  planned_artifact_count_after: 0
+  changed_paths_are_docs_only: true
+  production_files_changed: false
+  test_files_changed: false
+  model_or_media_execution_performed: false
+  independent_review_state: NOT_OBSERVED_NONBLOCKING_FOR_DOCUMENT_PREPARATION
+  structural_verification:
+    manifest_paths_present: true
+    result_schema_json_valid: true
+    result_schema_version: 2
+    csv_template_column_counts_consistent: true
+    duplicate_checklist_ids_found: false
+    digest_cycle_token_found: false
+    local_protected_filesystem_paths_found: false
+  added_artifacts:
+    - docs/migrations/siglip2-post-completion/29_SIX_CYCLE_HARDENING_AUDIT.md
+    - docs/migrations/siglip2-post-completion/30_post-completion-refresh-receipt-template.yaml
+    - docs/benchmarks/siglip-three-way/B16_PRE_EXECUTION_FREEZE_CHECKLIST.md
+    - docs/benchmarks/siglip-three-way/B17_sample-plan-template.csv
+execution_authorized: false
+baseline_snapshot:
+  canonical_main_sha_at_batch_1_start: e9eeaf939c7ab233b34d5c03298fd1399fa15c47
+  state: SNAPSHOT
+  refresh_at_v1_completion: true
+artifacts:
+  - path: docs/migrations/siglip2-post-completion/00_README_AND_ENTRYPOINT.md
+    role: package entrypoint and reading order
+    state: CREATED_BATCH_1
+    refresh_at_v1_completion: false
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/01_AUTHORITY_SCOPE_AND_ACTIVATION.md
+    role: authority boundary and activation preconditions
+    state: CREATED_BATCH_1
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/02_PACKAGE_MANIFEST.yaml
+    role: machine-readable package inventory
+    state: CREATED_BATCH_1
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/03_V1_BASELINE_SNAPSHOT.md
+    role: pre-completion V1 model and runtime snapshot
+    state: CREATED_BATCH_1
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/04_MODEL_CONTRACTS.md
+    role: human-readable three-model contract comparison
+    state: CREATED_BATCH_1
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/05_model-contracts.yaml
+    role: machine-readable model contracts
+    state: CREATED_BATCH_2
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/06_MODEL_COMPATIBILITY_MATRIX.md
+    role: compatibility and migration-delta matrix
+    state: CREATED_BATCH_2
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/07_MIGRATION_SURFACE_SNAPSHOT.md
+    role: current model-coupled code test and configuration surface
+    state: CREATED_BATCH_2
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/08_HARDCODE_AND_ASSUMPTION_REGISTER.md
+    role: hard-coded and model-specific assumption register
+    state: CREATED_BATCH_2
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/09_PRESERVE_BOUNDARIES.md
+    role: migration no-touch boundaries and invariants
+    state: CREATED_BATCH_2
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/10_TARGET_MODEL_PROFILE_DESIGN.md
+    role: bounded future model-profile design
+    state: CREATED_BATCH_3
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/11_V1_TO_V2_BASE_RUNBOOK.md
+    role: future V1 Base to V2 Base runbook
+    state: CREATED_BATCH_3
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/12_V2_BASE_TO_SO400M_RUNBOOK.md
+    role: future V2 Base to V2 So400m runbook
+    state: CREATED_BATCH_3
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/13_DEPENDENCY_RUNTIME_COMPATIBILITY.md
+    role: dependency and runtime compatibility record
+    state: CREATED_BATCH_3
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/14_TEST_AND_ACCEPTANCE_MATRIX.md
+    role: future TDD regression and acceptance map
+    state: CREATED_BATCH_3
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/15_SEMANTIC_SPACE_INDEX_STRATEGY.md
+    role: semantic-space and index isolation policy
+    state: CREATED_BATCH_4
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/16_VERSION_PRESERVATION_AND_ROLLBACK.md
+    role: candidate preservation and rollback strategy
+    state: CREATED_BATCH_4
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/17_RISK_REGISTER.md
+    role: migration and benchmark risk register
+    state: CREATED_BATCH_4
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/18_STALENESS_AND_REVERIFY_REGISTER.md
+    role: snapshot and revalidation registry
+    state: CREATED_BATCH_4
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/19_POST_COMPLETION_REFRESH_PROTOCOL.md
+    role: mandatory first procedure after V1 completion
+    state: CREATED_BATCH_4
+    refresh_at_v1_completion: false
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/20_EXTERNAL_EVIDENCE_AND_SOURCE_PACK.md
+    role: primary external evidence digest
+    state: CREATED_BATCH_4
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/21_source-receipts.yaml
+    role: machine-readable primary-source receipts
+    state: CREATED_BATCH_4
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/22_REJECTED_ALTERNATIVES_AND_RECONSIDERATION_TRIGGERS.md
+    role: rejected alternatives and reopening criteria
+    state: CREATED_BATCH_5
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/23_SYNTHETIC_REHEARSAL_SPEC.md
+    role: documentation-only fake-vector compatibility probe design
+    state: CREATED_BATCH_5
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/24_FUTURE_CODEX_LAUNCH_PACKET.md
+    role: future Codex migration handoff
+    state: CREATED_BATCH_5
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/25_FUTURE_CHATGPT_ORCHESTRATOR_HANDOFF.md
+    role: future ChatGPT orchestration handoff
+    state: CREATED_BATCH_5
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/26_COMPLETION_AND_MIGRATION_READINESS_CHECKLIST.md
+    role: V1 completion and migration readiness checklist
+    state: CREATED_BATCH_5
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/27_POST_MIGRATION_VERIFICATION_CHECKLIST.md
+    role: post-migration verification checklist
+    state: CREATED_BATCH_5
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/28_CHANGELOG.md
+    role: preparation-pack change history
+    state: CREATED_BATCH_5
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/29_SIX_CYCLE_HARDENING_AUDIT.md
+    role: owner-authorized six-cycle hardening audit and correction ledger
+    state: CREATED_HARDENING
+    refresh_at_v1_completion: false
+    authority_parent: ADR-0002
+  - path: docs/migrations/siglip2-post-completion/30_post-completion-refresh-receipt-template.yaml
+    role: machine-readable receipt template for mandatory post-V1 refresh
+    state: CREATED_HARDENING
+    refresh_at_v1_completion: false
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B00_BENCHMARK_CHARTER.md
+    role: three-way benchmark charter
+    state: CREATED_BENCHMARK_BATCH_1
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B01_CORPUS_SELECTION_AND_FREEZE_PROTOCOL.md
+    role: benchmark corpus selection and freeze protocol
+    state: CREATED_BENCHMARK_BATCH_1
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B02_corpus-manifest-template.yaml
+    role: benchmark corpus manifest template
+    state: CREATED_BENCHMARK_BATCH_1
+    refresh_at_v1_completion: false
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B03_QUERY_TAXONOMY.md
+    role: benchmark query taxonomy
+    state: CREATED_BENCHMARK_BATCH_1
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B04_query-set-template.csv
+    role: benchmark query-set template
+    state: CREATED_BENCHMARK_BATCH_1
+    refresh_at_v1_completion: false
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B05_RELEVANCE_AND_ANNOTATION_GUIDE.md
+    role: relevance and annotation rules
+    state: CREATED_BENCHMARK_BATCH_1
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B06_relevance-judgment-template.csv
+    role: relevance-judgment template
+    state: CREATED_BENCHMARK_BATCH_1
+    refresh_at_v1_completion: false
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B07_METRICS_AND_STATISTICAL_PROTOCOL.md
+    role: benchmark metrics and aggregation protocol
+    state: CREATED_BENCHMARK_BATCH_1
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B08_PERFORMANCE_AND_RESOURCE_PROTOCOL.md
+    role: performance and resource measurement protocol
+    state: CREATED_BENCHMARK_BATCH_2
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B09_BENCHMARK_EXECUTION_PROTOCOL.md
+    role: identical-arm benchmark execution protocol
+    state: CREATED_BENCHMARK_BATCH_2
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B10_result-schema.json
+    role: benchmark result schema
+    state: CREATED_BENCHMARK_BATCH_2
+    refresh_at_v1_completion: false
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B11_benchmark-run-manifest-template.yaml
+    role: reproducible benchmark run manifest template
+    state: CREATED_BENCHMARK_BATCH_2
+    refresh_at_v1_completion: false
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B12_BENCHMARK_REPORT_TEMPLATE.md
+    role: benchmark report template
+    state: CREATED_BENCHMARK_BATCH_2
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B13_WINNER_DECISION_RULES.md
+    role: predeclared representation winner rules
+    state: CREATED_BENCHMARK_BATCH_2
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B14_FAILURE_MODES_AND_BIAS_CHECKLIST.md
+    role: benchmark bias and failure-mode checklist
+    state: CREATED_BENCHMARK_BATCH_2
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B15_BENCHMARK_AUDIT_CHECKLIST.md
+    role: post-run benchmark audit checklist
+    state: CREATED_BENCHMARK_BATCH_2
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B16_PRE_EXECUTION_FREEZE_CHECKLIST.md
+    role: fail-closed pre-execution benchmark freeze/preregistration checklist
+    state: CREATED_HARDENING
+    refresh_at_v1_completion: true
+    authority_parent: ADR-0002
+  - path: docs/benchmarks/siglip-three-way/B17_sample-plan-template.csv
+    role: exact source-native PTS/timebase sample-plan template
+    state: CREATED_HARDENING
+    refresh_at_v1_completion: false
+    authority_parent: ADR-0002

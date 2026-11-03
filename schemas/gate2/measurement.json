@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate2.measurement.v1",
+  "title": "Gate-2 measurement set",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "measured", "not_observed", "measurement_set_digest"],
+  "properties": {
+    "schema_version": {"const": "gate2.measurement.v1"},
+    "measured": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/measured"}
+    },
+    "not_observed": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/notObserved"}
+    },
+    "measurement_set_digest": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "metricId": {"type": "string", "minLength": 1, "pattern": "^(?!\\s*(?:[nN][uU][lL][lL]|[nN][oO][nN][eE]|[tT][oO][dD][oO]|[tT][bB][dD]|[xX][xX][xX]|[pP][lL][aA][cC][eE][hH][oO][lL][dD][eE][rR]|[cC][hH][aA][nN][gG][eE][mM][eE]|[uU][nN][kK][nN][oO][wW][nN]|[eE][xX][aA][mM][pP][lL][eE])\\s*$)(?!\\s)(?!.*\\s$)[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$"},
+    "measured": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_id", "unit", "value", "evidence_class", "derivation"],
+      "properties": {
+        "metric_id": {"$ref": "#/$defs/metricId"},
+        "unit": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "value": {"type": "number"},
+        "evidence_class": {"type": "string", "enum": ["MEASURED", "MATCHED", "VISUALLY_OBSERVED", "AUDIO_OBSERVED", "EDITORIAL_INFERENCE"]},
+        "derivation": {"type": "string", "minLength": 1, "pattern": "\\S"}
+      }
+    },
+    "notObserved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_id", "unit", "value", "status", "derivation", "reason"],
+      "properties": {
+        "metric_id": {"$ref": "#/$defs/metricId"},
+        "unit": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "value": {"type": "null"},
+        "status": {"const": "NOT_OBSERVED"},
+        "derivation": {"const": "not measured"},
+        "reason": {"type": "string", "minLength": 1, "pattern": "\\S"}
+      }
+    }
+  }
+}

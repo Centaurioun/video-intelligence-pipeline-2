@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["records"],
+  "properties": {
+    "records": {"type":"array","minItems":1,"uniqueItems":true,"items":{"$ref":"#/$defs/record"}},
+    "revision_ids": {"type":"array","uniqueItems":true,"items":{"$ref":"#/$defs/id"}}
+  },
+  "$defs": {
+    "record": {
+      "type":"object","additionalProperties":false,
+      "required":["record_id","record_type","record_schema_version","record_digest","payload"],
+      "properties": {
+        "record_id":{"type":"string","pattern":"^[a-z0-9][a-z0-9_-]{0,127}$"},
+        "record_type":{"const":"occurrence_revision"},
+        "record_schema_version":{"const":"gate0.v1"},
+        "record_digest":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "required":["occurrence_id","revision_id","content_id","locator","byte_count","digest_algorithm","content_digest","stream_refs","probe_ref","discovery_authorization_id","source_status","relation_ids"],
+          "properties": {
+            "occurrence_id":{"$ref":"#/$defs/id"},"revision_id":{"$ref":"#/$defs/id"},"content_id":{"$ref":"#/$defs/id"},
+            "locator":{"type":"string","minLength":1},"byte_count":{"type":"integer","minimum":0},
+            "digest_algorithm":{"const":"sha256"},"content_digest":{"$ref":"#/$defs/digest"},
+            "stream_refs":{"type":"array","uniqueItems":true,"items":{"type":"object","additionalProperties":false,"required":["stream_index","stream_type"],"properties":{"stream_index":{"type":"integer","minimum":0},"stream_type":{"enum":["video","audio","data","subtitle"]}}}},
+            "probe_ref":{"type":"string","minLength":1},"discovery_authorization_id":{"$ref":"#/$defs/id"},
+            "source_status":{"enum":["INCLUDED","EXCLUDED_AFTER_PROBE","NOT_OBSERVED"]},
+            "relation_ids":{"type":"array","uniqueItems":true,"items":{"$ref":"#/$defs/id"}},
+            "custody":{"type":"object","additionalProperties":false,"required":["state"],"properties":{"state":{"enum":["PRESERVED","QUARANTINED","NOT_OBSERVED"]},"authority":{"type":"string"},"recorded_at":{"$ref":"#/$defs/time"}}}
+          }
+        }
+      }
+    },
+    "id":{"type":"string","pattern":"^[a-z0-9][a-z0-9_-]{0,127}$"},
+    "digest":{"type":"string","pattern":"^[a-f0-9]{64}$"},
+    "time":{"type":"string","pattern":"^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?Z$"}
+  }
+}

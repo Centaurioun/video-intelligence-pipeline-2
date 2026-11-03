@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "events"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "gate0.runtime_and_failure_ledger.v1"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "payload_digest",
+        "artifact_type"
+      ],
+      "properties": {
+        "artifact_id": {
+          "$ref": "#/$defs/id"
+        },
+        "payload_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "artifact_type": {
+          "enum": [
+            "source_manifest.json",
+            "discovery_authorizations.jsonl",
+            "policy_decisions.jsonl",
+            "split_manifest.json",
+            "queries.jsonl",
+            "gold_events.jsonl",
+            "window_judgments.jsonl",
+            "window_sample_manifest.jsonl",
+            "run_manifest.json",
+            "ranked_candidates.jsonl",
+            "runtime_and_failure_ledger.json",
+            "metrics.json",
+            "gate_decision.md"
+          ]
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "event_type",
+        "attempt_id",
+        "affected_refs",
+        "reason",
+        "occurred_at"
+      ],
+      "properties": {
+        "event_id": {
+          "$ref": "#/$defs/id"
+        },
+        "event_type": {
+          "enum": [
+            "FAILURE",
+            "RETRY",
+            "EGRESS_BLOCKED",
+            "INVALIDATION",
+            "ROLLBACK",
+            "TOMBSTONE",
+            "SECRET_SCAN"
+          ]
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "affected_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        },
+        "reason": {
+          "type": "string"
+        },
+        "occurred_at": {
+          "$ref": "#/$defs/at"
+        },
+        "before_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "after_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "authority": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "idempotency_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "membership_digest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "payload_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ref"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "policy_decision_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tool_identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "protocol": {
+          "enum": [
+            "DNS",
+            "HTTP_PROXY",
+            "PROVIDER",
+            "LOOPBACK"
+          ]
+        },
+        "attempted_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "transmitted_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "type": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "decision": {
+          "enum": [
+            "ALLOW",
+            "DENY"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "BLOCKED",
+            "TRANSMITTED",
+            "FAILED"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "event_type"
+            ],
+            "properties": {
+              "event_id": {},
+              "event_type": {
+                "const": "EGRESS_BLOCKED"
+              },
+              "attempt_id": {},
+              "affected_refs": {},
+              "reason": {},
+              "occurred_at": {},
+              "before_status": {},
+              "after_status": {},
+              "authority": {},
+              "idempotency_key": {},
+              "membership_digest": {},
+              "payload_ref": {},
+              "policy_decision_id": {},
+              "tool_identity": {},
+              "destination": {},
+              "protocol": {},
+              "attempted_bytes": {},
+              "transmitted_bytes": {},
+              "payload": {},
+              "decision": {},
+              "outcome": {}
+            }
+          },
+          "then": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "policy_decision_id",
+              "tool_identity",
+              "destination",
+              "protocol",
+              "attempted_bytes",
+              "transmitted_bytes",
+              "payload",
+              "decision",
+              "outcome"
+            ],
+            "properties": {
+              "event_id": {},
+              "event_type": {},
+              "attempt_id": {},
+              "affected_refs": {},
+              "reason": {},
+              "occurred_at": {},
+              "before_status": {},
+              "after_status": {},
+              "authority": {},
+              "idempotency_key": {},
+              "membership_digest": {},
+              "payload_ref": {},
+              "policy_decision_id": {},
+              "tool_identity": {},
+              "destination": {},
+              "protocol": {},
+              "attempted_bytes": {},
+              "transmitted_bytes": {
+                "const": 0
+              },
+              "payload": {
+                "type": "null"
+              },
+              "decision": {},
+              "outcome": {}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

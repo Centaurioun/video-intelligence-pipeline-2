@@ -1,0 +1,39 @@
+{
+  "schema_version": "gate1.v1",
+  "artifacts": [
+    "comparison_contract.json",
+    "capability_descriptors.jsonl",
+    "policy_decisions.jsonl",
+    "run_manifest.json",
+    "embedding_results.jsonl",
+    "ranked_candidates.jsonl",
+    "judgments.jsonl",
+    "failure_ledger.json",
+    "benchmark_report.json",
+    "synthetic_receipt.json"
+  ],
+  "schemas": {
+    "comparison_contract.json": "comparison_contract.json",
+    "capability_descriptors.jsonl": "capability_descriptor.json",
+    "policy_decisions.jsonl": "policy_decision.json",
+    "run_manifest.json": "run_manifest.json",
+    "embedding_results.jsonl": "embedding_result.json",
+    "ranked_candidates.jsonl": "ranked_candidate.json",
+    "judgments.jsonl": "judgment.json",
+    "failure_ledger.json": "failure_ledger.json",
+    "benchmark_report.json": "benchmark_report.json",
+    "synthetic_receipt.json": "synthetic_receipt.json"
+  },
+  "required_payload_fields": {
+    "comparison_contract.json": ["comparison_id", "execution_mode", "question", "estimand", "changed_axis", "pinned_controls", "arm_ids", "operation", "primary_metric", "decision_rule", "validity_rules", "dependency_refs", "policy_eligibility", "tie_rule", "retry_policy", "resource_budget", "owner_approval_ref"],
+    "capability_descriptors.jsonl": ["record_id", "arm_id", "capability_revision", "provider_family", "operation", "input_mode", "requested_model", "resolved_backend", "runtime_revision", "config_digest", "space_id", "policy_decision_id", "window_profile_digest", "metric", "normalization"],
+    "policy_decisions.jsonl": ["record_id", "policy_decision_id", "decision", "processing_boundary"],
+    "run_manifest.json": ["schema_version", "run_id", "comparison_id", "execution_mode", "spec_sha", "execution_authority_sha", "canonical_contract_blob", "source_partitions", "candidate_production_inputs", "provenance", "backend_observation", "contract_digest", "descriptor_digest", "policy_digest", "frozen_protocol_digest", "synthetic_fault", "status"],
+    "embedding_results.jsonl": ["envelope", "payload"],
+    "ranked_candidates.jsonl": ["record_id", "arm_id", "query_id", "candidate_id", "representation_id", "space_id", "score", "rank", "tie_key", "coverage_status"],
+    "judgments.jsonl": ["record_id", "query_id", "candidate_id", "relevant", "reviewer_id", "synthetic", "evidence_class"],
+    "failure_ledger.json": ["record_id", "run_id", "comparison_id", "event_type", "attempt_id", "affected_refs", "reason", "occurred_at"],
+    "benchmark_report.json": ["comparison_id", "validity", "benchmark_status", "primary_metric_id", "primary_value", "arm_values", "coverage", "failure_class", "conclusion"],
+    "synthetic_receipt.json": ["spec_sha", "execution_authority_sha", "canonical_contract_blob", "execution_mode", "real_benchmark_executed", "provider_calls", "network_egress_bytes", "protected_media_used", "model_download_or_change", "winner_observed", "real_model_provider_claims", "gate0_terminal_sha", "gate_promotion"]
+  }
+}

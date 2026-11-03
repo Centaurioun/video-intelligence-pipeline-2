@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Closed ranked-candidate record (implementation-spec \u00a79.2 matrix; unlisted fields are prohibited). The technical window record (window_sample_manifest.jsonl) is the sole coordinate surface; provenance lives on the artifact envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_id",
+    "record_type",
+    "record_schema_version",
+    "record_digest",
+    "payload"
+  ],
+  "properties": {
+    "record_id": {
+      "$ref": "#/$defs/id"
+    },
+    "record_type": {
+      "const": "ranked_candidate"
+    },
+    "record_schema_version": {
+      "const": "gate0.v1"
+    },
+    "record_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "payload": {
+      "$ref": "#/$defs/payload"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "payload": {
+      "description": "\u00a79.2 ranked_candidate payload. Required: candidate identity, query, arm, typed window join, status and the gold firewall. representation_id is conditionally required by the cross-artifact validator, not by this schema.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "query_id",
+        "arm_id",
+        "window_id",
+        "score_status",
+        "coverage_status",
+        "gold_accessed"
+      ],
+      "properties": {
+        "candidate_id": {
+          "$ref": "#/$defs/id"
+        },
+        "query_id": {
+          "$ref": "#/$defs/id"
+        },
+        "arm_id": {
+          "$ref": "#/$defs/id"
+        },
+        "representation_id": {
+          "$ref": "#/$defs/id",
+          "description": "Semantic representation identity. Present iff the candidate's arm declares representation_kind=embedding; it MUST be absent for representation_kind=metadata_floor, which has no embedding or model descriptor. This cross-artifact conditional is enforced by gate0.contracts.validator (JSON Schema cannot express it); no arm id is hardcoded here."
+        },
+        "window_id": {
+          "$ref": "#/$defs/id"
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "score_status": {
+          "enum": [
+            "FINITE",
+            "FAILED",
+            "NON_FINITE",
+            "ZERO_VECTOR",
+            "EMPTY"
+          ]
+        },
+        "rank": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "tie_key": {
+          "type": "string"
+        },
+        "coverage_status": {
+          "enum": [
+            "PLANNED",
+            "SELECTED",
+            "FAILED",
+            "OMITTED",
+            "QUARANTINED",
+            "EMPTY"
+          ]
+        },
+        "gold_accessed": {
+          "const": false
+        }
+      }
+    }
+  }
+}

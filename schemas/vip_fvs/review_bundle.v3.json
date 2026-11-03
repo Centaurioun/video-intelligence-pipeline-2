@@ -1,0 +1,600 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://video-intelligence-pipeline.invalid/schema/vip_fvs/review_bundle.v3.json",
+  "title": "VIP FVS ReviewBundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_id",
+    "record_type",
+    "record_schema_version",
+    "record_digest",
+    "payload"
+  ],
+  "properties": {
+    "record_id": {
+      "$ref": "#/$defs/id"
+    },
+    "record_type": {
+      "const": "vip_fvs.review_bundle"
+    },
+    "record_schema_version": {
+      "const": "vip_fvs.review_bundle.v3"
+    },
+    "record_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "payload": {
+      "$ref": "#/$defs/payload"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonempty": {
+      "type": "string",
+      "minLength": 1
+    },
+    "digest_map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "digest"
+      ],
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_revision_id",
+        "source_sha256",
+        "source_byte_count",
+        "selected_stream_index",
+        "timebase",
+        "probe_artifact_ref",
+        "probe_digest",
+        "source_locator",
+        "snapshot"
+      ],
+      "properties": {
+        "source_revision_id": {
+          "$ref": "#/$defs/id"
+        },
+        "source_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "source_byte_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selected_stream_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timebase": {
+          "$ref": "#/$defs/timebase"
+        },
+        "probe_artifact_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "probe_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "source_locator": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/source_snapshot"
+        }
+      }
+    },
+    "timebase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "num",
+        "den"
+      ],
+      "properties": {
+        "num": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "den": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "discovery_policy_ref",
+        "refinement_policy_ref",
+        "policy_digest",
+        "scope_digest"
+      ],
+      "properties": {
+        "discovery_policy_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "refinement_policy_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "policy_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "scope_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "query_id",
+        "text",
+        "digest"
+      ],
+      "properties": {
+        "query_id": {
+          "$ref": "#/$defs/id"
+        },
+        "text": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempt_id",
+        "generation_id",
+        "semantic_space_id",
+        "model_identity",
+        "model_revision",
+        "weights_digest",
+        "processor_digest",
+        "index_ref",
+        "index_digest",
+        "input_digest"
+      ],
+      "properties": {
+        "attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "generation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "semantic_space_id": {
+          "$ref": "#/$defs/id"
+        },
+        "model_identity": {
+          "$ref": "#/$defs/id"
+        },
+        "model_revision": {
+          "$ref": "#/$defs/id"
+        },
+        "weights_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "processor_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "index_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "index_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "input_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "rank",
+        "score",
+        "evidence_class",
+        "binding_eligible",
+        "assertion_digest",
+        "semantic_interval"
+      ],
+      "properties": {
+        "candidate_id": {
+          "$ref": "#/$defs/id"
+        },
+        "rank": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "score": {
+          "type": "number",
+          "finite": true
+        },
+        "evidence_class": {
+          "const": "MATCHED"
+        },
+        "binding_eligible": {
+          "const": false
+        },
+        "assertion_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "semantic_interval": {
+          "$ref": "#/$defs/interval"
+        }
+      }
+    },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "time_domain",
+        "endpoint_semantics"
+      ],
+      "properties": {
+        "start": {
+          "type": "number"
+        },
+        "end": {
+          "type": "number"
+        },
+        "time_domain": {
+          "const": "semantic_seconds"
+        },
+        "endpoint_semantics": {
+          "const": "half_open"
+        }
+      }
+    },
+    "refinement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "refinement_id",
+        "status",
+        "source_revision_id",
+        "selected_stream_index",
+        "source_pts_interval",
+        "timebase",
+        "attempt_id",
+        "evidence_artifact_ref",
+        "evidence_digest",
+        "evidence_class",
+        "request_identity"
+      ],
+      "properties": {
+        "refinement_id": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "const": "MEASURED"
+        },
+        "source_revision_id": {
+          "$ref": "#/$defs/id"
+        },
+        "selected_stream_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_pts_interval": {
+          "$ref": "#/$defs/pts_interval"
+        },
+        "timebase": {
+          "$ref": "#/$defs/timebase"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "evidence_artifact_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "evidence_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "evidence_class": {
+          "const": "MEASURED"
+        },
+        "request_identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "request_id",
+            "candidate_assertion_ref",
+            "producer_attempt_id",
+            "idempotency_key",
+            "request_digest",
+            "request"
+          ],
+          "properties": {
+            "request_id": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "candidate_assertion_ref": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "producer_attempt_id": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "idempotency_key": {
+              "$ref": "#/$defs/nonempty"
+            },
+            "request_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "request": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "request_id",
+                "candidate_assertion_ref",
+                "source_revision_id",
+                "source_locator",
+                "expected_source_sha256",
+                "selected_stream_index",
+                "requested_start_pts",
+                "requested_end_pts",
+                "producer_attempt_id",
+                "idempotency_key",
+                "expected_timebase"
+              ],
+              "properties": {
+                "request_id": {
+                  "$ref": "#/$defs/nonempty"
+                },
+                "candidate_assertion_ref": {
+                  "$ref": "#/$defs/nonempty"
+                },
+                "source_revision_id": {
+                  "$ref": "#/$defs/nonempty"
+                },
+                "source_locator": {
+                  "$ref": "#/$defs/nonempty"
+                },
+                "expected_source_sha256": {
+                  "$ref": "#/$defs/digest"
+                },
+                "selected_stream_index": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "requested_start_pts": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "requested_end_pts": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "producer_attempt_id": {
+                  "$ref": "#/$defs/nonempty"
+                },
+                "idempotency_key": {
+                  "$ref": "#/$defs/nonempty"
+                },
+                "expected_timebase": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "array",
+                      "prefixItems": [
+                        {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      ],
+                      "minItems": 2,
+                      "maxItems": 2
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "pts_interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end",
+        "time_domain",
+        "endpoint_semantics"
+      ],
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "time_domain": {
+          "const": "source_pts"
+        },
+        "endpoint_semantics": {
+          "const": "half_open"
+        }
+      }
+    },
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "display_only",
+        "start_seconds",
+        "end_seconds"
+      ],
+      "properties": {
+        "display_only": {
+          "const": true
+        },
+        "start_seconds": {
+          "type": "number"
+        },
+        "end_seconds": {
+          "type": "number"
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundle_id",
+        "run_id",
+        "created_at",
+        "review_status",
+        "source",
+        "authorization",
+        "query",
+        "generation",
+        "candidate",
+        "refinement",
+        "presentation",
+        "dependency_digest",
+        "decision"
+      ],
+      "properties": {
+        "bundle_id": {
+          "$ref": "#/$defs/id"
+        },
+        "run_id": {
+          "$ref": "#/$defs/id"
+        },
+        "created_at": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "review_status": {
+          "const": "AWAITING_EDITORIAL_DECISION"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "authorization": {
+          "$ref": "#/$defs/authorization"
+        },
+        "query": {
+          "$ref": "#/$defs/query"
+        },
+        "generation": {
+          "$ref": "#/$defs/generation"
+        },
+        "candidate": {
+          "$ref": "#/$defs/candidate"
+        },
+        "refinement": {
+          "$ref": "#/$defs/refinement"
+        },
+        "presentation": {
+          "$ref": "#/$defs/presentation"
+        },
+        "dependency_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "decision": {
+          "type": "null"
+        }
+      }
+    },
+    "source_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "snapshot_id",
+        "snapshot_path",
+        "manifest_path",
+        "snapshot_sha256",
+        "source_byte_count",
+        "source_locator",
+        "authorization_id",
+        "source_revision_id",
+        "snapshot_manifest_sha256",
+        "max_source_bytes",
+        "max_store_bytes"
+      ],
+      "properties": {
+        "snapshot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "snapshot_path": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "manifest_path": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "snapshot_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "source_byte_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_locator": {
+          "$ref": "#/$defs/nonempty"
+        },
+        "authorization_id": {
+          "$ref": "#/$defs/id"
+        },
+        "source_revision_id": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/id"
+            }
+          ]
+        },
+        "snapshot_manifest_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "max_source_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_store_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  },
+  "record_schema_version": {
+    "const": "vip_fvs.review_bundle.v3"
+  }
+}

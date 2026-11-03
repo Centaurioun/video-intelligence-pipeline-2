@@ -1,0 +1,332 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_id",
+    "record_type",
+    "record_schema_version",
+    "record_digest",
+    "payload"
+  ],
+  "properties": {
+    "record_id": {
+      "$ref": "#/$defs/id"
+    },
+    "record_type": {
+      "enum": [
+        "sample_target",
+        "typed_interval"
+      ]
+    },
+    "record_schema_version": {
+      "const": "gate0.v1"
+    },
+    "record_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "payload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sample_target_payload"
+        },
+        {
+          "$ref": "#/$defs/typed_interval_payload"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "rational": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer"
+        },
+        "denominator": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "time_base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "denominator": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "sample_target_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_id",
+        "window_id",
+        "interval_id",
+        "tick",
+        "target_offset",
+        "pts_status",
+        "coverage_status"
+      ],
+      "properties": {
+        "target_id": {
+          "$ref": "#/$defs/id"
+        },
+        "window_id": {
+          "$ref": "#/$defs/id"
+        },
+        "interval_id": {
+          "$ref": "#/$defs/id"
+        },
+        "tick": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "target_offset": {
+          "$ref": "#/$defs/rational"
+        },
+        "pts_status": {
+          "enum": [
+            "VALID",
+            "MISSING",
+            "NON_MONOTONE",
+            "DISCONTINUOUS",
+            "OUT_OF_RANGE",
+            "WRONG_STREAM",
+            "AMBIGUOUS",
+            "MIXED_TIME_BASE",
+            "MISSING_TIE_EVIDENCE",
+            "NO_COVERAGE"
+          ]
+        },
+        "coverage_status": {
+          "enum": [
+            "PLANNED",
+            "SELECTED",
+            "FAILED",
+            "OMITTED",
+            "QUARANTINED",
+            "EMPTY"
+          ]
+        },
+        "raw_pts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ticks",
+            "time_base_num",
+            "time_base_den"
+          ],
+          "properties": {
+            "ticks": {
+              "type": "integer"
+            },
+            "time_base_num": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "time_base_den": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "normalized_pts": {
+          "$ref": "#/$defs/rational"
+        },
+        "selected_frame_id": {
+          "$ref": "#/$defs/id"
+        },
+        "decoder_ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "presentation_order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duplicate_reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mapping_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "stream_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dts_ticks": {
+          "type": "integer"
+        },
+        "frame_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_frame_identity": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "normalized_pts"
+            ]
+          },
+          "then": {
+            "required": [
+              "mapping_ref"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "mapping_ref"
+            ]
+          },
+          "then": {
+            "required": [
+              "normalized_pts"
+            ]
+          }
+        }
+      ]
+    },
+    "typed_interval_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "interval_id",
+        "revision_id",
+        "stream_index",
+        "time_domain",
+        "origin",
+        "start",
+        "end",
+        "endpoint_semantics",
+        "time_base",
+        "precision",
+        "producer_attempt_id",
+        "refinement_eligibility"
+      ],
+      "properties": {
+        "interval_id": {
+          "$ref": "#/$defs/id"
+        },
+        "revision_id": {
+          "$ref": "#/$defs/id"
+        },
+        "stream_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "time_domain": {
+          "enum": [
+            "SEMANTIC_SECONDS",
+            "TECHNICAL_WINDOW",
+            "MATCHED_OFFSET",
+            "SOURCE_PTS",
+            "SOURCE_FRAME",
+            "PROXY_TIME",
+            "TIMELINE_TIME",
+            "RENDERED_OUTPUT"
+          ]
+        },
+        "origin": {
+          "$ref": "#/$defs/rational"
+        },
+        "start": {
+          "$ref": "#/$defs/rational"
+        },
+        "end": {
+          "$ref": "#/$defs/rational"
+        },
+        "endpoint_semantics": {
+          "const": "HALF_OPEN"
+        },
+        "time_base": {
+          "$ref": "#/$defs/time_base"
+        },
+        "mapping_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "precision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "producer_attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "refinement_eligibility": {
+          "enum": [
+            "ELIGIBLE",
+            "INELIGIBLE"
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "record_type"
+        ],
+        "properties": {
+          "record_type": {
+            "const": "sample_target"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/sample_target_payload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "record_type"
+        ],
+        "properties": {
+          "record_type": {
+            "const": "typed_interval"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/typed_interval_payload"
+          }
+        }
+      }
+    }
+  ]
+}

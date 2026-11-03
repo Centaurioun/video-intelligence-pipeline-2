@@ -1,0 +1,19 @@
+{
+  "retention_classes": [
+    "SOURCE_REFERENCE",
+    "DERIVED_REPLAYABLE",
+    "DERIVED_RESTRICTED",
+    "AUDIT_MINIMUM",
+    "TOMBSTONE"
+  ],
+  "rollback": [
+    "AVAILABLE",
+    "QUARANTINED",
+    "CLEANUP_PENDING",
+    "CLEANED",
+    "TOMBSTONED"
+  ],
+  "membership_digest_encoding": "sha256(lf_join(sorted_unique_artifact_ids))",
+  "source_preservation": true,
+  "tombstone_searchable": false
+}

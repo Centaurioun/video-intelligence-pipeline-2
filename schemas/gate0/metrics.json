@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "metrics"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "gate0.metrics.v1"
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/metric"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric_id",
+        "query_version_digest",
+        "gold_version_digest",
+        "judgment_version_digest",
+        "ranking_digest",
+        "baseline_digest",
+        "population_id",
+        "numerator",
+        "denominator",
+        "calculation_version",
+        "benchmark_status",
+        "validity"
+      ],
+      "properties": {
+        "metric_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+          "maxLength": 128
+        },
+        "query_version_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "gold_version_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "judgment_version_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "ranking_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "baseline_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "population_id": {
+          "$ref": "#/$defs/id"
+        },
+        "numerator": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "denominator": {
+          "type": "integer",
+          "exclusiveMinimum": 0
+        },
+        "calculation_version": {
+          "type": "string"
+        },
+        "benchmark_status": {
+          "enum": [
+            "PLANNED",
+            "VALID",
+            "INVALID_PROTOCOL",
+            "PASS",
+            "FAIL",
+            "NOT_RUN"
+          ]
+        },
+        "validity": {
+          "enum": [
+            "VALID",
+            "INVALID_PROTOCOL",
+            "NOT_RUN"
+          ]
+        }
+      }
+    }
+  }
+}

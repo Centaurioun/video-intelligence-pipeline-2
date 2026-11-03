@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate1.synthetic_receipt.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "spec_sha",
+    "execution_authority_sha",
+    "canonical_contract_blob",
+    "execution_mode",
+    "real_benchmark_executed",
+    "provider_calls",
+    "network_egress_bytes",
+    "protected_media_used",
+    "model_download_or_change",
+    "winner_observed",
+    "real_model_provider_claims",
+    "gate0_terminal_sha",
+    "gate_promotion"
+  ],
+  "properties": {
+    "spec_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "execution_authority_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "canonical_contract_blob": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "execution_mode": {"const": "SYNTHETIC"},
+    "real_benchmark_executed": {"type": "boolean"},
+    "provider_calls": {"type": "integer", "minimum": 0},
+    "network_egress_bytes": {"type": "integer", "minimum": 0},
+    "protected_media_used": {"type": "boolean"},
+    "model_download_or_change": {"type": "boolean"},
+    "winner_observed": {"type": "boolean"},
+    "real_model_provider_claims": {"const": "NOT_OBSERVED"},
+    "gate0_terminal_sha": {"type": ["string", "null"]},
+    "gate_promotion": {"type": "boolean"}
+  }
+}

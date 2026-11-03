@@ -1,0 +1,6 @@
+{
+  "config_digest": "fbab74c76529a7950c15afdd814226ae8ad65a93c7cfc78aa2b6371e03ceca87",
+  "dependency_lock_digest": "bfe36fb15e17f245e9cd8f133e25d6939546c63d0ded7d11868b26bbd3c2e9ec",
+  "python_version": "3.11.9",
+  "runtime_feasibility": "NOT_OBSERVED"
+}

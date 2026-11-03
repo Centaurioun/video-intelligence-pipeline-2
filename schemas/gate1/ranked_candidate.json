@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate1.ranked_candidate.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_id",
+    "arm_id",
+    "query_id",
+    "candidate_id",
+    "representation_id",
+    "space_id",
+    "score",
+    "rank",
+    "tie_key",
+    "coverage_status"
+  ],
+  "properties": {
+    "record_id": {"type": "string", "minLength": 1},
+    "arm_id": {"type": "string", "minLength": 1},
+    "query_id": {"type": "string", "minLength": 1},
+    "candidate_id": {"type": "string", "minLength": 1},
+    "representation_id": {"type": "string", "minLength": 1},
+    "space_id": {"type": "string", "minLength": 1},
+    "score": {"type": ["number", "null"]},
+    "rank": {"type": ["integer", "null"]},
+    "tie_key": {"type": ["array", "null"], "items": {}},
+    "coverage_status": {"enum": ["SELECTED", "FAILED", "OMITTED", "QUARANTINED"]}
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate1.run_manifest.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "comparison_id",
+    "execution_mode",
+    "spec_sha",
+    "execution_authority_sha",
+    "canonical_contract_blob",
+    "source_partitions",
+    "candidate_production_inputs",
+    "provenance",
+    "backend_observation",
+    "contract_digest",
+    "descriptor_digest",
+    "policy_digest",
+    "frozen_protocol_digest",
+    "synthetic_fault",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {"const": "gate1.run.v1"},
+    "run_id": {"type": "string", "pattern": "^syn-[0-9a-f]{16}$"},
+    "comparison_id": {"type": "string", "minLength": 1},
+    "execution_mode": {"enum": ["SYNTHETIC", "REAL"]},
+    "spec_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "execution_authority_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "canonical_contract_blob": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "source_partitions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["development", "evaluation"],
+      "properties": {
+        "development": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "evaluation": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "candidate_production_inputs": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "input_id"],
+            "properties": {
+              "kind": {"enum": ["query", "candidate"]},
+              "input_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "input_id", "arm_id", "space_id"],
+            "properties": {
+              "kind": {"const": "representation"},
+              "input_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+              "arm_id": {"type": "string", "minLength": 1},
+              "space_id": {"type": "string", "minLength": 1}
+            }
+          }
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "attempt_id", "config_digest"],
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1},
+        "attempt_id": {"type": "string", "minLength": 1},
+        "config_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "backend_observation": {"type": "string", "minLength": 1},
+    "contract_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "descriptor_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "policy_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "frozen_protocol_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "synthetic_fault": {"enum": ["NONE", "RESOURCE_OPERABILITY"]},
+    "status": {"enum": ["PLANNED", "VALID", "INVALID_PROTOCOL", "PASS", "FAIL", "NOT_RUN"]}
+  }
+}

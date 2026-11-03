@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schemas/orchestration/remaining-work-prompt-packet.schema.json",
+  "title": "Remaining Work Prompt Packet Metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "prompt_core",
+    "launch_overlay"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "remaining-work-prompt-packet.v1"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "prompt_core": {
+      "$ref": "#/$defs/prompt_core"
+    },
+    "launch_overlay": {
+      "$ref": "#/$defs/launch_overlay"
+    }
+  },
+  "$defs": {
+    "prompt_core": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "sha256",
+        "goal",
+        "dependencies",
+        "read_scope",
+        "write_domain",
+        "consumed_contracts",
+        "prohibited_scope",
+        "focused_tests",
+        "verification_hooks",
+        "h4_decomposition_guidance",
+        "parallelism_contract",
+        "failure_policy",
+        "receipt_contract",
+        "expected_deliverables",
+        "executor_mode",
+        "resource_class"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "goal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependencies": {
+          "type": "array"
+        },
+        "read_scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "write_domain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "consumed_contracts": {
+          "type": "array"
+        },
+        "prohibited_scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "focused_tests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "verification_hooks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "h4_decomposition_guidance": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parallelism_contract": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "failure_policy": {
+          "type": "object"
+        },
+        "receipt_contract": {
+          "type": "object"
+        },
+        "expected_deliverables": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "executor_mode": {
+          "enum": [
+            "PARALLEL_PORTFOLIO",
+            "SERIAL_TIGHT_COUPLING",
+            "PER_TASK_REVIEW_REQUIRED",
+            "VERIFY_ONLY",
+            "REPAIR_CELL"
+          ]
+        },
+        "resource_class": {
+          "enum": [
+            "LIGHTWEIGHT_CPU_TEST",
+            "HEAVY_CPU",
+            "FFMPEG_HEAVY",
+            "MODEL_MPS",
+            "MIXED_HEAVY",
+            "ENV_ADMIN"
+          ]
+        }
+      }
+    },
+    "launch_overlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "base_sha",
+        "dependency_heads",
+        "branch",
+        "worktree",
+        "open_problem_ids",
+        "contract_deltas",
+        "resource_leases",
+        "resolved_model_identity",
+        "reconciled_at_head"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        },
+        "dependency_heads": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "worktree": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "open_problem_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contract_deltas": {
+          "type": "array"
+        },
+        "resource_leases": {
+          "type": "object"
+        },
+        "resolved_model_identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reconciled_at_head": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        }
+      }
+    }
+  }
+}

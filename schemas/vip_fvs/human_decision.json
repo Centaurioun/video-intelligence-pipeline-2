@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://video-intelligence-pipeline.invalid/schema/vip_fvs/human_decision.v1.json",
+  "title": "VIP FVS HumanDecisionArtifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["record_id", "record_type", "record_schema_version", "record_digest", "payload"],
+  "properties": {
+    "record_id": {"$ref": "#/$defs/id"},
+    "record_type": {"const": "vip_fvs.human_decision"},
+    "record_schema_version": {"const": "vip_fvs.human_decision.v1"},
+    "record_digest": {"$ref": "#/$defs/digest"},
+    "payload": {"$ref": "#/$defs/payload"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["decision_id", "bundle_record_digest", "bundle_dependency_digest", "principal_kind", "principal_ref", "refinement_id", "refinement_evidence_digest", "source_revision_id", "source_sha256", "target_plan_revision", "decision_class", "rationale", "disposition", "plan_action", "evidence_class", "requested_modification", "accepted_sub_interval_ref", "supersedes"],
+      "properties": {
+        "decision_id": {"$ref": "#/$defs/id"},
+        "bundle_record_digest": {"$ref": "#/$defs/digest"},
+        "bundle_dependency_digest": {"$ref": "#/$defs/digest"},
+        "principal_kind": {"const": "human"},
+        "principal_ref": {"$ref": "#/$defs/id"},
+        "refinement_id": {"$ref": "#/$defs/id"},
+        "refinement_evidence_digest": {"$ref": "#/$defs/digest"},
+        "source_revision_id": {"$ref": "#/$defs/id"},
+        "source_sha256": {"$ref": "#/$defs/digest"},
+        "target_plan_revision": {"type": "integer", "minimum": 1},
+        "decision_class": {"enum": ["ACCEPT", "REJECT", "MODIFY"]},
+        "rationale": {"type": "string", "minLength": 1},
+        "disposition": {"enum": ["ACCEPTED_FOR_PLAN", "REJECTED", "MODIFICATION_REQUESTED"]},
+        "plan_action": {"enum": ["BUILD_REAL_PLAN", "NONE"]},
+        "evidence_class": {"const": "EDITORIAL_INFERENCE"},
+        "requested_modification": {"type": ["string", "null"]},
+        "accepted_sub_interval_ref": {"type": ["string", "null"]},
+        "supersedes": {"anyOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]}
+      }
+    }
+  }
+}

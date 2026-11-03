@@ -1,0 +1,2 @@
+# Gate-0 exact dependency lock; runtime feasibility remains NOT_OBSERVED.
+pytest==8.3.3
