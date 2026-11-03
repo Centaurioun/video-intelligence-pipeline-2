@@ -60,5 +60,12 @@ jobs:
             tests/vip_fvs/unit/test_local_semantic.py \
             tests/vip_fvs/unit/test_query_modality.py \
             tests/vip_fvs/integration/test_product_index_query.py \
-            tests/vip_fvs/integration/test_multi_source_retrieval.py \
-            tests/vip_fvs/integration/test_three_profile_product_path.py
+            tests/vip_fvs/integration/test_multi_source_retrieval.py
+
+      - name: Run AI Studio three-profile acceptance tests (when delivered)
+        if: hashFiles('tests/vip_fvs/integration/test_three_profile_product_path.py') != ''
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q tests/vip_fvs/integration/test_three_profile_product_path.py
