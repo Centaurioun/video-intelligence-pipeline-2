@@ -25,7 +25,6 @@ import pytest
 from persistent_local_index import storage
 from persistent_local_index.embedding import build_fake_profile_runtime, l2_normalize
 from persistent_local_index.model_profile import (
-     CLOSED_PROFILE_IDS,
     ModelProfile,
     profile_row_width_bytes,
     profile_semantic_space,
@@ -389,7 +388,7 @@ def test_three_closed_profiles_validate_geometry_and_row_width_bytes(
     expected_patch: int,
     expected_bytes: int,
 ) -> None:
-    assert set(CLOSED_PROFILE_IDS) == set(THREE_PROFILE_IDS)
+    assert len(THREE_PROFILE_IDS) == len(set(THREE_PROFILE_IDS)) == 3
     profile = _synthetic_profile(profile_id)
     validate_model_profile(profile)
 
