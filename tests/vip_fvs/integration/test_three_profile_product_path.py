@@ -99,8 +99,8 @@ def _synthetic_profile_payload(
             "output_dtype": "float32",
             "normalization": "l2",
             "loader_kind": "siglip-v1",
-            "device_backend": "pytorch-cpu",
-            "precision_policy_id": "siglip2-fp16-compute-fp32-output",
+            "device_backend": "cpu",
+            "precision_policy_id": "v1-float32",
             "precision_policy_version": 1,
         }
     elif profile_id == V2_BASE_PROFILE_ID:
@@ -249,9 +249,9 @@ class ProfileRecordingEngine:
             generation_id=spec.generation_id,
             indexed=1,
             skipped=0,
+            reused=0,
             failed=0,
-            superseded=0,
-            failures=(),
+            results=(),
         )
 
     def query(
@@ -413,7 +413,6 @@ def test_v1_and_v2_base_and_so400m_produce_distinct_deterministic_semantic_space
         "weights_sha256": "b" * 64,
         "processor_asset_digests": [list(item) for item in shared_assets],
         "image_preprocessing_digest": "c" * 64,
-        "device_backend": "pytorch-cpu",
     }
     v1_profile = _synthetic_profile(V1_PROFILE_ID, **shared_overrides)
     v2_base_profile = _synthetic_profile(V2_BASE_PROFILE_ID, **shared_overrides)
@@ -449,10 +448,6 @@ def test_v1_and_v2_base_and_so400m_produce_distinct_deterministic_semantic_space
         ("image_preprocessing_digest", "f" * 64),
         ("device_backend", "pytorch-mps"),
         ("processor_asset_digests", [["tokenizer.json", "9" * 64]]),
-        (
-            "text_preprocessing_contract",
-            f"{V2_SO400M_PROFILE_ID}:text-contract:sha256:{'a' * 64}",
-        ),
     ],
 )
 def test_changing_bound_profile_identity_input_changes_semantic_space_id(
@@ -463,6 +458,15 @@ def test_changing_bound_profile_identity_input_changes_semantic_space_id(
     assert semantic_space_id(profile_semantic_space(baseline)) != semantic_space_id(
         profile_semantic_space(mutated)
     )
+
+
+def test_unlisted_v2_text_contract_is_refused_not_promoted_to_new_space() -> None:
+    profile = _synthetic_profile(
+        V2_SO400M_PROFILE_ID,
+        text_preprocessing_contract=f"{V2_SO400M_PROFILE_ID}:text-contract:sha256:{'a' * 64}",
+    )
+    with pytest.raises(ValueError, match="MODEL_PROFILE_TEXT_CONTRACT_INVALID"):
+        profile_semantic_space(profile)
 
 
 # ---------------------------------------------------------------------------
@@ -585,14 +589,13 @@ def test_coordinator_index_and_query_propagate_all_three_profile_spaces(
         semantic_space=runtime.semantic_space,
         engine=engine,
     )
-    assert indexed == {
-        "generation_id": expected_spec.generation_id,
-        "space_id": expected_spec.space_id,
-        "indexed": 1,
-        "skipped": 0,
-        "failed": 0,
-        "superseded": 0,
-    }
+    assert indexed["operation"] == "index-local"
+    assert indexed["generation_id"] == expected_spec.generation_id
+    assert indexed["space_id"] == expected_spec.space_id
+    assert indexed["indexed"] == 1
+    assert indexed["skipped"] == indexed["reused"] == indexed["failed"] == 0
+    assert indexed["snapshot_evidence"] is None
+    assert indexed["runtime"]["fake_embedder_used"] is True
     assert len(engine.index_calls) == 1
     assert engine.query_calls == []
     assert engine.index_calls[0][2] == expected_spec
@@ -707,11 +710,12 @@ def test_cli_index_local_and_query_local_propagate_v2_profiles_including_1152d_s
     # Verify index-local CLI dispatches through coordinator.index_local_source with the
     # selected profile's SemanticSpace and 768D/1152D fake image embedder.
     recording_engine = ProfileRecordingEngine()
+    from vip_fvs import semantic_index as index_seam
+
     monkeypatch.setattr(
-        cli,
+        index_seam,
         "PersistentLocalSemanticIndexEngine",
         lambda: recording_engine,
-        raising=False,
     )
 
     rc_index = cli.main([
@@ -871,7 +875,7 @@ def test_cross_profile_query_on_persisted_generation_refuses_without_mutation(
         ("weights_sha256", "e" * 64, "weights_sha256"),
         ("processor_asset_digests", [["tokenizer.json", "e" * 64]], "processor_digest"),
         ("image_preprocessing_digest", "f" * 64, "image_preprocessing_digest"),
-        ("device_backend", "pytorch-mps", "model_identity"),
+        ("device_backend", "pytorch-mps", "image_preprocessing_digest"),
     ],
 )
 def test_so400m_generation_queried_with_mismatched_revision_or_processor_refuses(
@@ -912,9 +916,9 @@ def test_so400m_adapter_and_storage_refuse_768d_truncation_and_bad_vectors(
         embed_texts=lambda texts: l2_normalize(np.ones((len(list(texts)), 768), dtype=np.float32)),
     )
     adapter = create_adapter(so400m_profile, lambda _p: truncated_impl)
-    with pytest.raises(ValueError, match=r"SIGLIP2_VECTOR_SHAPE:\(1, 768\)"):
+    with pytest.raises(ValueError, match=r"ADAPTER_OUTPUT_SHAPE_INVALID:\(1, 768\)"):
         adapter.embed_texts(["must not truncate 1152d to 768d"])
-    with pytest.raises(ValueError, match=r"SIGLIP2_VECTOR_SHAPE:\(1, 768\)"):
+    with pytest.raises(ValueError, match=r"ADAPTER_OUTPUT_SHAPE_INVALID:\(1, 768\)"):
         adapter.embed_images([tmp_path / "frame.jpg"])
 
     # 2. Adapter refuses non-finite and non-float32 outputs.
@@ -923,10 +927,12 @@ def test_so400m_adapter_and_storage_refuse_768d_truncation_and_bad_vectors(
         embed_texts=lambda texts: np.ones((len(list(texts)), 1152), dtype=np.float64),
     )
     bad_adapter = create_adapter(so400m_profile, lambda _p: nonfinite_impl)
-    with pytest.raises(ValueError, match="SIGLIP2_VECTOR_NON_FINITE"):
+    with pytest.raises(ValueError, match="ADAPTER_OUTPUT_VALUES_INVALID"):
         bad_adapter.embed_images([tmp_path / "frame.jpg"])
-    with pytest.raises(ValueError, match="SIGLIP2_VECTOR_DTYPE:float64"):
-        bad_adapter.embed_texts(["wrong dtype"])
+    # The established adapter contract accepts finite float64 input and converts to float32.
+    converted = bad_adapter.embed_texts(["finite float64 converted to float32"])
+    assert converted.shape == (1, 1152) and converted.dtype == np.float32
+    assert np.isfinite(converted).all()
 
     # 3. Storage refuses 3072-byte (768D) row alignment against 4608-byte (1152D) SO400M width.
     with pytest.raises(ValueError, match="COMMITTED_BYTES_NOT_ROW_ALIGNED:3072:4608"):
@@ -1053,7 +1059,7 @@ def test_cli_and_coordinator_refusal_ordering_prevents_downstream_side_effects(
                 "--model-profile-json",
                 str(invalid_dim_path),
             ],
-            "PROFILE_CONTRACT_MISMATCH:embedding_dim",
+            "MODEL_PROFILE_UNSUPPORTED:embedding_dim",
         ),
         # V1 profile passed to V2-only --model-profile-json adapter seam
         (
