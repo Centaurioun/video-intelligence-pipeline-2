@@ -10,14 +10,11 @@ from typing import Any
 from gate2.faults import Capability, FaultClass, capability, inject
 from gate2.recovery import RecoveryHarness, RecoveryRefusal
 from gate2.workload import WorkloadSpec, generate
-from vip_lab.common import canonical_json_dumps
 from vip_lab.mega12.replay_graph import (
     DEFAULT_CURR_MANIFEST_DIGEST,
     SyntheticReplayHarnessAdapter,
     build_canonical_recovery_binding,
 )
-
-_BYTES_FAULT_CLASSES = frozenset({FaultClass.A, FaultClass.E, FaultClass.F})
 
 
 def _classify_refusal_code(exc: RecoveryRefusal) -> str:
@@ -34,7 +31,75 @@ def _classify_refusal_code(exc: RecoveryRefusal) -> str:
         return "PARTIAL_INDEX"
     if "DIGEST_MISMATCH" in msg or "digest mismatch" in msg:
         return "DIGEST_MISMATCH"
+    if "stale recovery binding" in msg:
+        return "STALE_RECOVERY_BINDING"
     return "RECOVERY_REFUSAL"
+
+
+def _build_canonical_fault_payload(
+    fc: FaultClass,
+    *,
+    workload_spec: WorkloadSpec,
+    sample_stage_digest: str,
+) -> dict[str, Any]:
+    if fc == FaultClass.A_BEFORE_STAGE_START:
+        return {
+            "crash_point": "before_stage_start",
+            "truncate": True,
+            "stage_digest": sample_stage_digest,
+        }
+    if fc == FaultClass.E_REPEATED_IDEMPOTENCY_KEY:
+        return {
+            "idempotency_keys": ["job_000_stage_000", "job_000_stage_000"],
+            "stage_digest": sample_stage_digest,
+        }
+    if fc == FaultClass.F_RESTART_RECONSTRUCTION:
+        return {
+            "pre_digest": sample_stage_digest,
+            "post_digest": sample_stage_digest,
+        }
+    if fc == FaultClass.H_INTERRUPTED_RECOVERY:
+        return {
+            "interrupted_recovery": True,
+            "stage_digest": sample_stage_digest,
+        }
+    if fc == FaultClass.I_CORRUPT_AT_REST:
+        return {
+            "corrupt_at_rest": True,
+            "truncated_bytes": True,
+            "partial_record": True,
+            "stage_digest": sample_stage_digest,
+        }
+    if fc == FaultClass.J_POST_SUCCESS_INVALIDATION:
+        return {
+            "expected_digest": sample_stage_digest,
+            "actual_digest": "f" * 64 if sample_stage_digest != "f" * 64 else "0" * 64,
+        }
+    if fc == FaultClass.K_IDENTITY_DRIFT:
+        return {
+            "expected_manifest_digest": DEFAULT_CURR_MANIFEST_DIGEST,
+            "current_manifest_digest": "e" * 64,
+            "expected_c04_sha": workload_spec.c04_sha,
+            "current_c04_sha": workload_spec.c04_sha,
+            "expected_e05_sha": workload_spec.e05_sha,
+            "current_e05_sha": workload_spec.e05_sha,
+            "expected_config_digest": workload_spec.config_digest,
+            "current_config_digest": workload_spec.config_digest,
+        }
+    if fc == FaultClass.L_CONCURRENT_WRITER:
+        return {
+            "writers": 2,
+            "stage_digest": sample_stage_digest,
+        }
+    if fc == FaultClass.M_REFERENTIAL_DIVERGENCE:
+        return {
+            "sqlite_keys": ["seg_000", "seg_001"],
+            "vector_keys": ["seg_000"],
+        }
+    return {
+        "fault_class": fc.value,
+        "stage_digest": sample_stage_digest,
+    }
 
 
 def evaluate_fault_scenario_matrix(
@@ -53,15 +118,7 @@ def evaluate_fault_scenario_matrix(
     sample_job = fixture.jobs[0]
     sample_stage = sample_job.stages[0]
     sample_bytes = sample_stage.artifact
-    sample_dict = {
-        "manifest_digest": DEFAULT_CURR_MANIFEST_DIGEST,
-        "c04_sha": workload_spec.c04_sha,
-        "e05_sha": workload_spec.e05_sha,
-        "configuration_digest": workload_spec.config_digest,
-        "duplicate_Complete_attempt": False,
-        "stale_recovery_marker": False,
-    }
-    sample_dict_bytes = canonical_json_dumps(sample_dict).encode("utf-8")
+    sample_stage_digest = sample_stage.artifact_digest
 
     fault_rows: list[dict[str, Any]] = []
     harnessed_count = 0
@@ -70,38 +127,42 @@ def evaluate_fault_scenario_matrix(
 
     for fc in FaultClass:
         cap = capability(fc)
+        letter_code = fc.name.split("_", 1)[0]
+        fault_payload = _build_canonical_fault_payload(
+            fc,
+            workload_spec=workload_spec,
+            sample_stage_digest=sample_stage_digest,
+        )
+        inj_res = inject(fc, fault_payload)
         if cap == Capability.HARNESSED:
             harnessed_count += 1
-            if fc in _BYTES_FAULT_CLASSES:
-                mutated_bytes = inject(fc, sample_bytes)
-                in_len = len(sample_bytes)
-                out_len = len(mutated_bytes)
-                differs = mutated_bytes != sample_bytes
-            else:
-                mutated_dict = inject(fc, dict(sample_dict))
-                mutated_serialized = canonical_json_dumps(mutated_dict).encode("utf-8")
-                in_len = len(sample_dict_bytes)
-                out_len = len(mutated_serialized)
-                differs = mutated_dict != sample_dict
             fault_rows.append(
                 {
-                    "fault_class": fc.value,
+                    "fault_class": letter_code,
+                    "fault_class_id": fc.value,
+                    "fault_class_name": fc.name,
                     "capability": cap.value,
                     "execution_state": "EXECUTED_SYNTHETIC",
-                    "input_bytes": in_len,
-                    "mutated_bytes": out_len,
-                    "mutated_differs_from_input": differs,
+                    "disposition": inj_res.disposition,
+                    "detected": inj_res.detected,
+                    "payload_digest": inj_res.payload_digest,
+                    "details": inj_res.details,
+                    "mutated_differs_from_input": bool(inj_res.detected),
                 }
             )
         elif cap == Capability.NOT_YET_HARNESSED:
             not_yet_harnessed_count += 1
             fault_rows.append(
                 {
-                    "fault_class": fc.value,
+                    "fault_class": letter_code,
+                    "fault_class_id": fc.value,
+                    "fault_class_name": fc.name,
                     "capability": cap.value,
                     "execution_state": "NOT_EXECUTED",
-                    "input_bytes": len(sample_bytes),
-                    "mutated_bytes": None,
+                    "disposition": inj_res.disposition,
+                    "detected": inj_res.detected,
+                    "payload_digest": inj_res.payload_digest,
+                    "details": inj_res.details,
                     "mutated_differs_from_input": None,
                 }
             )
@@ -109,11 +170,15 @@ def evaluate_fault_scenario_matrix(
             unreachable_count += 1
             fault_rows.append(
                 {
-                    "fault_class": fc.value,
+                    "fault_class": letter_code,
+                    "fault_class_id": fc.value,
+                    "fault_class_name": fc.name,
                     "capability": cap.value,
                     "execution_state": "NOT_EXECUTED",
-                    "input_bytes": len(sample_bytes),
-                    "mutated_bytes": None,
+                    "disposition": inj_res.disposition,
+                    "detected": inj_res.detected,
+                    "payload_digest": inj_res.payload_digest,
+                    "details": inj_res.details,
                     "mutated_differs_from_input": None,
                 }
             )
@@ -136,14 +201,16 @@ def evaluate_fault_scenario_matrix(
         base_harness.run(crash_point=None)
         committed_digest = base_adapter.state_digest()
 
-        # 1. GENERATION_MISMATCH on checkpoint reopen
+        # 1. GENERATION_MISMATCH refusal during start_or_resume
         obs_gen = "NONE"
+        gen_ckpt = Path(tmp_dir) / "gen_mismatch_checkpoint.json"
         try:
-            RecoveryHarness.open(
-                base_ckpt,
+            gen_harness = RecoveryHarness.open(
+                gen_ckpt,
                 dataclasses.replace(binding, generation_id="wrong-generation"),
                 base_adapter,
             )
+            gen_harness.run(crash_point=None)
         except RecoveryRefusal as exc:
             obs_gen = _classify_refusal_code(exc)
         refusal_checks.append(
@@ -154,14 +221,16 @@ def evaluate_fault_scenario_matrix(
             }
         )
 
-        # 2. SEMANTIC_SPACE_MISMATCH on checkpoint reopen
+        # 2. SEMANTIC_SPACE_MISMATCH refusal during start_or_resume
         obs_space = "NONE"
+        space_ckpt = Path(tmp_dir) / "space_mismatch_checkpoint.json"
         try:
-            RecoveryHarness.open(
-                base_ckpt,
+            space_harness = RecoveryHarness.open(
+                space_ckpt,
                 dataclasses.replace(binding, semantic_space_id="wrong-semantic-space"),
                 base_adapter,
             )
+            space_harness.run(crash_point=None)
         except RecoveryRefusal as exc:
             obs_space = _classify_refusal_code(exc)
         refusal_checks.append(
@@ -172,7 +241,11 @@ def evaluate_fault_scenario_matrix(
             }
         )
 
-        # 3. TRUNCATED_PAYLOAD (FaultClass.A), PARTIAL_RECORD (E), PARTIAL_INDEX, DIGEST_MISMATCH (F)
+        # 3. TRUNCATED_PAYLOAD, PARTIAL_RECORD, PARTIAL_INDEX, DIGEST_MISMATCH
+        truncated_bytes = sample_bytes[: max(1, len(sample_bytes) // 2)]
+        partial_record_bytes = sample_bytes[:-1]
+        corrupted_digest_bytes = bytes([sample_bytes[0] ^ 0xFF]) + sample_bytes[1:]
+
         adapter_scenarios = [
             (
                 "TRUNCATED_PAYLOAD",
@@ -180,7 +253,7 @@ def evaluate_fault_scenario_matrix(
                     fixture=fixture,
                     generation_id=generation_id,
                     semantic_space_id=semantic_space_id,
-                    stage_payload_overrides={(0, 0): inject(FaultClass.A, sample_bytes)},
+                    stage_payload_overrides={(0, 0): truncated_bytes},
                 ),
             ),
             (
@@ -189,7 +262,7 @@ def evaluate_fault_scenario_matrix(
                     fixture=fixture,
                     generation_id=generation_id,
                     semantic_space_id=semantic_space_id,
-                    stage_payload_overrides={(0, 0): inject(FaultClass.E, sample_bytes)},
+                    stage_payload_overrides={(0, 0): partial_record_bytes},
                 ),
             ),
             (
@@ -207,7 +280,7 @@ def evaluate_fault_scenario_matrix(
                     fixture=fixture,
                     generation_id=generation_id,
                     semantic_space_id=semantic_space_id,
-                    stage_payload_overrides={(0, 0): inject(FaultClass.F, sample_bytes)},
+                    stage_payload_overrides={(0, 0): corrupted_digest_bytes},
                 ),
             ),
         ]

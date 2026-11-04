@@ -12,9 +12,8 @@ from gate2.recovery import (
     RecoveryBinding,
     RecoveryHarness,
     RecoveryRefusal,
-    SimulatedCrash,
 )
-from gate2.workload import SyntheticFixture, WorkloadSpec, generate
+from gate2.workload import SyntheticFixture, WorkloadError, WorkloadSpec, generate
 from vip_lab.common import (
     VipLabError,
     canonical_json_dumps,
@@ -33,11 +32,67 @@ DEFAULT_PREV_MANIFEST_DIGEST = "5" * 64
 DEFAULT_CURR_MANIFEST_DIGEST = "6" * 64
 DEFAULT_RECEIPT_IDENTITY = "e05-receipt-synth-mega12"
 
+EXPECTED_BEFORE_ACTION_CRASH_MSG = "synthetic crash before action"
+EXPECTED_AFTER_SIDE_EFFECT_CRASH_MSG = (
+    "synthetic crash after side effect before completion"
+)
+
+_DIMENSION_KEYS = (
+    "jobs",
+    "stages",
+    "artifact_bytes",
+    "cost_units",
+    "fault_position",
+    "concurrency",
+    "repetitions",
+)
+_REQUIRED_FLAT_DIMENSION_KEYS = (
+    "jobs",
+    "stages",
+    "artifact_bytes",
+    "cost_units",
+    "fault_position",
+)
+_IDENTITY_KEYS = (
+    "f01_sha",
+    "c04_sha",
+    "e05_sha",
+    "config_digest",
+)
+_NESTED_TOP_KEYS = frozenset({"dimensions", "seed", "identity", "workload_id"})
+_FLAT_TOP_KEYS = frozenset(
+    {*_DIMENSION_KEYS, "seed", *_IDENTITY_KEYS, "workload_id"}
+)
+
+
+def _require_strict_int(value: Any, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise VipLabError(
+            "INVALID_WORKLOAD_SPEC",
+            f"WorkloadSpec field {field_name!r} must be an integer, got {type(value).__name__}.",
+            field_path=field_name,
+        )
+    return value
+
+
+def _require_strict_str(value: Any, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise VipLabError(
+            "INVALID_WORKLOAD_SPEC",
+            f"WorkloadSpec field {field_name!r} must be a non-empty string.",
+            field_path=field_name,
+        )
+    return value
+
 
 def coerce_canonical_workload_spec(
     spec_or_mapping: WorkloadSpec | Mapping[str, Any],
 ) -> tuple[WorkloadSpec, str | None]:
-    """Coerce a canonical WorkloadSpec or mapping into (WorkloadSpec, optional_workload_id)."""
+    """Coerce a canonical WorkloadSpec or flat/nested mapping into (WorkloadSpec, optional_workload_id).
+
+    Preserves every dimension, seed, and identity digest without silent default fallback.
+    Rejects unknown, missing, or conflicting flat-vs-nested representations.
+    """
     if isinstance(spec_or_mapping, WorkloadSpec):
         return spec_or_mapping, None
     if not isinstance(spec_or_mapping, Mapping):
@@ -45,30 +100,132 @@ def coerce_canonical_workload_spec(
             "INVALID_WORKLOAD_SPEC",
             "workload_spec must be a gate2.workload.WorkloadSpec or mapping.",
         )
-    jobs = int(spec_or_mapping.get("jobs", spec_or_mapping.get("job_count", 3)))
-    stages = int(spec_or_mapping.get("stages", spec_or_mapping.get("stages_per_job", 2)))
-    artifact_bytes = int(
-        spec_or_mapping.get("artifact_bytes", spec_or_mapping.get("payload_bytes", 48))
-    )
-    cost_units = int(spec_or_mapping.get("cost_units", 10))
-    fault_position = int(spec_or_mapping.get("fault_position", 0))
-    seed = int(spec_or_mapping.get("seed", 20261104))
-    f01_sha = str(spec_or_mapping.get("f01_sha", DEFAULT_SYNTHETIC_F01_SHA))
-    c04_sha = str(spec_or_mapping.get("c04_sha", DEFAULT_SYNTHETIC_C04_SHA))
-    e05_sha = str(spec_or_mapping.get("e05_sha", DEFAULT_SYNTHETIC_E05_SHA))
-    config_digest = str(
-        spec_or_mapping.get("config_digest", DEFAULT_SYNTHETIC_CONFIG_DIGEST)
-    )
-    concurrency = int(spec_or_mapping.get("concurrency", 1))
-    repetitions = int(spec_or_mapping.get("repetitions", 2))
+
+    top_keys = set(spec_or_mapping.keys())
+    has_nested = "dimensions" in top_keys or "identity" in top_keys
+    has_flat = bool(top_keys & ({*_DIMENSION_KEYS, *_IDENTITY_KEYS}))
+
+    if has_nested and has_flat:
+        raise VipLabError(
+            "INVALID_WORKLOAD_SPEC",
+            "Conflicting WorkloadSpec representation: cannot mix nested 'dimensions'/'identity' with flat dimension/identity keys.",
+        )
+
     raw_wl_id = spec_or_mapping.get("workload_id")
-    workload_id = (
-        str(raw_wl_id).strip()
-        if isinstance(raw_wl_id, str) and str(raw_wl_id).strip()
-        else None
-    )
-    return (
-        WorkloadSpec(
+    if raw_wl_id is not None and (
+        not isinstance(raw_wl_id, str) or not raw_wl_id.strip()
+    ):
+        raise VipLabError(
+            "INVALID_WORKLOAD_SPEC",
+            "workload_id must be a non-empty string when provided.",
+            field_path="workload_id",
+        )
+    workload_id = raw_wl_id.strip() if isinstance(raw_wl_id, str) else None
+
+    if has_nested:
+        unknown_top = sorted(top_keys - _NESTED_TOP_KEYS)
+        if unknown_top:
+            raise VipLabError(
+                "INVALID_WORKLOAD_SPEC",
+                f"Unknown top-level keys in nested WorkloadSpec mapping: {unknown_top}",
+            )
+        dims = spec_or_mapping.get("dimensions")
+        ident = spec_or_mapping.get("identity")
+        if not isinstance(dims, Mapping) or not isinstance(ident, Mapping):
+            raise VipLabError(
+                "INVALID_WORKLOAD_SPEC",
+                "Nested WorkloadSpec mapping requires both 'dimensions' and 'identity' mappings.",
+            )
+        unknown_dims = sorted(set(dims.keys()) - set(_DIMENSION_KEYS))
+        if unknown_dims:
+            raise VipLabError(
+                "INVALID_WORKLOAD_SPEC",
+                f"Unknown keys in WorkloadSpec.dimensions: {unknown_dims}",
+            )
+        missing_dims = sorted(set(_DIMENSION_KEYS) - set(dims.keys()))
+        if missing_dims:
+            raise VipLabError(
+                "INVALID_WORKLOAD_SPEC",
+                f"Missing required keys in WorkloadSpec.dimensions: {missing_dims}",
+            )
+        unknown_ident = sorted(set(ident.keys()) - set(_IDENTITY_KEYS))
+        if unknown_ident:
+            raise VipLabError(
+                "INVALID_WORKLOAD_SPEC",
+                f"Unknown keys in WorkloadSpec.identity: {unknown_ident}",
+            )
+        missing_ident = sorted(set(_IDENTITY_KEYS) - set(ident.keys()))
+        if missing_ident:
+            raise VipLabError(
+                "INVALID_WORKLOAD_SPEC",
+                f"Missing required keys in WorkloadSpec.identity: {missing_ident}",
+            )
+        if "seed" not in spec_or_mapping:
+            raise VipLabError(
+                "INVALID_WORKLOAD_SPEC",
+                "Missing required 'seed' in nested WorkloadSpec mapping.",
+            )
+        jobs = _require_strict_int(dims["jobs"], "dimensions.jobs")
+        stages = _require_strict_int(dims["stages"], "dimensions.stages")
+        artifact_bytes = _require_strict_int(
+            dims["artifact_bytes"], "dimensions.artifact_bytes"
+        )
+        cost_units = _require_strict_int(dims["cost_units"], "dimensions.cost_units")
+        fault_position = _require_strict_int(
+            dims["fault_position"], "dimensions.fault_position"
+        )
+        concurrency = _require_strict_int(dims["concurrency"], "dimensions.concurrency")
+        repetitions = _require_strict_int(dims["repetitions"], "dimensions.repetitions")
+        seed = _require_strict_int(spec_or_mapping["seed"], "seed")
+        f01_sha = _require_strict_str(ident["f01_sha"], "identity.f01_sha")
+        c04_sha = _require_strict_str(ident["c04_sha"], "identity.c04_sha")
+        e05_sha = _require_strict_str(ident["e05_sha"], "identity.e05_sha")
+        config_digest = _require_strict_str(
+            ident["config_digest"], "identity.config_digest"
+        )
+    else:
+        unknown_flat = sorted(top_keys - _FLAT_TOP_KEYS)
+        if unknown_flat:
+            raise VipLabError(
+                "INVALID_WORKLOAD_SPEC",
+                f"Unknown keys in flat WorkloadSpec mapping: {unknown_flat}",
+            )
+        required_flat = {*_REQUIRED_FLAT_DIMENSION_KEYS, "seed", *_IDENTITY_KEYS}
+        missing_flat = sorted(required_flat - top_keys)
+        if missing_flat:
+            raise VipLabError(
+                "INVALID_WORKLOAD_SPEC",
+                f"Missing required keys in flat WorkloadSpec mapping: {missing_flat}",
+            )
+        jobs = _require_strict_int(spec_or_mapping["jobs"], "jobs")
+        stages = _require_strict_int(spec_or_mapping["stages"], "stages")
+        artifact_bytes = _require_strict_int(
+            spec_or_mapping["artifact_bytes"], "artifact_bytes"
+        )
+        cost_units = _require_strict_int(spec_or_mapping["cost_units"], "cost_units")
+        fault_position = _require_strict_int(
+            spec_or_mapping["fault_position"], "fault_position"
+        )
+        seed = _require_strict_int(spec_or_mapping["seed"], "seed")
+        concurrency = (
+            _require_strict_int(spec_or_mapping["concurrency"], "concurrency")
+            if "concurrency" in spec_or_mapping
+            else 1
+        )
+        repetitions = (
+            _require_strict_int(spec_or_mapping["repetitions"], "repetitions")
+            if "repetitions" in spec_or_mapping
+            else 2
+        )
+        f01_sha = _require_strict_str(spec_or_mapping["f01_sha"], "f01_sha")
+        c04_sha = _require_strict_str(spec_or_mapping["c04_sha"], "c04_sha")
+        e05_sha = _require_strict_str(spec_or_mapping["e05_sha"], "e05_sha")
+        config_digest = _require_strict_str(
+            spec_or_mapping["config_digest"], "config_digest"
+        )
+
+    try:
+        spec = WorkloadSpec(
             jobs=jobs,
             stages=stages,
             artifact_bytes=artifact_bytes,
@@ -81,9 +238,11 @@ def coerce_canonical_workload_spec(
             config_digest=config_digest,
             concurrency=concurrency,
             repetitions=repetitions,
-        ),
-        workload_id,
-    )
+        )
+    except WorkloadError as exc:
+        raise VipLabError("INVALID_WORKLOAD_SPEC", str(exc)) from exc
+
+    return spec, workload_id
 
 
 def build_canonical_recovery_binding(
@@ -326,6 +485,7 @@ def build_replay_graph_from_workload(
     generation_id: str = "gen-synth-001",
     semantic_space_id: str = "siglip-v1-base:768:v1",
     workload_id: str | None = None,
+    custom_adapter: Any | None = None,
 ) -> ReplayGraph:
     if not isinstance(workload_spec, WorkloadSpec):
         raise VipLabError(
@@ -343,21 +503,34 @@ def build_replay_graph_from_workload(
         generation_id=generation_id,
         semantic_space_id=semantic_space_id,
     )
-    adapter = SyntheticReplayHarnessAdapter(
-        fixture=fixture,
-        generation_id=generation_id,
-        semantic_space_id=semantic_space_id,
+    adapter = (
+        custom_adapter
+        if custom_adapter is not None
+        else SyntheticReplayHarnessAdapter(
+            fixture=fixture,
+            generation_id=generation_id,
+            semantic_space_id=semantic_space_id,
+        )
     )
-    initial_digest = adapter.initial_state_digest
+    initial_digest = getattr(adapter, "initial_state_digest", adapter.state_digest())
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         ckpt_path = Path(tmp_dir) / "recovery_checkpoint.json"
         # 1. Simulate crash after first stage side effect before completion
         harness_crash = RecoveryHarness.open(ckpt_path, binding, adapter)
+        crash_triggered = False
         try:
             harness_crash.run(crash_point="after_side_effect_before_completion")
-        except SimulatedCrash:
-            pass
+        except RuntimeError as exc:
+            if type(exc) is RuntimeError and str(exc) == EXPECTED_AFTER_SIDE_EFFECT_CRASH_MSG:
+                crash_triggered = True
+            else:
+                raise
+        if not crash_triggered:
+            raise VipLabError(
+                "RECOVERY_CRASH_POINT_NOT_TRIGGERED",
+                "Expected simulated crash 'after_side_effect_before_completion' was not triggered.",
+            )
         # 2. Resume and complete all remaining operations
         harness_commit = RecoveryHarness.open(ckpt_path, binding, adapter)
         committed_out = harness_commit.run(crash_point=None)
@@ -365,12 +538,13 @@ def build_replay_graph_from_workload(
         harness_replay = RecoveryHarness.open(ckpt_path, binding, adapter)
         replay_out = harness_replay.run(crash_point=None)
 
-    duplicate_side_effects = adapter.duplicate_side_effects
+    duplicate_side_effects = getattr(adapter, "duplicate_side_effects", 0)
+    completed_count = len(getattr(adapter, "completed_ops", ()))
     idempotent_replay_verified = (
         duplicate_side_effects == 0
         and committed_out.get("post_state_digest") == replay_out.get("post_state_digest")
         and committed_out.get("post_state_digest") == adapter.state_digest()
-        and len(adapter.completed_ops) == workload_spec.jobs * workload_spec.stages
+        and completed_count == workload_spec.jobs * workload_spec.stages
     )
 
     nodes: list[ReplayNode] = []

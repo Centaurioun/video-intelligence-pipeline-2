@@ -28,6 +28,8 @@ REQUIRED_NOT_OBSERVED_METRICS: tuple[str, ...] = (
     "archive_scale",
     "wall_clock_throughput",
     "protected_media_behavior",
+    "authentic_model_performance",
+    "production_scale",
 )
 
 
@@ -42,7 +44,7 @@ def build_synthetic_recovery_measurement_set(
             metric_id="synthetic_jobs_committed",
             value=replay_graph.job_count,
             unit="jobs",
-            derivation="gate2.workload+gate2.recovery:synthetic_in_memory",
+            derivation="SYNTHETIC_FIXTURE_ONLY:gate2.workload+gate2.recovery:in_memory",
             evidence_class="MEASURED",
         )
     )
@@ -51,7 +53,7 @@ def build_synthetic_recovery_measurement_set(
             metric_id="synthetic_stages_replayed",
             value=len(replay_graph.nodes),
             unit="stages",
-            derivation="vip_lab.mega12.replay_graph:synthetic_in_memory",
+            derivation="SYNTHETIC_FIXTURE_ONLY:vip_lab.mega12.replay_graph:in_memory",
             evidence_class="MEASURED",
         )
     )
@@ -60,7 +62,7 @@ def build_synthetic_recovery_measurement_set(
             metric_id="synthetic_harnessed_faults_tested",
             value=int(fault_matrix.get("harnessed_count", 0)),
             unit="fault_classes",
-            derivation="gate2.faults:synthetic_in_memory",
+            derivation="SYNTHETIC_FIXTURE_ONLY:gate2.faults:in_memory",
             evidence_class="MEASURED",
         )
     )
@@ -103,6 +105,8 @@ def inspect_recovery_replay_consistency(
         cleaned.get("real_archive_workload") is True
         or cleaned.get("claim_archive_scale_proven") is True
         or cleaned.get("introduce_external_queue_service") is True
+        or cleaned.get("claim_real_source_measured") is True
+        or bool(cleaned.get("promote_not_observed_metrics"))
     ):
         code = "SYNTHETIC_RECOVERY_OVERCLAIM_REFUSED"
         reasons.append(code)
@@ -111,7 +115,7 @@ def inspect_recovery_replay_consistency(
             ReadinessFinding(
                 code=code,
                 status=ReadinessStatus.NOT_AUTHORIZED,
-                message="Synthetic recovery harness results cannot claim real-archive scale or justify new external services.",
+                message="Synthetic recovery harness results cannot claim real-archive scale, promote NOT_OBSERVED metrics, or justify new external services.",
                 evidence_state=NOT_OBSERVED,
             )
         )
@@ -191,18 +195,22 @@ def inspect_recovery_replay_consistency(
                 code="RECOVERY_REPLAY_CONSISTENCY_VERIFIED",
                 status=ReadinessStatus.READY_SYNTHETIC,
                 message="Generated-only recovery replay graph, fault capability matrix, and NOT_OBSERVED archive metrics verified.",
-                evidence_state="MEASURED",
+                evidence_state=NOT_OBSERVED,
             )
         )
 
     return ReadinessPacket(
         stage_id=STAGE_ID,
         status=status,
-        evidence_state="MEASURED" if status == ReadinessStatus.READY_SYNTHETIC else NOT_OBSERVED,
+        evidence_state=NOT_OBSERVED,
         reasons=tuple(reasons),
         blockers=tuple(blockers),
         findings=tuple(findings),
         summary={
+            "observation_domain": "SYNTHETIC_FIXTURE_ONLY",
+            "real_archive_metrics_status": NOT_OBSERVED,
+            "real_source_measured_claimed": False,
+            "gate2_scale_evidence_proven": False,
             "replay_graph": replay_graph_dict,
             "fault_matrix": fault_matrix,
             "measurements": measurement_dict,

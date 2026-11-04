@@ -73,6 +73,11 @@ def test_end_to_end_three_arm_pipeline_connects_all_waves_deterministically() ->
     assert lineage_receipt["replay_graph_digest"] == replay_graph["graph_digest"]
     assert blocker_summary["production_export_authorized"] is False
     assert blocker_summary["export_status"] == "REFUSED_NOT_AUTHORIZED"
+    assert artifacts["stage_packets"]["mega12"]["evidence_state"] == NOT_OBSERVED
+    assert (
+        artifacts["stage_packets"]["mega12"]["summary"]["observation_domain"]
+        == "SYNTHETIC_FIXTURE_ONLY"
+    )
 
     # Stretch S2 full cross-artifact verification passes
     verified = verify_e2e_lab_report(report_a.to_dict())

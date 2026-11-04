@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import pytest
 
-from gate2.workload import WorkloadSpec
+from gate2.recovery import RecoveryBinding
+from gate2.workload import WorkloadSpec, generate
 from vip_lab.common import NOT_OBSERVED, ReadinessStatus, VipLabError
 from vip_lab.mega12 import (
     REPLAY_GRAPH_SCHEMA_VERSION,
     REQUIRED_NOT_OBSERVED_METRICS,
     STAGE_ID,
     ReplayGraph,
+    SyntheticReplayHarnessAdapter,
     build_replay_graph_from_workload,
     build_synthetic_recovery_measurement_set,
+    coerce_canonical_workload_spec,
     evaluate_fault_scenario_matrix,
     inspect_recovery_replay_consistency,
     verify_replay_graph,
@@ -165,6 +168,9 @@ def test_stretch_s3_measurement_set_and_consistency_review() -> None:
     )
     mset_dict = mset.to_dict()
     assert mset_dict["schema_version"] == "gate2.measurement.v1"
+    for row in mset_dict["measured"]:
+        assert str(row["metric_id"]).startswith("synthetic_")
+        assert str(row["derivation"]).startswith("SYNTHETIC_FIXTURE_ONLY:")
     not_obs_by_id = {row["metric_id"]: row for row in mset_dict["not_observed"]}
     for metric_name in REQUIRED_NOT_OBSERVED_METRICS:
         assert metric_name in not_obs_by_id
@@ -183,6 +189,12 @@ def test_stretch_s3_measurement_set_and_consistency_review() -> None:
     )
     assert packet.stage_id == STAGE_ID
     assert packet.status == ReadinessStatus.READY_SYNTHETIC
+    assert packet.evidence_state == NOT_OBSERVED
+    assert all(f.evidence_state == NOT_OBSERVED for f in packet.findings)
+    assert packet.summary["observation_domain"] == "SYNTHETIC_FIXTURE_ONLY"
+    assert packet.summary["real_archive_metrics_status"] == NOT_OBSERVED
+    assert packet.summary["real_source_measured_claimed"] is False
+    assert packet.summary["gate2_scale_evidence_proven"] is False
     assert packet.summary["mechanism_justification"] == "NOT_JUSTIFIED_SYNTHETIC_ONLY"
     assert packet.summary["real_archive_recovery_proven"] is False
 
@@ -197,3 +209,104 @@ def test_stretch_s3_measurement_set_and_consistency_review() -> None:
     )
     assert overclaim_packet.status == ReadinessStatus.NOT_AUTHORIZED
     assert "SYNTHETIC_RECOVERY_OVERCLAIM_REFUSED" in overclaim_packet.blockers
+
+    promote_packet = inspect_recovery_replay_consistency(
+        {
+            "workload_spec": {
+                **spec.to_dict(),
+                "workload_id": "wl-mega12-synth",
+            },
+            "promote_not_observed_metrics": ["archive_scale"],
+        }
+    )
+    assert promote_packet.status == ReadinessStatus.NOT_AUTHORIZED
+    assert "SYNTHETIC_RECOVERY_OVERCLAIM_REFUSED" in promote_packet.blockers
+
+
+def test_unexpected_runtime_error_from_adapter_propagates_unswallowed() -> None:
+    spec = _sample_spec()
+    fixture = generate(spec)
+
+    class _ExplodingAdapter(SyntheticReplayHarnessAdapter):
+        def apply_idempotent(self, operation_id: str) -> None:
+            raise RuntimeError("unexpected adapter disk failure")
+
+    exploding = _ExplodingAdapter(
+        fixture=fixture,
+        generation_id="gen-mega12-01",
+        semantic_space_id="siglip-v1-base:768:v1",
+    )
+    with pytest.raises(RuntimeError, match="unexpected adapter disk failure"):
+        build_replay_graph_from_workload(
+            workload_spec=spec,
+            generation_id="gen-mega12-01",
+            semantic_space_id="siglip-v1-base:768:v1",
+            workload_id="wl-exploding",
+            custom_adapter=exploding,
+        )
+
+
+def test_coerce_canonical_workload_spec_preserves_nondefault_nested_and_flat_and_rejects_conflicts() -> None:
+    nondefault = WorkloadSpec(
+        jobs=7,
+        stages=4,
+        artifact_bytes=128,
+        cost_units=42,
+        fault_position=3,
+        seed=99887766,
+        f01_sha="a" * 40,
+        c04_sha="b" * 40,
+        e05_sha="c" * 40,
+        config_digest="d" * 64,
+        concurrency=5,
+        repetitions=6,
+    )
+    # 1. Nested WorkloadSpec.to_dict() round-trip
+    nested_payload = {
+        **nondefault.to_dict(),
+        "workload_id": "wl-nested-7x4",
+    }
+    parsed_nested, wl_id_nested = coerce_canonical_workload_spec(nested_payload)
+    assert wl_id_nested == "wl-nested-7x4"
+    assert parsed_nested == nondefault
+    assert parsed_nested.to_dict() == nondefault.to_dict()
+
+    # 2. Flat representation round-trip
+    flat_payload = {
+        "workload_id": "wl-flat-7x4",
+        "jobs": 7,
+        "stages": 4,
+        "artifact_bytes": 128,
+        "cost_units": 42,
+        "fault_position": 3,
+        "seed": 99887766,
+        "f01_sha": "a" * 40,
+        "c04_sha": "b" * 40,
+        "e05_sha": "c" * 40,
+        "config_digest": "d" * 64,
+        "concurrency": 5,
+        "repetitions": 6,
+    }
+    parsed_flat, wl_id_flat = coerce_canonical_workload_spec(flat_payload)
+    assert wl_id_flat == "wl-flat-7x4"
+    assert parsed_flat == nondefault
+
+    # 3. Reject conflicting mixed flat + nested keys
+    mixed = {**nested_payload, "jobs": 7}
+    with pytest.raises(VipLabError) as exc_mixed:
+        coerce_canonical_workload_spec(mixed)
+    assert exc_mixed.value.code == "INVALID_WORKLOAD_SPEC"
+
+    # 4. Reject unknown dimension key
+    bad_dim = nondefault.to_dict()
+    bad_dim["dimensions"]["extra_dim"] = 1
+    with pytest.raises(VipLabError) as exc_dim:
+        coerce_canonical_workload_spec(bad_dim)
+    assert exc_dim.value.code == "INVALID_WORKLOAD_SPEC"
+
+    # 5. Reject missing required dimension key (no silent default replacement)
+    missing_dim = nondefault.to_dict()
+    del missing_dim["dimensions"]["repetitions"]
+    with pytest.raises(VipLabError) as exc_missing:
+        coerce_canonical_workload_spec(missing_dim)
+    assert exc_missing.value.code == "INVALID_WORKLOAD_SPEC"

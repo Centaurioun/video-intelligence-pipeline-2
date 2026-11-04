@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from gate2.workload import WorkloadError
+from gate2.workload import WorkloadError, WorkloadSpec
 from vip_fvs.synthetic_profiles import CLOSED_SYNTHETIC_PROFILE_IDS, V1_PROFILE_ID
 from vip_lab.common import (
     VipLabError,
@@ -82,12 +83,26 @@ class SyntheticLabScenario:
             "pts_ticks": list(self.pts_ticks),
             "requested_start_pts": self.requested_start_pts,
             "requested_end_pts": self.requested_end_pts,
-            "workload": dict(self.workload),
+            "workload": copy.deepcopy(self.workload),
         }
 
 
 def default_three_arm_scenario() -> SyntheticLabScenario:
     shared_sha = "c" * 64
+    default_wl_spec = WorkloadSpec(
+        jobs=3,
+        stages=2,
+        artifact_bytes=48,
+        cost_units=10,
+        fault_position=0,
+        seed=20261104,
+        f01_sha="1" * 40,
+        c04_sha="2" * 40,
+        e05_sha="3" * 40,
+        config_digest="4" * 64,
+        concurrency=1,
+        repetitions=2,
+    )
     return SyntheticLabScenario(
         schema_version=E2E_SCENARIO_SCHEMA_VERSION,
         scenario_id="scen-mega14-three-arm-default",
@@ -126,19 +141,8 @@ def default_three_arm_scenario() -> SyntheticLabScenario:
         requested_start_pts=3003,
         requested_end_pts=6006,
         workload={
+            **default_wl_spec.to_dict(),
             "workload_id": "wl-mega14-e2e",
-            "jobs": 3,
-            "stages": 2,
-            "artifact_bytes": 48,
-            "cost_units": 10,
-            "fault_position": 0,
-            "seed": 20261104,
-            "f01_sha": "1" * 40,
-            "c04_sha": "2" * 40,
-            "e05_sha": "3" * 40,
-            "config_digest": "4" * 64,
-            "concurrency": 1,
-            "repetitions": 2,
         },
     )
 

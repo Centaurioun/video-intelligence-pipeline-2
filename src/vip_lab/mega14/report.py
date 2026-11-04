@@ -18,6 +18,7 @@ from vip_lab.mega09.queue_validation import verify_candidate_queue
 from vip_lab.mega10.temporal_request import verify_temporal_refinement_request
 from vip_lab.mega11.editorial_proposal import verify_editorial_proposal
 from vip_lab.mega11.proposal_revisions import verify_proposal_revision_chain
+from vip_lab.mega12.consistency_review import REQUIRED_NOT_OBSERVED_METRICS
 from vip_lab.mega12.replay_graph import verify_replay_graph
 from vip_lab.mega13.lineage_audit import audit_cross_stage_lineage
 
@@ -188,6 +189,44 @@ def verify_e2e_lab_report(
             "E2E_CROSS_STAGE_DIGEST_MISMATCH",
             "lineage_receipt.receipt_digest does not match recomputed cross-stage lineage audit.",
         )
+
+    stage_packets = artifacts.get("stage_packets")
+    if isinstance(stage_packets, Mapping):
+        mega12_packet = stage_packets.get("mega12")
+        if isinstance(mega12_packet, Mapping):
+            if mega12_packet.get("evidence_state") != NOT_OBSERVED:
+                raise VipLabError(
+                    "E2E_AUTHORITY_VIOLATION",
+                    "MEGA-12 aggregate stage packet evidence_state must remain NOT_OBSERVED.",
+                )
+            m12_summary = mega12_packet.get("summary")
+            if (
+                not isinstance(m12_summary, Mapping)
+                or m12_summary.get("observation_domain") != "SYNTHETIC_FIXTURE_ONLY"
+            ):
+                raise VipLabError(
+                    "E2E_AUTHORITY_VIOLATION",
+                    "MEGA-12 summary must declare observation_domain='SYNTHETIC_FIXTURE_ONLY'.",
+                )
+
+    rec_meas = artifacts.get("recovery_measurements")
+    if isinstance(rec_meas, Mapping):
+        not_obs_rows = rec_meas.get("not_observed")
+        if not isinstance(not_obs_rows, list):
+            raise VipLabError(
+                "E2E_AUTHORITY_VIOLATION",
+                "recovery_measurements.not_observed must be a list of NOT_OBSERVED records.",
+            )
+        not_obs_ids = {
+            row.get("metric_id")
+            for row in not_obs_rows
+            if isinstance(row, Mapping) and row.get("status") == NOT_OBSERVED
+        }
+        if any(metric_id not in not_obs_ids for metric_id in REQUIRED_NOT_OBSERVED_METRICS):
+            raise VipLabError(
+                "E2E_AUTHORITY_VIOLATION",
+                "recovery_measurements missing required NOT_OBSERVED archive/scale metrics.",
+            )
 
     stage_digests = payload.get("stage_digests")
     if not isinstance(stage_digests, Mapping):

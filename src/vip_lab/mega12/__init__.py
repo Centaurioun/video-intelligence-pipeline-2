@@ -8,6 +8,8 @@ from vip_lab.mega12.consistency_review import (
 )
 from vip_lab.mega12.fault_scenarios import evaluate_fault_scenario_matrix
 from vip_lab.mega12.replay_graph import (
+    EXPECTED_AFTER_SIDE_EFFECT_CRASH_MSG,
+    EXPECTED_BEFORE_ACTION_CRASH_MSG,
     REPLAY_GRAPH_SCHEMA_VERSION,
     ReplayGraph,
     ReplayNode,
@@ -21,6 +23,8 @@ from vip_lab.mega12.replay_graph import (
 )
 
 __all__ = [
+    "EXPECTED_AFTER_SIDE_EFFECT_CRASH_MSG",
+    "EXPECTED_BEFORE_ACTION_CRASH_MSG",
     "REPLAY_GRAPH_SCHEMA_VERSION",
     "REQUIRED_NOT_OBSERVED_METRICS",
     "STAGE_ID",

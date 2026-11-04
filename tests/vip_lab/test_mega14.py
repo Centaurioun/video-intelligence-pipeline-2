@@ -6,7 +6,9 @@ import copy
 from pathlib import Path
 import pytest
 
+from gate2.workload import WorkloadSpec
 from vip_lab.common import NOT_OBSERVED, VipLabError, canonical_json_dumps
+from vip_lab.mega12 import coerce_canonical_workload_spec
 from vip_lab.mega14 import (
     E2E_REPORT_SCHEMA_VERSION,
     E2E_SCENARIO_SCHEMA_VERSION,
@@ -35,9 +37,11 @@ def test_scenario_defaults_and_closed_schema_validation() -> None:
     assert s3.mode == "THREE_ARM"
     assert len(s3.queries) >= 2
     assert len(s3.sources) >= 2
+    assert parse_e2e_scenario_mapping(s3.to_dict()) == s3
 
     s1 = default_single_arm_scenario()
     assert s1.mode == "SINGLE_ARM"
+    assert parse_e2e_scenario_mapping(s1.to_dict()) == s1
 
     with pytest.raises(VipLabError) as exc_unk:
         parse_e2e_scenario_mapping(
@@ -56,6 +60,46 @@ def test_scenario_defaults_and_closed_schema_validation() -> None:
             }
         )
     assert exc_flag.value.code == "SCENARIO_FORBIDDEN_EXECUTION_FLAG"
+
+
+def test_scenario_workload_serialization_round_trip_preserves_all_nondefault_fields() -> None:
+    nondefault_spec = WorkloadSpec(
+        jobs=5,
+        stages=3,
+        artifact_bytes=96,
+        cost_units=25,
+        fault_position=2,
+        seed=135792468,
+        f01_sha="9" * 40,
+        c04_sha="8" * 40,
+        e05_sha="7" * 40,
+        config_digest="6" * 64,
+        concurrency=4,
+        repetitions=3,
+    )
+    base_dict = default_single_arm_scenario().to_dict()
+    base_dict["workload"] = {
+        **nondefault_spec.to_dict(),
+        "workload_id": "wl-nondefault-roundtrip",
+    }
+    parsed_nested = parse_e2e_scenario_mapping(base_dict)
+    reconstructed_spec, reconstructed_id = coerce_canonical_workload_spec(parsed_nested.workload)
+    assert reconstructed_id == "wl-nondefault-roundtrip"
+    assert reconstructed_spec == nondefault_spec
+    assert reconstructed_spec.to_dict() == nondefault_spec.to_dict()
+
+    # Second round-trip through .to_dict() -> parse_e2e_scenario_mapping
+    reparsed = parse_e2e_scenario_mapping(parsed_nested.to_dict())
+    reconstructed_again, reconstructed_id_again = coerce_canonical_workload_spec(reparsed.workload)
+    assert reconstructed_id_again == "wl-nondefault-roundtrip"
+    assert reconstructed_again == nondefault_spec
+
+    # Conflicting mixed flat + nested workload representation must fail closed
+    conflicting = copy.deepcopy(base_dict)
+    conflicting["workload"]["jobs"] = 99
+    with pytest.raises(VipLabError) as exc_conflict:
+        parse_e2e_scenario_mapping(conflicting)
+    assert exc_conflict.value.code == "SCENARIO_WORKLOAD_INVALID"
 
 
 def test_stretch_s2_report_verifier_detects_cross_stage_tampering() -> None:
