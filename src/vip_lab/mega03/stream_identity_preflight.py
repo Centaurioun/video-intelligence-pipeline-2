@@ -19,11 +19,10 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from gate3.stream_identity import (
-    POSITIONAL_IDENTITY_DERIVATION,
-    REASON_POSITIONAL_STREAM_IDENTITY_FORBIDDEN,
-    evaluate_stream_identity,
-)
+from gate3.stream_identity import POSITIONAL_IDENTITY_DERIVATION
+
+# LAB-owned refusal code; not exported by the canonical Gate-3 module.
+REASON_POSITIONAL_STREAM_IDENTITY_FORBIDDEN = "POSITIONAL_STREAM_IDENTITY_FORBIDDEN"
 
 from ..common import (
     NOT_OBSERVED,
@@ -68,27 +67,18 @@ def inspect_stream_namespace(payload: Mapping[str, Any]) -> ReadinessPacket:
             )
         )
 
-    # Path 1: If full snapshot_record and binding_record are supplied, delegate
-    # directly to gate3.stream_identity.evaluate_stream_identity as well.
-    snapshot_record = cleaned.get("snapshot_record")
-    binding_record = cleaned.get("binding_record")
-    delegated_ev = None
-    if isinstance(snapshot_record, Mapping) and isinstance(binding_record, Mapping):
-        delegated_ev = evaluate_stream_identity(
-            dict(snapshot_record), dict(binding_record)
-        )
-        if not delegated_ev.verified:
-            for r_code in delegated_ev.reason_codes:
-                reasons.append(r_code)
-                blockers.append(r_code)
-                findings.append(
-                    ReadinessFinding(
-                        code=r_code,
-                        status=ReadinessStatus.BLOCKED,
-                        message=f"gate3.stream_identity refused binding: {r_code}",
-                        field_path="snapshot_record.stream_identity",
-                    )
-                )
+    # Caller-supplied snapshot/binding records do not prove real stream identity.
+    # Do NOT invoke gate3.evaluate_stream_identity: its API requires native
+    # container bytes and the LAB may not read or authenticate media sources.
+    declared_proof = cleaned.get("snapshot_record") is not None or cleaned.get("binding_record") is not None
+    if declared_proof:
+        code = "STREAM_DECLARED_PROOF_NOT_AUTHORITY"
+        reasons.append(code)
+        blockers.append(code)
+        findings.append(ReadinessFinding(
+            code=code, status=ReadinessStatus.NOT_AUTHORIZED,
+            message="Untrusted records cannot prove ISO-BMFF/probe stream correspondence",
+        ))
 
     ffprobe_idx = cleaned.get("ffprobe_stream_index")
     mp4_track_idx = cleaned.get("mp4_track_index")
@@ -172,44 +162,28 @@ def inspect_stream_namespace(payload: Mapping[str, Any]) -> ReadinessPacket:
             )
         )
 
-    # Even if numbers match (e.g. ffprobe_stream_index == 0 and mp4_track_index == 0),
-    # metadata-only indices alone NEVER prove stream correspondence unless backed by
-    # a verified gate3.stream_identity.v1 proof (delegated_ev.verified == True).
-    if delegated_ev is None or not delegated_ev.verified:
-        code = "STREAM_IDENTITY_METADATA_ONLY_UNPROVEN"
-        if code not in reasons:
-            reasons.append(code)
-            blockers.append(code)
-        findings.append(
-            ReadinessFinding(
-                code=code,
-                status=ReadinessStatus.BLOCKED,
-                message=(
-                    "Opaque ffprobe_stream_index / mp4_track_index / mp4_track_id metadata "
-                    "cannot prove stream correspondence without verified gate3.stream_identity.v1 evidence"
-                ),
-                details={
-                    "ffprobe_stream_index": ffprobe_idx,
-                    "mp4_track_index": mp4_track_idx,
-                    "mp4_track_id": mp4_track_id,
-                },
-            )
-        )
-
-    if any(f.status == ReadinessStatus.INVALID for f in findings):
-        final_status = ReadinessStatus.INVALID
-    elif blockers:
-        final_status = ReadinessStatus.BLOCKED
-    else:
-        final_status = ReadinessStatus.READY_SYNTHETIC
-        reasons.append("STREAM_IDENTITY_DELEGATED_PROOF_VERIFIED")
-
+    # Numerical coincidence remains unproven even with declared metadata.
+    code = "STREAM_IDENTITY_METADATA_ONLY_UNPROVEN"
+    reasons.append(code)
+    blockers.append(code)
+    findings.append(ReadinessFinding(
+        code=code, status=ReadinessStatus.BLOCKED,
+        message="Metadata-only namespace identifiers cannot establish source-native stream proof",
+        details={
+            "ffprobe_stream_index": ffprobe_idx,
+            "mp4_track_index": mp4_track_idx,
+            "mp4_track_id": mp4_track_id,
+        },
+    ))
+    final_status = (
+        ReadinessStatus.INVALID
+        if any(f.status == ReadinessStatus.INVALID for f in findings)
+        else ReadinessStatus.BLOCKED
+    )
     return ReadinessPacket(
-        stage_id=STAGE_ID,
-        status=final_status,
-        evidence_state="MEASURED" if (delegated_ev and delegated_ev.verified) else NOT_OBSERVED,
-        reasons=tuple(reasons),
-        blockers=tuple(blockers),
+        stage_id=STAGE_ID, status=final_status,
+        evidence_state=NOT_OBSERVED,
+        reasons=tuple(reasons), blockers=tuple(blockers),
         findings=tuple(findings),
         summary={
             "ffprobe_stream_index": ffprobe_idx,
@@ -217,7 +191,7 @@ def inspect_stream_namespace(payload: Mapping[str, Any]) -> ReadinessPacket:
             "mp4_track_id": mp4_track_id,
             "mp4_trak_count": trak_count,
             "identity_derivation": derivation,
-            "stream_identity_verified": bool(delegated_ev and delegated_ev.verified),
+            "stream_identity_verified": False,
             "positive_mapping_invented": False,
         },
     )

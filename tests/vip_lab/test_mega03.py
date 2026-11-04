@@ -248,57 +248,46 @@ class TestPacketP00Common:
 
 
 class TestMega03S5Preflight:
-    def test_valid_s5_declaration_and_bounded_bytes(self, tmp_path: Path) -> None:
-        clip_bytes = b"synthetic-mp4-header-and-payload-bytes"
-        src_dir, sha, snap_ev = _capture_sample_snapshot(
-            tmp_path,
-            source_bytes=clip_bytes,
-            source_revision="rev_001",
-        )
-        tb_body = {
+    def test_valid_metadata_never_admits_or_measures_source(self) -> None:
+        source_bytes = b"synthetic-only-not-opened"
+        declared_sha = hashlib.sha256(source_bytes).hexdigest()
+        body = {
             "schema_version": 1,
-            "snapshot_id": snap_ev["snapshot_id"],
-            "snapshot_manifest_sha256": snap_ev["snapshot_manifest_sha256"],
             "source_revision_id": "rev_001",
-            "source_sha256": sha,
-            "source_byte_count": len(clip_bytes),
-            "selected_stream_index": 0,
-            "stream_count": 1,
-            "timebase": {"num": 1, "den": 90000},
-            "pts_ticks": [0, 3000, 6000],
-            "dts_ticks": [0, 3000, 6000],
-            "declared_vfr": False,
-            "declared_reordering": False,
+            "source_sha256": declared_sha,
+            "source_byte_count": len(source_bytes),
         }
-        tb_ev = {
-            **tb_body,
+        temporal = {
+            **body,
             "evidence_sha256": hashlib.sha256(
-                canonical_json_dumps(tb_body).encode("utf-8")
+                canonical_json_dumps(body).encode("utf-8")
             ).hexdigest(),
         }
-
-        pkt = inspect_s5_declaration(
-            {
-                "source_id": "src_swan_01",
-                "source_revision": "rev_001",
-                "declared_sha256": sha,
-                "declared_size": len(clip_bytes),
-                "relative_path": "swan_lake.mp4",
-                "snapshot": snap_ev,
-                "temporal_binding": tb_ev,
-                "trusted": True,
+        pkt = inspect_s5_declaration({
+            "source_id": "src_swan_01",
+            "source_revision": "rev_001",
+            "declared_sha256": declared_sha,
+            "declared_size": len(source_bytes),
+            "relative_path": "swan_lake.mp4",
+            "snapshot": {
+                "source_revision_id": "rev_001",
+                "snapshot_sha256": declared_sha,
+                "source_byte_count": len(source_bytes),
             },
-            snapshot_root=src_dir,
-        )
+            "temporal_binding": temporal,
+            "trusted": True,
+        })
         assert pkt.status == ReadinessStatus.READY_SYNTHETIC
         assert pkt.synthetic_only is True
         assert pkt.execution_authorized is False
-        assert pkt.summary["admitted"] is True
-        assert pkt.summary["bytes_verified"] is True
-        assert pkt.summary["snapshot_verified"] is True
+        assert pkt.evidence_state == "NOT_OBSERVED"
+        assert pkt.summary["admitted"] is False
+        assert pkt.summary["bytes_verified"] is False
+        assert pkt.summary["snapshot_verified"] is False
+        assert pkt.summary["snapshot_record_declared_consistent"] is True
         assert pkt.summary["temporal_binding_version"] == 1
-        assert "PR_258_DIRECT_CODE_ABSENT_IN_SNAPSHOT" in pkt.reasons
         assert "UNTRUSTED_AUTHORITY_FLAGS_IGNORED" in pkt.reasons
+        assert all(f.evidence_state == "NOT_OBSERVED" for f in pkt.findings)
 
     def test_s5_refuses_path_traversal_and_absolute_paths(self) -> None:
         for bad_path in ("../outside.mp4", "/etc/passwd", "a/../../b.mp4", "a\\b.mp4"):
@@ -314,55 +303,43 @@ class TestMega03S5Preflight:
             assert pkt.status == ReadinessStatus.INVALID
             assert pkt.summary["admitted"] is False
 
-    def test_s5_refuses_digest_mismatch_size_mismatch_and_symlink(
-        self, tmp_path: Path
+    def test_s5_refuses_even_synthetic_source_root_without_opening(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        clip_bytes = b"0123456789abcdef"
-        clip_path = tmp_path / "clip.mp4"
-        clip_path.write_bytes(clip_bytes)
-        good_sha = hashlib.sha256(clip_bytes).hexdigest()
+        import os
 
-        bad_digest_pkt = inspect_s5_declaration(
-            {
-                "source_id": "src_01",
-                "source_revision": "rev_1",
-                "declared_sha256": "f" * 64,
-                "declared_size": len(clip_bytes),
-                "relative_path": "clip.mp4",
+        # Refuse before any filesystem API call, even when bytes and hash match.
+        def forbidden_open(*args: Any, **kwargs: Any) -> None:
+            raise AssertionError("S5 metadata-only inspector must not open source bytes")
+
+        monkeypatch.setattr(os, "open", forbidden_open)
+        pkt = inspect_s5_declaration({
+            "source_id": "src_01",
+            "source_revision": "rev_1",
+            "declared_sha256": "f" * 64,
+            "declared_size": 16,
+            "relative_path": "clip.mp4",
+        }, snapshot_root=tmp_path)
+        assert pkt.status == ReadinessStatus.BLOCKED
+        assert "S5_SOURCE_BYTE_ADMISSION_NOT_AUTHORIZED" in pkt.blockers
+        assert pkt.summary["admitted"] is False
+        assert pkt.summary["bytes_verified"] is False
+
+    def test_s5_declared_snapshot_mismatch_is_invalid_without_read(self) -> None:
+        pkt = inspect_s5_declaration({
+            "source_id": "src_01",
+            "source_revision": "rev_1",
+            "declared_sha256": "f" * 64,
+            "declared_size": 16,
+            "relative_path": "clip.mp4",
+            "snapshot": {
+                "source_revision_id": "rev_1",
+                "snapshot_sha256": "a" * 64,
+                "source_byte_count": 16,
             },
-            snapshot_root=tmp_path,
-        )
-        assert bad_digest_pkt.status == ReadinessStatus.BLOCKED
-        assert "S5_DIGEST_MISMATCH" in bad_digest_pkt.blockers
-
-        bad_size_pkt = inspect_s5_declaration(
-            {
-                "source_id": "src_01",
-                "source_revision": "rev_1",
-                "declared_sha256": good_sha,
-                "declared_size": len(clip_bytes) + 4,
-                "relative_path": "clip.mp4",
-            },
-            snapshot_root=tmp_path,
-        )
-        assert bad_size_pkt.status == ReadinessStatus.BLOCKED
-        assert "S5_SIZE_MISMATCH" in bad_size_pkt.blockers
-
-        symlink_path = tmp_path / "sym_clip.mp4"
-        symlink_path.symlink_to(clip_path)
-        sym_pkt = inspect_s5_declaration(
-            {
-                "source_id": "src_01",
-                "source_revision": "rev_1",
-                "declared_sha256": good_sha,
-                "declared_size": len(clip_bytes),
-                "relative_path": "sym_clip.mp4",
-            },
-            snapshot_root=tmp_path,
-        )
-        assert sym_pkt.status == ReadinessStatus.BLOCKED
-        assert "S5_SYMLINK_OR_NONREGULAR_REFUSED" in sym_pkt.blockers
-
+        })
+        assert pkt.status == ReadinessStatus.INVALID
+        assert "S5_SNAPSHOT_DECLARATION_MISMATCH" in pkt.blockers
 
 class TestMega03StreamIdentityPreflight:
     def test_negative_preflight_refuses_numeric_coincidence_and_multi_trak(self) -> None:
