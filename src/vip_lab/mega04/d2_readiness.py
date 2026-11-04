@@ -187,7 +187,7 @@ def inspect_d2_readiness(
             },
         )
 
-    report_dict = report.to_dict()
+    report_dict = report.as_dict()
     field_states: dict[str, str] = {}
     blocked_fields: list[str] = []
     evidence_intake_blockers: list[str] = []

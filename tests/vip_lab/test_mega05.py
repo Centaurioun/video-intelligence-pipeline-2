@@ -48,7 +48,7 @@ class TestMega05ModelAssetClaims:
         assert validated["vip-v2-siglip2-base-224"]["embedding_dim"] == 768
         assert validated["vip-v2-siglip2-so400m-384"]["embedding_dim"] == 1152
         assert validated["vip-v2-siglip2-so400m-384"]["row_width_bytes"] == 4608
-        assert validated["vip-v2-siglip2-so400m-384"]["authentic_model_evidence"] == "NOT_OBSERVED"
+        assert validated["vip-v2-siglip2-so400m-384"]["authentic_model_evidence"] is False
 
         # 768D V1 and 768D V2 Base must never share a semantic_space_id
         assert (

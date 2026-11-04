@@ -203,7 +203,9 @@ def inspect_query_review_preflight(
                     label_version,
                     reviewer_count=2,
                 )
-                lbl_digest = label_version_digest(queries, gold)
+                lbl_digest = label_version_digest(
+                    [row["payload"] for row in gold]
+                )
                 gold_valid = True
                 findings.append(
                     ReadinessFinding(

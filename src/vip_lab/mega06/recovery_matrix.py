@@ -314,6 +314,7 @@ def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
             harness_resume = RecoveryHarness.open(
                 checkpoint_path, resume_binding, adapter
             )
+            skipped_completed = len(adapter.completed_ops)
             outcome = harness_resume.run()
         except RecoveryRefusal as exc:
             code = "RECOVERY_REFUSED_FAIL_CLOSED"
@@ -347,10 +348,10 @@ def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
         )
         resume_run = {
             "completed_count": len(adapter.completed_ops),
-            "skipped_completed": outcome.skipped_completed,
+            "skipped_completed": skipped_completed,
             "recomputed_count": recomputed_count,
             "corrupted_count": 1 if adapter.corrupted else 0,
-            "state_digest": outcome.state_digest,
+            "state_digest": outcome["post_state_digest"],
         }
 
     reasons.append("RECOVERY_SYNTHETIC_SCENARIO_VERIFIED")
