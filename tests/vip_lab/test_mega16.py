@@ -81,7 +81,16 @@ from vip_lab.mega16 import (
     verify_release_refusal_certificate,
     verify_render_preflight_specification,
 )
+from vip_lab.mega16.release_refusal import run_mega15_16_offline_pipeline
 from tests.vip_lab.test_mega15 import _make_three_item_queue_with_duplicates
+
+
+def _set_test_report_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    root = tmp_path / "trusted-synthetic-reports"
+    monkeypatch.setattr(mega16_cli_module, "_TRUSTED_SYNTHETIC_REPORT_ROOT", root)
+    return root
 
 
 def _build_mega15_fixture() -> tuple[Any, ...]:
@@ -314,13 +323,16 @@ def test_cli_run_verify_and_refusals(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    out_file = tmp_path / "mega15_16_report.json"
+    report_root = _set_test_report_root(tmp_path, monkeypatch)
+    out_file = report_root / "mega15_16_report.json"
     rc = mega16_cli_main(["run-offline", "--seed", "20261102", "--output", str(out_file)])
     assert rc == 0
     assert out_file.exists()
+    report_before_verify = out_file.read_bytes()
 
     rc_ver = mega16_cli_main(["verify-report", "--input", str(out_file)])
     assert rc_ver == 0
+    assert out_file.read_bytes() == report_before_verify
     captured = capsys.readouterr()
     summary = json.loads(captured.out.strip().splitlines()[-1])
     assert summary["verified"] is True
@@ -340,7 +352,7 @@ def test_cli_run_verify_and_refusals(
     assert REFUSAL_CLI_OUTPUT_PATH_UNSAFE in err_clobber
 
     # Media file extension on --output must fail closed
-    media_out = tmp_path / "render_output.mp4"
+    media_out = report_root / "render_output.mp4"
     rc_media = mega16_cli_main(["run-offline", "--output", str(media_out)])
     assert rc_media == 2
     err_media = capsys.readouterr().err
@@ -353,7 +365,7 @@ def test_cli_run_verify_and_refusals(
     assert REFUSAL_CLI_OUTPUT_PATH_UNSAFE in err_trav
 
     # Symlink target on --output and --input must fail closed
-    symlink_path = tmp_path / "symlink_report.json"
+    symlink_path = report_root / "symlink_report.json"
     symlink_path.symlink_to(out_file)
     rc_sym_out = mega16_cli_main(["run-offline", "--output", str(symlink_path)])
     assert rc_sym_out == 2
@@ -366,7 +378,7 @@ def test_cli_run_verify_and_refusals(
     # Tampered report file must fail verification with exit code 2
     tampered_data = json.loads(out_file.read_text(encoding="utf-8"))
     tampered_data["release_refusal_certificate"]["production_export_authorized"] = True
-    tampered_file = tmp_path / "tampered.json"
+    tampered_file = report_root / "tampered.json"
     tampered_file.write_text(json.dumps(tampered_data), encoding="utf-8")
     assert mega16_cli_main(["verify-report", "--input", str(tampered_file)]) == 2
 
@@ -385,9 +397,10 @@ def test_cli_run_verify_and_refusals(
 
 
 def test_cli_verify_missing_report_does_not_create_parent_directories(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    missing_report = tmp_path / "missing-parent" / "nested" / "report.json"
+    report_root = _set_test_report_root(tmp_path, monkeypatch)
+    missing_report = report_root / "missing-parent" / "nested" / "report.json"
     assert not missing_report.parent.exists()
 
     assert mega16_cli_main(["verify-report", "--input", str(missing_report)]) == 2
@@ -395,10 +408,89 @@ def test_cli_verify_missing_report_does_not_create_parent_directories(
     assert not missing_report.parent.exists()
 
 
-def test_cli_output_refuses_symlinked_ancestor(tmp_path: Path) -> None:
+def test_cli_output_refuses_absolute_path_outside_trusted_report_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    trusted_root = _set_test_report_root(tmp_path, monkeypatch)
+    outside_path = tmp_path / "outside" / "nested" / "report.json"
+    real_is_symlink = Path.is_symlink
+    real_exists = Path.exists
+
+    def refuse_outside_metadata_access(path: Path) -> bool:
+        if path == outside_path:
+            raise AssertionError("outside report target was statted before refusal")
+        return real_is_symlink(path)
+
+    def refuse_outside_exists_check(path: Path) -> bool:
+        if path == outside_path:
+            raise AssertionError("outside report target was statted before refusal")
+        return real_exists(path)
+
+    monkeypatch.setattr(Path, "is_symlink", refuse_outside_metadata_access)
+    monkeypatch.setattr(Path, "exists", refuse_outside_exists_check)
+
+    assert mega16_cli_main(["run-offline", "--output", str(outside_path)]) == 2
+    assert not outside_path.parent.exists()
+    assert not trusted_root.exists()
+
+
+def test_cli_input_refuses_absolute_path_outside_trusted_report_root_before_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_test_report_root(tmp_path, monkeypatch)
+    outside_path = tmp_path / "outside" / "valid-report.json"
+    outside_path.parent.mkdir()
+    outside_path.write_text(
+        json.dumps(run_mega15_16_offline_pipeline().to_dict()), encoding="utf-8"
+    )
+    real_is_symlink = Path.is_symlink
+    real_exists = Path.exists
+
+    def refuse_outside_metadata_access(path: Path) -> bool:
+        if path == outside_path:
+            raise AssertionError("outside report target was statted before refusal")
+        return real_is_symlink(path)
+
+    def refuse_outside_exists_check(path: Path) -> bool:
+        if path == outside_path:
+            raise AssertionError("outside report target was statted before refusal")
+        return real_exists(path)
+
+    monkeypatch.setattr(Path, "is_symlink", refuse_outside_metadata_access)
+    monkeypatch.setattr(Path, "exists", refuse_outside_exists_check)
+    reads = 0
+    real_read = mega16_cli_module.os.read
+
+    def track_read(fd: int, size: int) -> bytes:
+        nonlocal reads
+        reads += 1
+        return real_read(fd, size)
+
+    monkeypatch.setattr(mega16_cli_module.os, "read", track_read)
+
+    assert mega16_cli_main(["verify-report", "--input", str(outside_path)]) == 2
+    assert reads == 0
+
+
+def test_cli_relative_report_paths_are_rooted_in_trusted_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report_root = _set_test_report_root(tmp_path, monkeypatch)
+    relative_path = "nested/report.json"
+
+    assert mega16_cli_main(["run-offline", "--output", relative_path]) == 0
+    assert (report_root / relative_path).is_file()
+    assert mega16_cli_main(["verify-report", "--input", relative_path]) == 0
+
+
+def test_cli_output_refuses_symlinked_ancestor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report_root = _set_test_report_root(tmp_path, monkeypatch)
+    report_root.mkdir(parents=True)
     outside = tmp_path / "outside"
     outside.mkdir()
-    link = tmp_path / "linked-parent"
+    link = report_root / "linked-parent"
     link.symlink_to(outside, target_is_directory=True)
     output = link / "nested" / "report.json"
 
@@ -409,7 +501,8 @@ def test_cli_output_refuses_symlinked_ancestor(tmp_path: Path) -> None:
 def test_cli_output_retries_partial_writes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    output = tmp_path / "partial-write-report.json"
+    report_root = _set_test_report_root(tmp_path, monkeypatch)
+    output = report_root / "partial-write-report.json"
     real_write = mega16_cli_module.os.write
 
     def partial_write(fd: int, data: bytes | bytearray | memoryview) -> int:
@@ -427,7 +520,8 @@ def test_cli_output_retries_partial_writes(
 def test_cli_output_removes_incomplete_file_after_write_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    output = tmp_path / "failed-write-report.json"
+    report_root = _set_test_report_root(tmp_path, monkeypatch)
+    output = report_root / "failed-write-report.json"
     real_write = mega16_cli_module.os.write
     calls = 0
 
@@ -448,7 +542,9 @@ def test_cli_output_removes_incomplete_file_after_write_error(
 def test_cli_verify_rejects_media_paths_before_reading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    media_path = tmp_path / "source.mp4"
+    report_root = _set_test_report_root(tmp_path, monkeypatch)
+    report_root.mkdir(parents=True)
+    media_path = report_root / "source.mp4"
     media_path.write_bytes(b"not a report")
     read_calls = 0
     real_read = mega16_cli_module.os.read
