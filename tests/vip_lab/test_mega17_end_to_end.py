@@ -171,6 +171,42 @@ def test_mega17_rejects_upstream_occurrence_drop_even_when_membership_sets_match
         )
 
 
+def test_mega17_rejects_foreign_upstream_arm_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scenario = default_three_arm_scenario()
+    real_producer = run_mega15_16_offline_pipeline
+
+    def producer_with_foreign_arms(*, scenario):
+        report = real_producer(scenario=scenario)
+        foreign_arm_ids = {
+            arm_id: f"FOREIGN_{index}"
+            for index, arm_id in enumerate(
+                sorted({record.arm_id for record in report.preparation_packet.temporal_records})
+            )
+        }
+        packet = replace(
+            report.preparation_packet,
+            temporal_records=tuple(
+                replace(record, arm_id=foreign_arm_ids[record.arm_id])
+                for record in report.preparation_packet.temporal_records
+            ),
+        )
+        packet = replace(packet, packet_digest=canonical_sha256(packet._digest_payload()))
+        return replace(report, preparation_packet=packet)
+
+    monkeypatch.setattr(
+        mega17_orchestrator,
+        "run_mega15_16_offline_pipeline",
+        producer_with_foreign_arms,
+    )
+
+    with pytest.raises(VipLabError, match="MEGA17_UPSTREAM_SCENARIO_MISMATCH"):
+        mega17_orchestrator.run_mega17_product_readiness_chain(
+            scenario, workspace_root=WORKSPACE_ROOT
+        )
+
+
 def test_mega17_eight_readiness_dimensions_and_maturity_model_ceilings() -> None:
     """Verifies Section 11 (8 readiness dimensions) and Section 12 (M0..M5 maturity ceiling)."""
     rep = run_mega17_product_readiness_chain(workspace_root=WORKSPACE_ROOT)

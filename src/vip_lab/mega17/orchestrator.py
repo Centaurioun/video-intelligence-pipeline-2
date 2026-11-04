@@ -44,6 +44,12 @@ from vip_lab.mega14.scenario import (
     default_three_arm_scenario,
     parse_e2e_scenario_mapping,
 )
+from vip_lab.mega14.orchestrator import (
+    ARM_VIP_V1_BASE,
+    ARM_VIP_V2_BASE,
+    ARM_VIP_V2_SO400M,
+    PROFILE_ID_TO_ARM,
+)
 from vip_lab.mega16.release_refusal import run_mega15_16_offline_pipeline
 from vip_lab.mega17.canonical_integration import (
     CanonicalIntegrationReadinessPacket,
@@ -103,10 +109,16 @@ def _validate_mega15_16_scenario_lineage(
         )
         for row in occurrence_rows
     }
-    arm_by_item = {record.queue_item_id: record.arm_id for record in temporal_records}
+    arm_by_item = {
+        record.queue_item_id: record.arm_id for record in temporal_records
+    }
     item_ids = set(query_by_item)
     actual_arms = set(arm_by_item.values())
-    expected_arm_count = 1 if scenario.mode == "SINGLE_ARM" else 3
+    expected_arms = (
+        {PROFILE_ID_TO_ARM[scenario.single_arm_profile_id]}
+        if scenario.mode == "SINGLE_ARM"
+        else {ARM_VIP_V1_BASE, ARM_VIP_V2_BASE, ARM_VIP_V2_SO400M}
+    )
 
     if (
         len(query_by_item) != len(query_rows)
@@ -114,7 +126,7 @@ def _validate_mega15_16_scenario_lineage(
         or len(arm_by_item) != len(temporal_records)
         or set(occurrence_by_item) != item_ids
         or set(arm_by_item) != item_ids
-        or len(actual_arms) != expected_arm_count
+        or actual_arms != expected_arms
     ):
         raise VipLabError(
             "MEGA17_UPSTREAM_SCENARIO_MISMATCH",
@@ -142,7 +154,7 @@ def _validate_mega15_16_scenario_lineage(
         )
         for query in scenario.queries
         for source in scenario.sources[: scenario.top_k]
-        for arm_id in actual_arms
+        for arm_id in expected_arms
     )
     if actual_membership != expected_membership:
         raise VipLabError(
