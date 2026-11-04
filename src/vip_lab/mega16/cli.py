@@ -9,7 +9,8 @@ Supports two closed offline subcommands:
 Strictly refuses:
 - Forbidden execution, network, model-download, real-archive, FFmpeg, or export flags
 - URL arguments (`http://`, `https://`, `s3://`, `gs://`, `file://`)
-- Symlink targets, existing-file overwrites (no-clobber), traversal (`..`), or media paths
+- Paths outside the fixed `outputs/vip_lab/synthetic-reports` root, symlinks,
+  existing-file overwrites (no-clobber), traversal (`..`), or media paths
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import stat
 import sys
 from typing import Sequence
 
@@ -34,6 +36,12 @@ REFUSAL_CLI_OUTPUT_PATH_UNSAFE = "REFUSAL_CLI_OUTPUT_PATH_UNSAFE"
 REFUSAL_CLI_INPUT_PATH_UNSAFE = "REFUSAL_CLI_INPUT_PATH_UNSAFE"
 
 MAX_CLI_REPORT_BYTES = 16 * 1024 * 1024
+_TRUSTED_SYNTHETIC_REPORT_ROOT = (
+    Path(__file__).resolve().parents[3]
+    / "outputs"
+    / "vip_lab"
+    / "synthetic-reports"
+)
 
 FORBIDDEN_CLI_FLAGS: tuple[str, ...] = (
     "--execute-ffmpeg",
@@ -51,6 +59,12 @@ FORBIDDEN_CLI_FLAGS: tuple[str, ...] = (
     "--authorize-production-export",
     "--promote-gate",
     "--owner-override",
+    "--real",
+    "--render",
+    "--export",
+    "--provider",
+    "--download",
+    "--upload",
 )
 
 URL_PREFIXES: tuple[str, ...] = (
@@ -117,6 +131,14 @@ def _validate_safe_output_path(raw_path: str) -> Path:
             REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
             f"Media file extension {p.suffix!r} is forbidden for offline JSON report output.",
         )
+    if p.suffix.lower() != ".json":
+        raise_mega15_error(
+            REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
+            f"Offline report output must use a .json path, got {p.suffix!r}.",
+        )
+    p = _confine_synthetic_report_path(
+        p, raw_path, REFUSAL_CLI_OUTPUT_PATH_UNSAFE
+    )
     if p.is_symlink() or p.exists():
         raise_mega15_error(
             REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
@@ -131,21 +153,111 @@ def _validate_safe_output_path(raw_path: str) -> Path:
     return p
 
 
-def _atomic_write_new_file(path: Path, data: bytes) -> None:
-    parent = path.parent if str(path.parent) != "" else Path(".")
-    parent.mkdir(parents=True, exist_ok=True)
-    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+def _confine_synthetic_report_path(
+    path: Path, raw_path: str, refusal_code: str
+) -> Path:
+    """Resolve relative report names under the fixed, code-trusted report root."""
+    root = _TRUSTED_SYNTHETIC_REPORT_ROOT
+    if not root.is_absolute():
+        raise_mega15_error(
+            refusal_code,
+            "Configured synthetic-report root must be an absolute path.",
+        )
+    candidate = path if path.is_absolute() else root / path
     try:
-        fd = os.open(str(path), flags, 0o600)
+        candidate.relative_to(root)
+    except ValueError:
+        raise_mega15_error(
+            refusal_code,
+            f"Report path {raw_path!r} is outside the trusted synthetic-report directory.",
+        )
+    return candidate
+
+
+def _open_parent_directory_without_symlinks(
+    path: Path, *, create_missing: bool = True
+) -> int:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    if path.is_absolute():
+        current_fd = os.open(path.anchor, flags)
+        components = path.parent.parts[1:]
+    else:
+        current_fd = os.open(".", flags)
+        components = path.parent.parts
+
+    try:
+        for component in components:
+            if component in ("", "."):
+                continue
+            try:
+                next_fd = os.open(component, flags, dir_fd=current_fd)
+            except FileNotFoundError:
+                if not create_missing:
+                    raise
+                try:
+                    os.mkdir(component, mode=0o700, dir_fd=current_fd)
+                except FileExistsError:
+                    pass
+                next_fd = os.open(component, flags, dir_fd=current_fd)
+            os.close(current_fd)
+            current_fd = next_fd
+        return current_fd
+    except OSError:
+        os.close(current_fd)
+        raise
+
+
+def _atomic_write_new_file(path: Path, data: bytes) -> None:
+    parent_fd: int | None = None
+    output_fd: int | None = None
+    created = False
+    try:
+        parent_fd = _open_parent_directory_without_symlinks(path)
+        output_fd = os.open(
+            path.name,
+            os.O_CREAT
+            | os.O_EXCL
+            | os.O_WRONLY
+            | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=parent_fd,
+        )
+        created = True
+        view = memoryview(data)
+        offset = 0
+        while offset < len(view):
+            written = os.write(output_fd, view[offset:])
+            if written <= 0:
+                raise OSError("write returned no progress")
+            offset += written
+        os.close(output_fd)
+        output_fd = None
+        os.close(parent_fd)
+        parent_fd = None
     except OSError as exc:
+        if output_fd is not None:
+            try:
+                os.close(output_fd)
+            except OSError:
+                pass
+        if created and parent_fd is not None:
+            try:
+                os.unlink(path.name, dir_fd=parent_fd)
+            except OSError:
+                pass
+        if parent_fd is not None:
+            try:
+                os.close(parent_fd)
+            except OSError:
+                pass
         raise_mega15_error(
             REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
-            f"Refused to open output path {str(path)!r} exclusively without following symlinks: {exc}",
+            f"Refused unsafe or incomplete write to output path {str(path)!r}: {exc}",
         )
-    try:
-        os.write(fd, data)
-    finally:
-        os.close(fd)
 
 
 def _safe_read_report_file(raw_path: str) -> dict:
@@ -160,23 +272,51 @@ def _safe_read_report_file(raw_path: str) -> dict:
             REFUSAL_CLI_INPUT_PATH_UNSAFE,
             f"Parent directory traversal ('..') is forbidden in input path: {raw_path!r}",
         )
-    if p.is_symlink() or not p.is_file():
+    if p.suffix.lower() != ".json":
         raise_mega15_error(
             REFUSAL_CLI_INPUT_PATH_UNSAFE,
-            f"Input report path {raw_path!r} must be a regular non-symlink file.",
+            f"Input must be a JSON synthetic report, got {p.suffix!r}.",
         )
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    p = _confine_synthetic_report_path(
+        p, raw_path, REFUSAL_CLI_INPUT_PATH_UNSAFE
+    )
+    if p.is_symlink():
+        raise_mega15_error(
+            REFUSAL_CLI_INPUT_PATH_UNSAFE,
+            f"Input report path {raw_path!r} must not be a symlink.",
+        )
+    parent_fd: int | None = None
+    fd: int | None = None
     try:
-        fd = os.open(str(p), flags)
+        parent_fd = _open_parent_directory_without_symlinks(
+            p, create_missing=False
+        )
+        fd = os.open(
+            p.name,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent_fd,
+        )
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError("input report is not a regular file")
+        chunks: list[bytes] = []
+        remaining = MAX_CLI_REPORT_BYTES + 1
+        while remaining:
+            chunk = os.read(fd, remaining)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        raw_bytes = b"".join(chunks)
     except OSError as exc:
         raise_mega15_error(
             REFUSAL_CLI_INPUT_PATH_UNSAFE,
             f"Failed to open input report path {raw_path!r}: {exc}",
         )
-    try:
-        raw_bytes = os.read(fd, MAX_CLI_REPORT_BYTES + 1)
     finally:
-        os.close(fd)
+        if fd is not None:
+            os.close(fd)
+        if parent_fd is not None:
+            os.close(parent_fd)
 
     if len(raw_bytes) > MAX_CLI_REPORT_BYTES:
         raise_mega15_error(
@@ -219,7 +359,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         type=str,
         default=None,
-        help="Optional new non-existing JSON file path to write the canonical report.",
+        help=(
+            "Optional new JSON report path under outputs/vip_lab/synthetic-reports; "
+            "relative paths are rooted there."
+        ),
     )
 
     ver_p = sub.add_parser(
@@ -230,7 +373,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--input",
         type=str,
         required=True,
-        help="Path to the Mega1516OfflineReport JSON file.",
+        help=(
+            "Mega1516OfflineReport JSON path under outputs/vip_lab/synthetic-reports; "
+            "relative paths are rooted there."
+        ),
     )
     return parser
 
