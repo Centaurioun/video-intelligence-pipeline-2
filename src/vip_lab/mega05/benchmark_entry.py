@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from vip_fvs.synthetic_profiles import SYNTHETIC_PROFILE_IDS
+from vip_fvs.synthetic_profiles import CLOSED_SYNTHETIC_PROFILE_IDS as SYNTHETIC_PROFILE_IDS
 
 from ..common import (
     NOT_OBSERVED,

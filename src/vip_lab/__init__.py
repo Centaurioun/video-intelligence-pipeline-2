@@ -25,12 +25,7 @@ from .common import (
     sanitize_untrusted_authority_claims,
     validate_hex_digest,
 )
-from .integration import (
-    evaluate_mega03_composite,
-    evaluate_mega06_composite,
-    evaluate_mega07_composite,
-    summarize_program,
-)
+# Do not eagerly import integration: every lab wave must collect independently.
 
 __all__ = [
     "LAB_PROGRAM_VERSION",
@@ -44,13 +39,9 @@ __all__ = [
     "canonical_json_bytes",
     "canonical_json_dumps",
     "canonical_sha256",
-    "evaluate_mega03_composite",
-    "evaluate_mega06_composite",
-    "evaluate_mega07_composite",
     "load_bounded_json_file",
     "parse_strict_json_bytes",
     "parse_strict_json_text",
     "sanitize_untrusted_authority_claims",
-    "summarize_program",
     "validate_hex_digest",
 ]

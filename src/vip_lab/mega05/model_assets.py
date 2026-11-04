@@ -23,7 +23,7 @@ from persistent_local_index.model_profile import (
     validate_model_profile,
 )
 from vip_fvs.synthetic_profiles import (
-    SYNTHETIC_PROFILE_IDS,
+    CLOSED_SYNTHETIC_PROFILE_IDS as SYNTHETIC_PROFILE_IDS,
     make_synthetic_profile,
 )
 
