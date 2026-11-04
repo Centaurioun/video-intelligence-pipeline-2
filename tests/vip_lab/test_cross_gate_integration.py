@@ -2,22 +2,69 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
-from gate0.config_freeze import POLICY_ROOT_IDENTITY, SCHEMA_VERSION
+from gate0.identity import digest_bytes, digest_json
 from vip_lab.common import LAB_PROGRAM_VERSION, ReadinessStatus
 from vip_lab.integration import summarize_program
 
 
-def _make_full_synthetic_program_payload() -> dict[str, Any]:
-    digests = {
-        "corpus_snapshot_digest": "1" * 64,
-        "split_manifest_digest": "2" * 64,
-        "query_set_digest": "3" * 64,
-        "gold_event_digest": "4" * 64,
-        "model_bundle_digest": "5" * 64,
-        "prompt_template_digest": "6" * 64,
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CONFIG_PATH = REPO_ROOT / "config/gate0/default.json"
+
+
+def _synth_digest(label: str) -> str:
+    return digest_json({"synthetic_metadata": label})
+
+
+def _make_gate0_config_and_observed() -> tuple[dict[str, Any], dict[str, str]]:
+    config: dict[str, Any] = json.loads(DEFAULT_CONFIG_PATH.read_text(encoding="utf-8"))
+    config["corpus"]["source_root"] = "/synthetic-input-root-that-must-not-be-opened"
+    config["corpus"]["source_manifest_digest"] = _synth_digest("source-manifest-rev-1")
+    config["model"].update(
+        {
+            "model_identity": "synthetic-local-model-identity",
+            "weights_digest": _synth_digest("weights"),
+            "processor_digest": _synth_digest("processor"),
+            "space_id": "synthetic-embedding-space",
+            "dimension": 64,
+        }
+    )
+    config["policy"]["egress_manifest_digest"] = _synth_digest("egress-manifest")
+    config["sandbox"].update(
+        {
+            "bwrap_version": "synthetic-bwrap-1.0",
+            "bwrap_digest": _synth_digest("bwrap"),
+            "interpreter_digest": _synth_digest("interpreter"),
+        }
+    )
+    config["blinding"]["blind_mapping_digest"] = _synth_digest("blind-mapping")
+
+    observed = {
+        "post_inventory:corpus.source_manifest_digest": config["corpus"][
+            "source_manifest_digest"
+        ],
+        "model:model.weights_digest": config["model"]["weights_digest"],
+        "model:model.processor_digest": config["model"]["processor_digest"],
+        "policy:policy.egress_manifest_digest": config["policy"][
+            "egress_manifest_digest"
+        ],
+        "sandbox:sandbox.bwrap_digest": config["sandbox"]["bwrap_digest"],
+        "sandbox:sandbox.interpreter_digest": config["sandbox"]["interpreter_digest"],
+        "blinding:blinding.blind_mapping_digest": config["blinding"][
+            "blind_mapping_digest"
+        ],
+        "policy:policy.review_input.authorized_root": digest_bytes(
+            config["policy"]["review_input"]["authorized_root"].encode("utf-8")
+        ),
     }
+    return config, observed
+
+
+def _make_full_synthetic_program_payload() -> dict[str, Any]:
+    g0_cfg, g0_observed = _make_gate0_config_and_observed()
     common_proto = {
         "corpus_snapshot_digest": "1" * 64,
         "query_set_digest": "2" * 64,
@@ -41,17 +88,8 @@ def _make_full_synthetic_program_payload() -> dict[str, Any]:
             "expect_negative_stream_refusal": True,
         },
         "mega04": {
-            "config": {
-                "schema_version": SCHEMA_VERSION,
-                "policy_root_identity": POLICY_ROOT_IDENTITY,
-                **digests,
-                "window_policy": {"window_sec": 4, "stride_sec": 2},
-                "keyframes_per_window": 4,
-                "preprocess_id": "siglip_224_rgb",
-                "similarity_metric": "cosine",
-                "top_k": 5,
-            },
-            "observed_digests": digests,
+            "config": g0_cfg,
+            "observed_digests": g0_observed,
         },
         "mega05": {
             "arms": [
@@ -78,6 +116,8 @@ def _make_full_synthetic_program_payload() -> dict[str, Any]:
                 "jobs": 3,
                 "stages": 2,
                 "artifact_bytes": 64,
+                "cost_units": 10,
+                "fault_position": 0,
                 "f01_sha": "1" * 40,
                 "c04_sha": "2" * 40,
                 "e05_sha": "3" * 40,
@@ -90,8 +130,8 @@ def _make_full_synthetic_program_payload() -> dict[str, Any]:
                         "unit": "ms",
                         "value": 9.5,
                         "evidence_class": "MEASURED",
-                        "status": "OBSERVED",
-                        "provenance_digest": "d" * 64,
+                        "status": "MEASURED",
+                        "derivation": "synthetic_timer",
                     }
                 ]
             },

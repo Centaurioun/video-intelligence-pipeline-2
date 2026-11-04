@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from gate3.qc import bare_pass_is_insufficient, may_consume_for_binding_origin
+from gate3.qc import bare_pass_is_insufficient
 from vip_fvs.real_preview_receipt import FIXTURE_NOT_OBSERVED_REQUIRED
 
 from ..common import (
@@ -61,7 +61,10 @@ def inspect_qc_export_readiness(payload: Mapping[str, Any]) -> ReadinessPacket:
 
     raw_qc = cleaned.get("qc_report")
     if isinstance(raw_qc, str) or raw_qc is None:
-        if bare_pass_is_insufficient():
+        synthetic_bare_record = {
+            "edit_qc_status": raw_qc if isinstance(raw_qc, str) else "PASS"
+        }
+        if bare_pass_is_insufficient(synthetic_bare_record) or raw_qc is None:
             code = "BARE_PASS_QC_INSUFFICIENT"
             reasons.append(code)
             blockers.append(code)
@@ -82,6 +85,7 @@ def inspect_qc_export_readiness(payload: Mapping[str, Any]) -> ReadinessPacket:
             summary={
                 "technical_qc_status": NOT_OBSERVED,
                 "editorial_qc_status": NOT_OBSERVED,
+                "binding_consumable": False,
                 "production_export_authorized": False,
                 "export_status": "REFUSED_NOT_AUTHORIZED",
             },
@@ -106,13 +110,28 @@ def inspect_qc_export_readiness(payload: Mapping[str, Any]) -> ReadinessPacket:
             blockers=tuple(blockers),
             findings=tuple(findings),
             summary={
+                "binding_consumable": False,
                 "production_export_authorized": False,
                 "export_status": "REFUSED_NOT_AUTHORIZED",
             },
         )
 
+    if bare_pass_is_insufficient(raw_qc):
+        code = "BARE_PASS_QC_INSUFFICIENT"
+        reasons.append(code)
+        blockers.append(code)
+        findings.append(
+            ReadinessFinding(
+                code=code,
+                status=ReadinessStatus.BLOCKED,
+                message="edit_qc_status='PASS' without qc_scope and supporting_evidence_refs is insufficient",
+                field_path="qc_report",
+            )
+        )
+
     origin = str(raw_qc.get("origin", "SYNTHETIC_FIXTURE"))
-    binding_consumable = may_consume_for_binding_origin(origin)
+    # Synthetic lab QC records are never consumable for real Gate-3 binding.
+    binding_consumable = False
     tech_checks = raw_qc.get("technical_checks")
     ed_checks = raw_qc.get("editorial_checks")
 

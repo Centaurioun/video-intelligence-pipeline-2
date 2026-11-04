@@ -39,8 +39,8 @@ STAGE_ID = "MEGA-07.CANDIDATE_TEMPORAL_GATE"
 
 def _to_rational_seconds(val: Any, field_name: str) -> Rational:
     if isinstance(val, Mapping):
-        num = val.get("num")
-        den = val.get("den")
+        num = val.get("num", val.get("numerator"))
+        den = val.get("den", val.get("denominator"))
         if (
             not isinstance(num, int)
             or isinstance(num, bool)
@@ -50,14 +50,13 @@ def _to_rational_seconds(val: Any, field_name: str) -> Rational:
         ):
             raise VipLabError(
                 "TEMPORAL_RATIONAL_INVALID",
-                f"{field_name} rational mapping requires integer num and positive integer den",
+                f"{field_name} rational mapping requires integer num/numerator and positive integer den/denominator",
                 field_path=field_name,
             )
         return Rational(num, den)
     if isinstance(val, int) and not isinstance(val, bool):
         return Rational(val, 1)
     if isinstance(val, float):
-        # Convert exact millisecond integer representation only for synthetic convenience
         millis = round(val * 1000)
         return Rational(millis, 1000)
     raise VipLabError(
@@ -168,6 +167,7 @@ def inspect_candidate_temporal(payload: Mapping[str, Any]) -> ReadinessPacket:
             findings=tuple(findings),
             summary={
                 "candidate_evidence_class": cand_ev_class,
+                "refinement_status": "SYNTHETIC_DIAGNOSTIC_ONLY",
                 "temporal_refined": False,
                 "binding_eligible": False,
             },
@@ -200,7 +200,7 @@ def inspect_candidate_temporal(payload: Mapping[str, Any]) -> ReadinessPacket:
 
     try:
         tb_rat = _to_rational_seconds(tb_raw, "time_base")
-        tb = TimeBase(tb_rat.num, tb_rat.den)
+        tb = TimeBase(tb_rat.numerator, tb_rat.denominator)
         start_sec = _to_rational_seconds(
             candidate.get("start_sec", 0), "candidate.start_sec"
         )
@@ -228,8 +228,10 @@ def inspect_candidate_temporal(payload: Mapping[str, Any]) -> ReadinessPacket:
             summary={"temporal_refined": False, "binding_eligible": False},
         )
 
-    table = PtsTable(tuple(int(t) for t in pts_ticks_raw))
-    if table.is_ambiguous:
+    ticks_tuple = tuple(int(t) for t in pts_ticks_raw)
+    try:
+        table = PtsTable(tb, ticks_tuple)
+    except ValueError as exc:
         code = "PTS_TABLE_NON_MONOTONIC_OR_AMBIGUOUS"
         reasons.append(code)
         blockers.append(code)
@@ -237,7 +239,32 @@ def inspect_candidate_temporal(payload: Mapping[str, Any]) -> ReadinessPacket:
             ReadinessFinding(
                 code=code,
                 status=ReadinessStatus.BLOCKED,
-                message="PTS table is non-monotonic or contains duplicate ticks; failing closed",
+                message=f"PTS table rejected by PtsTable: {exc}",
+                field_path="pts_ticks",
+            )
+        )
+        return ReadinessPacket(
+            stage_id=STAGE_ID,
+            status=ReadinessStatus.BLOCKED,
+            reasons=tuple(reasons),
+            blockers=tuple(blockers),
+            findings=tuple(findings),
+            summary={
+                "pts_ambiguous": True,
+                "temporal_refined": False,
+                "binding_eligible": False,
+            },
+        )
+
+    if any(table.is_ambiguous(t) for t in table.ticks):
+        code = "PTS_TABLE_NON_MONOTONIC_OR_AMBIGUOUS"
+        reasons.append(code)
+        blockers.append(code)
+        findings.append(
+            ReadinessFinding(
+                code=code,
+                status=ReadinessStatus.BLOCKED,
+                message="PTS table contains duplicate/ambiguous ticks; failing closed",
                 field_path="pts_ticks",
             )
         )
@@ -255,19 +282,17 @@ def inspect_candidate_temporal(payload: Mapping[str, Any]) -> ReadinessPacket:
         )
 
     # Convert requested start/end seconds to target ticks using exact rational arithmetic
-    req_start_ratio = start_sec / tb.rational
-    req_end_ratio = end_sec / tb.rational
-    req_start_tick = req_start_ratio.num // req_start_ratio.den
-    req_end_tick = req_end_ratio.num // req_end_ratio.den
+    req_start_tick = tb.seconds_to_ticks_floor(start_sec)
+    req_end_tick = tb.seconds_to_ticks_floor(end_sec)
 
     snap_start = resolve_start(table, req_start_tick)
     snap_end = resolve_end(table, req_end_tick)
     if (
-        not snap_start.resolved
-        or not snap_end.resolved
-        or snap_start.resolved_tick is None
-        or snap_end.resolved_tick is None
-        or snap_end.resolved_tick <= snap_start.resolved_tick
+        snap_start.resolved_ticks is None
+        or snap_end.resolved_ticks is None
+        or snap_end.resolved_ticks <= snap_start.resolved_ticks
+        or table.is_ambiguous(snap_start.resolved_ticks)
+        or table.is_ambiguous(snap_end.resolved_ticks)
     ):
         code = "TEMPORAL_BOUNDARY_RESOLUTION_FAILED"
         reasons.append(code)
@@ -279,8 +304,10 @@ def inspect_candidate_temporal(payload: Mapping[str, Any]) -> ReadinessPacket:
                 message="Requested candidate window could not be resolved to valid start/end PTS ticks",
                 field_path="candidate",
                 details={
-                    "start_reason": snap_start.reason_code,
-                    "end_reason": snap_end.reason_code,
+                    "start_policy": snap_start.policy,
+                    "end_policy": snap_end.policy,
+                    "resolved_start_ticks": snap_start.resolved_ticks,
+                    "resolved_end_ticks": snap_end.resolved_ticks,
                 },
             )
         )
@@ -293,11 +320,30 @@ def inspect_candidate_temporal(payload: Mapping[str, Any]) -> ReadinessPacket:
             summary={"temporal_refined": False, "binding_eligible": False},
         )
 
-    vfr_info = classify_vfr(table)
-    disc_gap = int(cleaned.get("max_delta_ticks", 90000))
-    discontinuities = detect_discontinuity(table, disc_gap)
-    start_ord = table.ordinal_of(snap_start.resolved_tick)
-    end_ord = table.ordinal_of(snap_end.resolved_tick)
+    resolved_start = snap_start.resolved_ticks
+    resolved_end = snap_end.resolved_ticks
+    vfr_str, _period, vfr_basis, _vfr_dev = classify_vfr(table)
+    is_vfr = vfr_str == "true"
+    deltas = [b - a for a, b in zip(table.ticks, table.ticks[1:])]
+    min_delta = min(deltas) if deltas else 0
+    max_delta = max(deltas) if deltas else 0
+    discontinuities = detect_discontinuity(table, resolved_start, resolved_end)
+    if discontinuities:
+        code = "PTS_DISCONTINUITY_DETECTED"
+        reasons.append(code)
+        blockers.append(code)
+        findings.append(
+            ReadinessFinding(
+                code=code,
+                status=ReadinessStatus.BLOCKED,
+                message=f"PTS discontinuity detected in interval [{resolved_start}, {resolved_end})",
+                field_path="pts_ticks",
+                details={"discontinuities": [list(pair) for pair in discontinuities]},
+            )
+        )
+
+    start_ord = table.ordinals_of(resolved_start)[0]
+    end_ord = table.ordinals_of(resolved_end)[0]
 
     if any(f.status == ReadinessStatus.INVALID for f in findings):
         final_status = ReadinessStatus.INVALID
@@ -311,14 +357,15 @@ def inspect_candidate_temporal(payload: Mapping[str, Any]) -> ReadinessPacket:
             ReadinessFinding(
                 code="SYNTHETIC_PTS_INTERVAL_RESOLVED",
                 status=ReadinessStatus.READY_SYNTHETIC,
-                message="Resolved candidate seconds to synthetic PTS ticks and frame ordinals",
-                evidence_state="MEASURED",
+                message="Resolved candidate seconds to synthetic PTS ticks and frame ordinals (diagnostic only)",
+                evidence_state=NOT_OBSERVED,
                 details={
-                    "start_pts": snap_start.resolved_tick,
-                    "end_pts": snap_end.resolved_tick,
+                    "start_pts": resolved_start,
+                    "end_pts": resolved_end,
                     "start_frame_ordinal": start_ord,
                     "end_frame_ordinal": end_ord,
-                    "is_vfr": vfr_info.is_vfr,
+                    "is_vfr": is_vfr,
+                    "refinement_status": "SYNTHETIC_DIAGNOSTIC_ONLY",
                 },
             )
         )
@@ -326,22 +373,27 @@ def inspect_candidate_temporal(payload: Mapping[str, Any]) -> ReadinessPacket:
     return ReadinessPacket(
         stage_id=STAGE_ID,
         status=final_status,
-        evidence_state="MEASURED" if final_status == ReadinessStatus.READY_SYNTHETIC else NOT_OBSERVED,
+        evidence_state=NOT_OBSERVED,
         reasons=tuple(reasons),
         blockers=tuple(blockers),
         findings=tuple(findings),
         summary={
             "candidate_evidence_class": "MATCHED",
-            "refinement_evidence_class": "MEASURED",
+            "refinement_status": "SYNTHETIC_DIAGNOSTIC_ONLY",
+            "refinement_evidence_state": NOT_OBSERVED,
             "temporal_refined": final_status == ReadinessStatus.READY_SYNTHETIC,
             "binding_eligible": False,
-            "start_pts": snap_start.resolved_tick,
-            "end_pts": snap_end.resolved_tick,
+            "start_pts": resolved_start,
+            "end_pts": resolved_end,
             "start_frame_ordinal": start_ord,
             "end_frame_ordinal": end_ord,
-            "is_vfr": vfr_info.is_vfr,
-            "min_delta_ticks": vfr_info.min_delta,
-            "max_delta_ticks": vfr_info.max_delta,
+            "start_snap_policy": snap_start.policy,
+            "end_snap_policy": snap_end.policy,
+            "is_vfr": is_vfr,
+            "vfr_classification": vfr_str,
+            "vfr_basis": vfr_basis,
+            "min_delta_ticks": min_delta,
+            "max_delta_ticks": max_delta,
             "discontinuity_count": len(discontinuities),
         },
     )

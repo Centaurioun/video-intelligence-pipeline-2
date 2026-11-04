@@ -49,15 +49,21 @@ def inspect_workload_plan(payload: Mapping[str, Any]) -> ReadinessPacket:
         )
 
     try:
+        stages_val = cleaned.get("stages", 0)
+        default_fault_pos = 0
         spec = WorkloadSpec(
-            seed=cleaned.get("seed", 0),  # type: ignore[arg-type]
             jobs=cleaned.get("jobs", 0),  # type: ignore[arg-type]
-            stages=cleaned.get("stages", 0),  # type: ignore[arg-type]
+            stages=stages_val,  # type: ignore[arg-type]
             artifact_bytes=cleaned.get("artifact_bytes", 0),  # type: ignore[arg-type]
+            cost_units=cleaned.get("cost_units", 10),  # type: ignore[arg-type]
+            fault_position=cleaned.get("fault_position", default_fault_pos),  # type: ignore[arg-type]
+            seed=cleaned.get("seed", 0),  # type: ignore[arg-type]
             f01_sha=str(cleaned.get("f01_sha", "")),
             c04_sha=str(cleaned.get("c04_sha", "")),
             e05_sha=str(cleaned.get("e05_sha", "")),
             config_digest=str(cleaned.get("config_digest", "")),
+            concurrency=cleaned.get("concurrency", 1),  # type: ignore[arg-type]
+            repetitions=cleaned.get("repetitions", 2),  # type: ignore[arg-type]
         )
         fixture_a = generate(spec)
         fixture_b = generate(spec)
@@ -86,8 +92,8 @@ def inspect_workload_plan(payload: Mapping[str, Any]) -> ReadinessPacket:
             },
         )
 
-    digest_a = fixture_a.fixture_digest()
-    digest_b = fixture_b.fixture_digest()
+    digest_a = fixture_a.fixture_digest
+    digest_b = fixture_b.fixture_digest
     if digest_a != digest_b:
         code = "WORKLOAD_NONDETERMINISTIC_GENERATION"
         reasons.append(code)
@@ -116,7 +122,7 @@ def inspect_workload_plan(payload: Mapping[str, Any]) -> ReadinessPacket:
             code="WORKLOAD_FIXTURE_GENERATED",
             status=ReadinessStatus.READY_SYNTHETIC,
             message="Generated deterministic synthetic Gate-2 workload fixture",
-            evidence_state="MEASURED",
+            evidence_state=NOT_OBSERVED,
             details={
                 "fixture_digest": digest_a,
                 "total_steps": total_steps,
@@ -139,6 +145,8 @@ def inspect_workload_plan(payload: Mapping[str, Any]) -> ReadinessPacket:
             "jobs": spec.jobs,
             "stages": spec.stages,
             "artifact_bytes": spec.artifact_bytes,
+            "cost_units": spec.cost_units,
+            "fault_position": spec.fault_position,
             "total_steps": total_steps,
             "total_bytes": total_bytes,
             "real_archive_workload_observed": False,

@@ -8,9 +8,10 @@ Delegates directly to:
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 import tempfile
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from gate2.faults import FaultClass, InjectionError, capability, inject
 from gate2.recovery import RecoveryBinding, RecoveryHarness, RecoveryRefusal
@@ -22,11 +23,120 @@ from ..common import (
     ReadinessPacket,
     ReadinessStatus,
     VipLabError,
+    canonical_json_dumps,
     sanitize_untrusted_authority_claims,
 )
 
 
 STAGE_ID = "MEGA-06.RECOVERY_MATRIX"
+
+_FAULT_CLASS_ALIASES: dict[str, FaultClass] = {
+    "PARTIAL_WRITE": FaultClass.C_AFTER_COMPUTE_BEFORE_PERSIST,
+    "BEFORE_STAGE_START": FaultClass.A_BEFORE_STAGE_START,
+    "DURING_DECODE": FaultClass.B_DURING_DECODE,
+    "AFTER_COMPUTE_BEFORE_PERSIST": FaultClass.C_AFTER_COMPUTE_BEFORE_PERSIST,
+    "ORPHAN_PAYLOAD": FaultClass.D_ORPHAN_PAYLOAD,
+    "INDEX_SQLITE_DIVERGENCE": FaultClass.E_INDEX_SQLITE_DIVERGENCE,
+    "STALE_LOCK": FaultClass.F_STALE_LOCK,
+    "DUPLICATE_DELIVERY": FaultClass.G_DUPLICATE_DELIVERY,
+    "INTERRUPTED_RECOVERY": FaultClass.H_INTERRUPTED_RECOVERY,
+    "CORRUPT_AT_REST": FaultClass.I_CORRUPT_AT_REST,
+    "SCHEMA_MISMATCH": FaultClass.J_SCHEMA_MISMATCH,
+    "PARTIAL_BATCH": FaultClass.K_PARTIAL_BATCH,
+    "OUT_OF_ORDER_COMPLETION": FaultClass.L_OUT_OF_ORDER_COMPLETION,
+    "DUPLICATE_INSERT": FaultClass.M_DUPLICATE_INSERT,
+}
+
+
+class _SimulatedInterruptionError(RuntimeError):
+    """Raised by the synthetic adapter to simulate mid-run interruption."""
+
+
+class _SyntheticRecoveryAdapter:
+    """In-memory deterministic adapter satisfying gate2.recovery.RecoveryHarness protocol."""
+
+    def __init__(
+        self,
+        operation_ids: Sequence[str],
+        *,
+        valid_receipt: str,
+        interrupt_at_step: int | None = None,
+    ) -> None:
+        self.operation_ids: tuple[str, ...] = tuple(operation_ids)
+        self.valid_receipt = valid_receipt
+        self.interrupt_at_step = interrupt_at_step
+        self.completed_ops: set[str] = set()
+        self.side_effect_counts: dict[str, int] = {}
+        self.corrupted: bool = False
+
+    def validate_receipt(self, receipt_identity: str) -> bool:
+        return (not self.corrupted) and (receipt_identity == self.valid_receipt)
+
+    def reconcile_sqlite_tail(self) -> None:
+        if self.corrupted:
+            raise RecoveryRefusal("corrupt artifact or sqlite tail detected")
+
+    def state_digest(self) -> str:
+        raw = canonical_json_dumps(
+            {
+                "completed": sorted(self.completed_ops),
+                "corrupted": self.corrupted,
+            }
+        ).encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()
+
+    def start_or_resume(self, binding: RecoveryBinding) -> Sequence[str]:
+        return self.operation_ids
+
+    def is_complete(self, operation_id: str) -> bool:
+        return operation_id in self.completed_ops
+
+    def apply_idempotent(self, operation_id: str) -> None:
+        if (
+            self.interrupt_at_step is not None
+            and len(self.completed_ops) >= self.interrupt_at_step
+        ):
+            raise _SimulatedInterruptionError(
+                f"Simulated interruption after {len(self.completed_ops)} completed steps"
+            )
+        self.side_effect_counts[operation_id] = (
+            self.side_effect_counts.get(operation_id, 0) + 1
+        )
+
+    def mark_complete(self, operation_id: str) -> None:
+        self.completed_ops.add(operation_id)
+
+
+def _resolve_fault_class(raw_name: str) -> FaultClass:
+    cleaned_name = raw_name.strip()
+    if cleaned_name in _FAULT_CLASS_ALIASES:
+        return _FAULT_CLASS_ALIASES[cleaned_name]
+    if cleaned_name.upper() in FaultClass.__members__:
+        return FaultClass[cleaned_name.upper()]
+    return FaultClass(cleaned_name.lower())
+
+
+def _default_fault_payload(fc: FaultClass) -> dict[str, Any]:
+    if fc in (
+        FaultClass.A_BEFORE_STAGE_START,
+        FaultClass.B_DURING_DECODE,
+        FaultClass.C_AFTER_COMPUTE_BEFORE_PERSIST,
+        FaultClass.F_STALE_LOCK,
+        FaultClass.G_DUPLICATE_DELIVERY,
+        FaultClass.H_INTERRUPTED_RECOVERY,
+        FaultClass.K_PARTIAL_BATCH,
+        FaultClass.L_OUT_OF_ORDER_COMPLETION,
+    ):
+        return {"completed": ["op_0"], "inflight": "op_1"}
+    if fc == FaultClass.D_ORPHAN_PAYLOAD:
+        return {"manifest_refs": ["ref_0"], "payloads": ["ref_0", "orphan_1"]}
+    if fc == FaultClass.E_INDEX_SQLITE_DIVERGENCE:
+        return {"sqlite_ids": ["id_0"], "matrix_ids": ["id_0", "extra_1"]}
+    if fc == FaultClass.I_CORRUPT_AT_REST:
+        return {"digest": "0" * 64, "bytes": "corrupted-checkpoint-bytes"}
+    if fc == FaultClass.J_SCHEMA_MISMATCH:
+        return {"declared_version": 1, "expected_version": 2}
+    return {"duplicate_keys": ["dup_key_0"]}
 
 
 def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
@@ -62,14 +172,18 @@ def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
 
     try:
         spec = WorkloadSpec(
-            seed=workload_cfg.get("seed", 7),  # type: ignore[arg-type]
             jobs=workload_cfg.get("jobs", 3),  # type: ignore[arg-type]
             stages=workload_cfg.get("stages", 2),  # type: ignore[arg-type]
             artifact_bytes=workload_cfg.get("artifact_bytes", 64),  # type: ignore[arg-type]
+            cost_units=workload_cfg.get("cost_units", 10),  # type: ignore[arg-type]
+            fault_position=workload_cfg.get("fault_position", 0),  # type: ignore[arg-type]
+            seed=workload_cfg.get("seed", 7),  # type: ignore[arg-type]
             f01_sha=str(workload_cfg.get("f01_sha", "1" * 40)),
             c04_sha=str(workload_cfg.get("c04_sha", "2" * 40)),
             e05_sha=str(workload_cfg.get("e05_sha", "3" * 40)),
             config_digest=str(workload_cfg.get("config_digest", "a" * 64)),
+            concurrency=workload_cfg.get("concurrency", 1),  # type: ignore[arg-type]
+            repetitions=workload_cfg.get("repetitions", 2),  # type: ignore[arg-type]
         )
         fixture = generate(spec)
     except (WorkloadError, TypeError, ValueError) as exc:
@@ -93,12 +207,21 @@ def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
             summary={"scenario_valid": False},
         )
 
+    fix_digest = fixture.fixture_digest
+    receipt_id = str(cleaned.get("receipt_identity", "rcpt_synth_01"))
     binding = RecoveryBinding(
-        workload_digest=fixture.fixture_digest(),
-        config_digest=spec.config_digest,
         f01_sha=spec.f01_sha,
         c04_sha=spec.c04_sha,
         e05_sha=spec.e05_sha,
+        workload_digest=fix_digest,
+        configuration_digest=spec.config_digest,
+        previous_manifest_digest=str(cleaned.get("previous_manifest_digest", "4" * 64)),
+        current_manifest_digest=str(cleaned.get("current_manifest_digest", "5" * 64)),
+        generation_id=str(cleaned.get("generation_id", "gen_synth_01")),
+        semantic_space_id=str(
+            cleaned.get("semantic_space_id", "vip-v1-siglip-base-224:768")
+        ),
+        receipt_identity=receipt_id,
     )
 
     interrupt_at_step = cleaned.get("interrupt_at_step")
@@ -109,22 +232,30 @@ def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
     fault_summary: dict[str, Any] | None = None
     if fault_class_name is not None:
         try:
-            fc = FaultClass(str(fault_class_name))
+            fc = _resolve_fault_class(str(fault_class_name))
             cap = capability(fc)
-            with tempfile.TemporaryDirectory(prefix="vip_lab_fault_") as ftmp:
-                inj = inject(fc, Path(ftmp), payload=b"synthetic-checkpoint-bytes")
+            custom_fault_payload = cleaned.get("fault_payload")
+            fault_payload = (
+                dict(custom_fault_payload)
+                if isinstance(custom_fault_payload, Mapping)
+                else _default_fault_payload(fc)
+            )
+            inj = inject(fc, fault_payload)
             fault_summary = {
                 "fault_class": fc.value,
-                "capability": cap.value,
-                "injected": inj.injected,
-                "deterministic": inj.deterministic,
-                "detail": inj.detail,
+                "fault_class_name": fc.name,
+                "requested_fault_class": str(fault_class_name),
+                "capability": cap,
+                "disposition": inj.disposition,
+                "detected": inj.detected,
+                "payload_digest": inj.payload_digest,
+                "details": dict(inj.details),
             }
             findings.append(
                 ReadinessFinding(
                     code="RECOVERY_FAULT_INJECTED_SYNTHETIC",
                     status=ReadinessStatus.READY_SYNTHETIC,
-                    message=f"Simulated synthetic fault class {fc.value}",
+                    message=f"Simulated synthetic fault class {fc.value} ({fc.name})",
                     details=fault_summary,
                 )
             )
@@ -149,38 +280,62 @@ def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
                 summary={"scenario_valid": False},
             )
 
-    with tempfile.TemporaryDirectory(prefix="vip_lab_rec_") as tmp_dir:
-        state_dir = Path(tmp_dir) / "state"
-        harness_initial = RecoveryHarness.open(state_dir, fixture, binding)
-        initial_run = harness_initial.run(
-            interrupt_at_step=(
-                int(interrupt_at_step)
-                if isinstance(interrupt_at_step, int)
-                and not isinstance(interrupt_at_step, bool)
-                else None
-            )
-        )
+    operation_ids = [
+        f"{job.job_id}:stage_{stage_idx}"
+        for job in fixture.jobs
+        for stage_idx in range(job.stages)
+    ]
+    step_limit = (
+        int(interrupt_at_step)
+        if isinstance(interrupt_at_step, int) and not isinstance(interrupt_at_step, bool)
+        else None
+    )
 
+    with tempfile.TemporaryDirectory(prefix="vip_lab_rec_") as tmp_dir:
+        checkpoint_path = Path(tmp_dir) / "checkpoint.json"
+        adapter = _SyntheticRecoveryAdapter(
+            operation_ids,
+            valid_receipt=receipt_id,
+            interrupt_at_step=step_limit,
+        )
+        harness_initial = RecoveryHarness.open(checkpoint_path, binding, adapter)
+        interrupted = False
+        try:
+            harness_initial.run()
+        except _SimulatedInterruptionError:
+            interrupted = True
+
+        initial_run = {
+            "completed_count": len(adapter.completed_ops),
+            "interrupted": interrupted,
+            "total_operations": len(operation_ids),
+        }
+
+        # Lift interruption limit for resume attempt
+        adapter.interrupt_at_step = None
         if corrupt_artifact_on_resume:
-            artifacts_dir = state_dir / "artifacts"
-            if artifacts_dir.exists():
-                for bin_file in sorted(artifacts_dir.glob("*.bin")):
-                    bin_file.write_bytes(b"corrupted-checkpoint-payload")
-                    break
+            adapter.corrupted = True
 
         resume_binding = binding
         if tamper_binding_on_resume:
             resume_binding = RecoveryBinding(
-                workload_digest="f" * 64,
-                config_digest=spec.config_digest,
                 f01_sha=spec.f01_sha,
                 c04_sha=spec.c04_sha,
                 e05_sha=spec.e05_sha,
+                workload_digest="f" * 64,
+                configuration_digest=spec.config_digest,
+                previous_manifest_digest=binding.previous_manifest_digest,
+                current_manifest_digest=binding.current_manifest_digest,
+                generation_id=binding.generation_id,
+                semantic_space_id=binding.semantic_space_id,
+                receipt_identity=binding.receipt_identity,
             )
 
         try:
-            harness_resume = RecoveryHarness.open(state_dir, fixture, resume_binding)
-            resume_run = harness_resume.run()
+            harness_resume = RecoveryHarness.open(
+                checkpoint_path, resume_binding, adapter
+            )
+            outcome = harness_resume.run()
         except RecoveryRefusal as exc:
             code = "RECOVERY_REFUSED_FAIL_CLOSED"
             reasons.append(code)
@@ -203,10 +358,21 @@ def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
                     "scenario_valid": True,
                     "refused_fail_closed": True,
                     "refusal_message": str(exc),
-                    "initial_run": dict(initial_run),
+                    "initial_run": initial_run,
                     "fault": fault_summary,
                 },
             )
+
+        recomputed_count = sum(
+            count - 1 for count in adapter.side_effect_counts.values() if count > 1
+        )
+        resume_run = {
+            "completed_count": len(adapter.completed_ops),
+            "skipped_completed": outcome.skipped_completed,
+            "recomputed_count": recomputed_count,
+            "corrupted_count": 1 if adapter.corrupted else 0,
+            "state_digest": outcome.state_digest,
+        }
 
     reasons.append("RECOVERY_SYNTHETIC_SCENARIO_VERIFIED")
     findings.append(
@@ -214,7 +380,7 @@ def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
             code="RECOVERY_RESUME_CONVERGED",
             status=ReadinessStatus.READY_SYNTHETIC,
             message="Synthetic recovery harness converged with zero recomputation and zero corruption",
-            evidence_state="MEASURED",
+            evidence_state=NOT_OBSERVED,
             details={
                 "initial_completed": initial_run["completed_count"],
                 "resume_completed": resume_run["completed_count"],
@@ -234,9 +400,9 @@ def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
         summary={
             "scenario_valid": True,
             "refused_fail_closed": False,
-            "fixture_digest": fixture.fixture_digest(),
-            "initial_run": dict(initial_run),
-            "resume_run": dict(resume_run),
+            "fixture_digest": fix_digest,
+            "initial_run": initial_run,
+            "resume_run": resume_run,
             "fault": fault_summary,
             "real_archive_recovery_proven": False,
         },

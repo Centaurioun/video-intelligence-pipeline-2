@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vip_fvs.synthetic_profiles import SYNTHETIC_PROFILE_IDS
+from vip_fvs.synthetic_profiles import CLOSED_SYNTHETIC_PROFILE_IDS
 from vip_lab.common import ReadinessStatus
 from vip_lab.mega05 import (
     RUNTIME_AUTHORITY_STAGES,
@@ -27,22 +27,22 @@ def _make_three_arm_claims() -> list[dict[str, Any]]:
         {
             "profile_id": "vip-v1-siglip-base-224",
             "weights_sha256": "a" * 64,
-            "tokenizer_sha256": "b" * 64,
-            "preprocess_sha256": "c" * 64,
+            "processor_digest": "b" * 64,
+            "image_preprocessing_digest": "c" * 64,
             **common_proto,
         },
         {
             "profile_id": "vip-v2-siglip2-base-224",
             "weights_sha256": "d" * 64,
-            "tokenizer_sha256": "e" * 64,
-            "preprocess_sha256": "f" * 64,
+            "processor_digest": "e" * 64,
+            "image_preprocessing_digest": "f" * 64,
             **common_proto,
         },
         {
             "profile_id": "vip-v2-siglip2-so400m-384",
             "weights_sha256": "4" * 64,
-            "tokenizer_sha256": "5" * 64,
-            "preprocess_sha256": "6" * 64,
+            "processor_digest": "5" * 64,
+            "image_preprocessing_digest": "6" * 64,
             **common_proto,
         },
     ]
@@ -59,11 +59,14 @@ class TestMega05ModelAssetClaims:
         validated = {
             row["profile_id"]: row for row in pkt.summary["validated_profiles"]
         }
-        assert set(validated.keys()) == set(SYNTHETIC_PROFILE_IDS)
+        assert set(validated.keys()) == set(CLOSED_SYNTHETIC_PROFILE_IDS)
         assert validated["vip-v1-siglip-base-224"]["embedding_dim"] == 768
+        assert validated["vip-v1-siglip-base-224"]["device_backend"] == "cpu"
+        assert validated["vip-v1-siglip-base-224"]["precision_policy_id"] == "v1-float32"
         assert validated["vip-v2-siglip2-base-224"]["embedding_dim"] == 768
         assert validated["vip-v2-siglip2-so400m-384"]["embedding_dim"] == 1152
         assert validated["vip-v2-siglip2-so400m-384"]["row_width_bytes"] == 4608
+        assert validated["vip-v2-siglip2-so400m-384"]["authentic_model_evidence"] == "NOT_OBSERVED"
 
         # 768D V1 and 768D V2 Base must never share a semantic_space_id
         assert (
@@ -92,6 +95,12 @@ class TestMega05ModelAssetClaims:
         auth_pkt = inspect_model_asset_claims({"profiles": auth_claims})
         assert auth_pkt.status == ReadinessStatus.BLOCKED
         assert "SYNTHETIC_EMBEDDING_NOT_AUTHENTIC_MODEL" in auth_pkt.blockers
+
+        bad_prof_claims = _make_three_arm_claims()
+        bad_prof_claims[0]["device_backend"] = "pytorch-mps"
+        bad_prof_pkt = inspect_model_asset_claims({"profiles": bad_prof_claims})
+        assert bad_prof_pkt.status == ReadinessStatus.BLOCKED
+        assert "MODEL_PROFILE_CONTRACT_VIOLATION" in bad_prof_pkt.blockers
 
 
 class TestMega05RuntimeAuthority:

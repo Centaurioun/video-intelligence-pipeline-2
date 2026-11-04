@@ -184,12 +184,16 @@ class TestMega07CandidateTemporalGate:
             }
         )
         assert pkt.status == ReadinessStatus.READY_SYNTHETIC
+        assert pkt.evidence_state == "NOT_OBSERVED"
         assert pkt.summary["temporal_refined"] is True
         assert pkt.summary["binding_eligible"] is False
+        assert pkt.summary["refinement_status"] == "SYNTHETIC_DIAGNOSTIC_ONLY"
+        assert pkt.summary["refinement_evidence_state"] == "NOT_OBSERVED"
         assert pkt.summary["start_pts"] == 90000
-        assert pkt.summary["end_pts"] == 180000
+        # Half-open resolve_end: first PTS strictly after 180000 is 183000 (ordinal 61)
+        assert pkt.summary["end_pts"] == 183000
         assert pkt.summary["start_frame_ordinal"] == 30
-        assert pkt.summary["end_frame_ordinal"] == 60
+        assert pkt.summary["end_frame_ordinal"] == 61
         assert pkt.summary["is_vfr"] is False
 
     def test_refuses_nominal_fps_multiplication_and_ambiguous_pts(self) -> None:
@@ -221,6 +225,20 @@ class TestMega07CandidateTemporalGate:
         )
         assert non_mono_pkt.status == ReadinessStatus.BLOCKED
         assert "PTS_TABLE_NON_MONOTONIC_OR_AMBIGUOUS" in non_mono_pkt.blockers
+
+        dup_pkt = inspect_candidate_temporal(
+            {
+                "candidate": {
+                    "evidence_class": "MATCHED",
+                    "frame_accurate": False,
+                    "start_sec": 0,
+                    "end_sec": 1,
+                },
+                "pts_ticks": [0, 3000, 3000, 6000],
+            }
+        )
+        assert dup_pkt.status == ReadinessStatus.BLOCKED
+        assert "PTS_TABLE_NON_MONOTONIC_OR_AMBIGUOUS" in dup_pkt.blockers
 
 
 class TestMega07EditorialLineage:

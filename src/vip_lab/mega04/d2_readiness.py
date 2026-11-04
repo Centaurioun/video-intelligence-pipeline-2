@@ -18,6 +18,8 @@ from gate0.d2_intake import (
     D2_BASELINE_STATES,
     D2_FIELDS,
     D2_FIELD_IDS,
+    D2_PACKAGE_FILE,
+    D2_PACKAGE_SCHEMA_VERSION,
     D2IntakeError,
     STATE_BLOCKED,
     STATE_NOT_OBSERVED,
@@ -45,30 +47,59 @@ def _write_temp_d2_package(root: Path, payload: Mapping[str, Any]) -> Path:
     pkg_dir.mkdir(parents=True, exist_ok=True)
     attestation = payload.get("attestation")
     fields = payload.get("fields")
-    evidence_files = payload.get("evidence_files", {})
+    artifacts = payload.get("artifacts", payload.get("evidence_files", {}))
     if not isinstance(attestation, Mapping) or not isinstance(fields, Mapping):
         raise VipLabError(
             "D2_MEMORY_PACKAGE_INVALID",
             "In-memory D2 payload must provide 'attestation' and 'fields' mappings",
         )
-    (pkg_dir / "owner-attestation.json").write_text(
-        canonical_json_dumps(dict(attestation)),
-        encoding="utf-8",
+
+    fields_map = (
+        dict(fields["fields"])
+        if "fields" in fields and isinstance(fields["fields"], Mapping)
+        else dict(fields)
     )
-    (pkg_dir / "d2-fields.json").write_text(
-        canonical_json_dumps(dict(fields)),
-        encoding="utf-8",
-    )
-    if isinstance(evidence_files, Mapping):
-        for rel_name, content in evidence_files.items():
-            if not isinstance(rel_name, str) or "/" in rel_name or "\\" in rel_name or rel_name in ("", ".", ".."):
+    clean_attestation: dict[str, Any] = {
+        "attester_id": str(attestation.get("attester_id", "gate0-owner")),
+        "attester_kind": str(attestation.get("attester_kind", "SYNTHETIC_FIXTURE")),
+    }
+    if "signature_ref" in attestation and attestation["signature_ref"] is not None:
+        clean_attestation["signature_ref"] = str(attestation["signature_ref"])
+
+    package_doc: dict[str, Any] = {
+        "schema_version": str(
+            payload.get("schema_version", D2_PACKAGE_SCHEMA_VERSION)
+        ),
+        "package_id": str(
+            payload.get(
+                "package_id",
+                attestation.get("package_id", "d2p_synthetic_lab_01"),
+            )
+        ),
+        "fixture": bool(payload.get("fixture", attestation.get("fixture", True))),
+        "attestation": clean_attestation,
+        "fields": fields_map,
+    }
+    if isinstance(payload.get("notes"), str):
+        package_doc["notes"] = payload["notes"]
+
+    if isinstance(artifacts, Mapping):
+        for rel_name, content in artifacts.items():
+            if (
+                not isinstance(rel_name, str)
+                or "/" in rel_name
+                or "\\" in rel_name
+                or rel_name in ("", ".", "..")
+            ):
                 raise VipLabError(
                     "D2_EVIDENCE_FILENAME_INVALID",
                     f"Invalid evidence filename {rel_name!r}",
                 )
             target = pkg_dir / rel_name
             if isinstance(content, Mapping):
-                target.write_text(canonical_json_dumps(dict(content)), encoding="utf-8")
+                target.write_text(
+                    canonical_json_dumps(dict(content)) + "\n", encoding="utf-8"
+                )
             elif isinstance(content, str):
                 target.write_text(content, encoding="utf-8")
             else:
@@ -76,6 +107,11 @@ def _write_temp_d2_package(root: Path, payload: Mapping[str, Any]) -> Path:
                     "D2_EVIDENCE_CONTENT_INVALID",
                     f"Evidence content for {rel_name!r} must be mapping or str",
                 )
+
+    (pkg_dir / D2_PACKAGE_FILE).write_text(
+        canonical_json_dumps(package_doc) + "\n",
+        encoding="utf-8",
+    )
     return pkg_dir
 
 
@@ -89,6 +125,7 @@ def inspect_d2_readiness(
 
     untrusted_flags: tuple[str, ...] = ()
     package_dir: Path | None = None
+    cleaned: Mapping[str, Any] = {}
 
     if isinstance(source, (str, Path)):
         package_dir = Path(source)
@@ -150,37 +187,58 @@ def inspect_d2_readiness(
             },
         )
 
-    report_dict = report.as_dict()
+    report_dict = report.to_dict()
     field_states: dict[str, str] = {}
-    verified_count = 0
     blocked_fields: list[str] = []
+    evidence_intake_blockers: list[str] = []
 
-    for row in report.fields:
-        field_states[row.field_id] = row.resulting_state
-        if row.resulting_state == STATE_VERIFIED:
-            verified_count += 1
-        if row.resulting_state == STATE_BLOCKED or not row.passed:
+    for row in report.results:
+        field_states[row.field_id] = row.state
+        if row.state == STATE_BLOCKED:
             blocked_fields.append(row.field_id)
-            blockers.append(f"{row.field_id}:{row.reason_code}")
+
+        primary_reason = row.reasons[0] if row.reasons else "NO_REASON"
+        is_evidence_row = row.validator_check == "EVIDENCE"
+        row_intake_failed = False
+
+        if is_evidence_row:
+            # In synthetic fixture mode, a valid evidence artifact produces STATE_PENDING
+            # with reason SYNTHETIC_FIXTURE_NOT_OWNER_EVIDENCE (or OWNER_ATTESTATION_UNAUTHENTICATED).
+            if row.state == STATE_BLOCKED or row.declared_status != "COMPLETE":
+                row_intake_failed = True
+                evidence_intake_blockers.append(row.field_id)
+                blockers.append(f"{row.field_id}:{primary_reason}")
+        else:
+            # Ruling and observation rows must remain declared ABSENT in text-only intake.
+            if (
+                "RULING_NOT_TEXT_CLOSABLE" in row.reasons
+                or "OBSERVATION_NOT_TEXT_CLOSABLE" in row.reasons
+            ):
+                row_intake_failed = True
+                evidence_intake_blockers.append(row.field_id)
+                blockers.append(f"{row.field_id}:{primary_reason}")
+
         findings.append(
             ReadinessFinding(
-                code=row.reason_code,
+                code=primary_reason,
                 status=(
                     ReadinessStatus.BLOCKED
-                    if not row.passed
+                    if row_intake_failed
                     else ReadinessStatus.READY_SYNTHETIC
                 ),
-                message=f"{row.field_id} ({row.name}): {row.resulting_state} ({row.reason_code})",
+                message=f"{row.field_id} ({row.title}): {row.state} ({primary_reason})",
                 field_path=f"fields.{row.field_id}",
                 evidence_state=NOT_OBSERVED,
                 details={
-                    "baseline_state": row.baseline_state,
-                    "resulting_state": row.resulting_state,
-                    "passed": row.passed,
+                    "baseline_state": D2_BASELINE_STATES.get(row.field_id),
+                    "resulting_state": row.state,
+                    "validator_check": row.validator_check,
+                    "reasons": list(row.reasons),
                 },
             )
         )
 
+    verified_count = int(report.counts.get(STATE_VERIFIED, 0))
     # Hard invariant: evaluate_d2_package never promotes any field to VERIFIED
     # without cryptographic owner authentication, and never sets execution_authorized=True.
     if verified_count > 0 or report.execution_authorized or report.owner_approval_claimed:
@@ -189,11 +247,10 @@ def inspect_d2_readiness(
             "Unauthenticated D2 evaluation unexpectedly claimed VERIFIED or execution_authorized",
         )
 
-    reasons.extend(report.reasons)
-    if blocked_fields:
+    if evidence_intake_blockers:
         final_status = ReadinessStatus.BLOCKED
         reasons.append("D2_FIELDS_INCOMPLETE_OR_INVALID")
-    elif report.attestation_classification in (
+    elif report.attestation_state in (
         ATTESTATION_SYNTHETIC,
         ATTESTATION_DECLARED,
     ):
@@ -213,21 +270,22 @@ def inspect_d2_readiness(
         blockers=tuple(blockers),
         findings=tuple(findings),
         summary={
+            "package_id": report.package_id,
             "package_digest": report.package_digest,
-            "attestation_classification": report.attestation_classification,
+            "attestation_state": report.attestation_state,
+            "attestation_classification": report.attestation_state,
             "authenticity": report.authenticity,
             "field_states": field_states,
+            "counts": dict(report.counts),
             "verified_count": verified_count,
+            "pending_count": int(report.counts.get(STATE_PENDING, 0)),
+            "blocked_count": int(report.counts.get(STATE_BLOCKED, 0)),
+            "not_observed_count": int(report.counts.get(STATE_NOT_OBSERVED, 0)),
             "blocked_fields": blocked_fields,
-            "pending_count": sum(
-                1 for s in field_states.values() if s == STATE_PENDING
-            ),
-            "not_observed_count": sum(
-                1 for s in field_states.values() if s == STATE_NOT_OBSERVED
-            ),
+            "evidence_intake_blockers": evidence_intake_blockers,
             "owner_approval_claimed": report.owner_approval_claimed,
             "execution_authorized": report.execution_authorized,
-            "d3_status": report.d3_status,
+            "d3_status": "NOT_AUTHORIZED",
             "report": report_dict,
         },
     )

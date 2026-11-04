@@ -23,7 +23,8 @@ from persistent_local_index.model_profile import (
     validate_model_profile,
 )
 from vip_fvs.synthetic_profiles import (
-    CLOSED_SYNTHETIC_PROFILE_IDS as SYNTHETIC_PROFILE_IDS,
+    CLOSED_SYNTHETIC_PROFILE_IDS,
+    build_synthetic_profile_runtime,
     make_synthetic_profile,
 )
 
@@ -39,6 +40,27 @@ from ..common import (
 
 
 STAGE_ID = "MEGA-05.MODEL_ASSETS_PREFLIGHT"
+SYNTHETIC_PROFILE_IDS = CLOSED_SYNTHETIC_PROFILE_IDS
+
+_ALLOWED_PROFILE_OVERRIDE_KEYS = (
+    "model_id",
+    "family",
+    "frozen_revision",
+    "weights_sha256",
+    "processor_asset_digests",
+    "processor_digest",
+    "image_preprocessing_digest",
+    "text_preprocessing_contract",
+    "image_size",
+    "patch_size",
+    "embedding_dim",
+    "output_dtype",
+    "normalization",
+    "loader_kind",
+    "device_backend",
+    "precision_policy_id",
+    "precision_policy_version",
+)
 
 
 def _inspect_single_asset_claim(
@@ -50,7 +72,7 @@ def _inspect_single_asset_claim(
     path_prefix = f"profiles[{idx}]"
 
     profile_id = claim.get("profile_id")
-    if not isinstance(profile_id, str) or profile_id not in SYNTHETIC_PROFILE_IDS:
+    if not isinstance(profile_id, str) or profile_id not in CLOSED_SYNTHETIC_PROFILE_IDS:
         code = "MODEL_PROFILE_ID_UNKNOWN"
         blockers.append(code)
         findings.append(
@@ -92,7 +114,13 @@ def _inspect_single_asset_claim(
             )
         )
 
-    for digest_field in ("weights_sha256", "tokenizer_sha256", "preprocess_sha256"):
+    for digest_field in (
+        "weights_sha256",
+        "processor_digest",
+        "image_preprocessing_digest",
+        "tokenizer_sha256",
+        "preprocess_sha256",
+    ):
         if digest_field in claim:
             try:
                 validate_hex_digest(
@@ -112,28 +140,96 @@ def _inspect_single_asset_claim(
                     )
                 )
 
+    if "frozen_revision" in claim:
+        try:
+            validate_hex_digest(
+                claim.get("frozen_revision"),
+                length=40,
+                field_name=f"{path_prefix}.frozen_revision",
+                error_code="MODEL_ASSET_DIGEST_INVALID",
+            )
+        except VipLabError as exc:
+            blockers.append(exc.code)
+            findings.append(
+                ReadinessFinding(
+                    code=exc.code,
+                    status=ReadinessStatus.INVALID,
+                    message=exc.message,
+                    field_path=exc.field_path,
+                )
+            )
+
     canonical_prof = make_synthetic_profile(profile_id)
-    # Allow overrides in claim to test validation failures (e.g. wrong dim or device)
+    override_kwargs: dict[str, Any] = {}
+    for key in _ALLOWED_PROFILE_OVERRIDE_KEYS:
+        if key in claim:
+            override_kwargs[key] = claim[key]
+
+    # Map legacy alias fields if caller supplied them without canonical names
+    if "processor_digest" not in override_kwargs and "tokenizer_sha256" in claim:
+        override_kwargs["processor_digest"] = claim["tokenizer_sha256"]
+    if "image_preprocessing_digest" not in override_kwargs and "preprocess_sha256" in claim:
+        override_kwargs["image_preprocessing_digest"] = claim["preprocess_sha256"]
+
     candidate_prof = ModelProfile(
         profile_id=canonical_prof.profile_id,
-        model_id=str(claim.get("model_id", canonical_prof.model_id)),
-        model_family=str(claim.get("model_family", canonical_prof.model_family)),
-        model_revision=str(claim.get("model_revision", canonical_prof.model_revision)),
-        weights_digest=str(
-            claim.get("weights_sha256", canonical_prof.weights_digest)
+        model_id=str(override_kwargs.get("model_id", canonical_prof.model_id)),
+        family=str(override_kwargs.get("family", canonical_prof.family)),
+        frozen_revision=str(
+            override_kwargs.get("frozen_revision", canonical_prof.frozen_revision)
         ),
-        embedding_dim=int(claim.get("embedding_dim", canonical_prof.embedding_dim)),
-        preprocess_signature=str(
-            claim.get("preprocess_signature", canonical_prof.preprocess_signature)
+        weights_sha256=str(
+            override_kwargs.get("weights_sha256", canonical_prof.weights_sha256)
         ),
-        device=str(claim.get("device", canonical_prof.device)),
-        binary_format_version=str(
-            claim.get("binary_format_version", canonical_prof.binary_format_version)
+        processor_asset_digests=tuple(
+            override_kwargs.get(
+                "processor_asset_digests", canonical_prof.processor_asset_digests
+            )
+        ),
+        processor_digest=str(
+            override_kwargs.get("processor_digest", canonical_prof.processor_digest)
+        ),
+        image_preprocessing_digest=str(
+            override_kwargs.get(
+                "image_preprocessing_digest", canonical_prof.image_preprocessing_digest
+            )
+        ),
+        text_preprocessing_contract=str(
+            override_kwargs.get(
+                "text_preprocessing_contract",
+                canonical_prof.text_preprocessing_contract,
+            )
+        ),
+        image_size=int(override_kwargs.get("image_size", canonical_prof.image_size)),
+        patch_size=int(override_kwargs.get("patch_size", canonical_prof.patch_size)),
+        embedding_dim=int(
+            override_kwargs.get("embedding_dim", canonical_prof.embedding_dim)
+        ),
+        output_dtype=str(
+            override_kwargs.get("output_dtype", canonical_prof.output_dtype)
+        ),
+        normalization=str(
+            override_kwargs.get("normalization", canonical_prof.normalization)
+        ),
+        loader_kind=str(override_kwargs.get("loader_kind", canonical_prof.loader_kind)),
+        device_backend=str(
+            override_kwargs.get("device_backend", canonical_prof.device_backend)
+        ),
+        precision_policy_id=str(
+            override_kwargs.get(
+                "precision_policy_id", canonical_prof.precision_policy_id
+            )
+        ),
+        precision_policy_version=int(
+            override_kwargs.get(
+                "precision_policy_version", canonical_prof.precision_policy_version
+            )
         ),
     )
 
     try:
         validate_model_profile(candidate_prof)
+        bundle = build_synthetic_profile_runtime(candidate_prof)
     except ValueError as exc:
         code = "MODEL_PROFILE_CONTRACT_VIOLATION"
         blockers.append(code)
@@ -147,19 +243,23 @@ def _inspect_single_asset_claim(
         )
         return None, findings, blockers
 
-    sem_space = str(
-        claim.get("semantic_space_id") or profile_semantic_space(candidate_prof)
-    )
+    sem_space_dict = profile_semantic_space(candidate_prof)
+    sem_space = str(claim.get("semantic_space_id") or sem_space_dict["space_id"])
     row_bytes = profile_row_width_bytes(candidate_prof)
 
     info = {
         "profile_id": candidate_prof.profile_id,
         "model_id": candidate_prof.model_id,
+        "family": candidate_prof.family,
+        "frozen_revision": candidate_prof.frozen_revision,
         "embedding_dim": candidate_prof.embedding_dim,
         "row_width_bytes": row_bytes,
-        "device": candidate_prof.device,
-        "binary_format_version": candidate_prof.binary_format_version,
+        "device_backend": candidate_prof.device_backend,
+        "precision_policy_id": candidate_prof.precision_policy_id,
+        "precision_policy_version": candidate_prof.precision_policy_version,
         "semantic_space_id": sem_space,
+        "synthetic_only": bundle.synthetic_only,
+        "authentic_model_evidence": bundle.authentic_model_evidence,
         "authentic_weights_verified": False,
         "authentic_model_execution": False,
     }

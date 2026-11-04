@@ -20,6 +20,8 @@ def _make_workload_spec_dict() -> dict[str, Any]:
         "jobs": 3,
         "stages": 2,
         "artifact_bytes": 64,
+        "cost_units": 10,
+        "fault_position": 0,
         "f01_sha": "1" * 40,
         "c04_sha": "2" * 40,
         "e05_sha": "3" * 40,
@@ -57,7 +59,7 @@ class TestMega06RecoveryMatrix:
             {
                 "workload": _make_workload_spec_dict(),
                 "interrupt_at_step": 2,
-                "fault_class": "PARTIAL_WRITE",
+                "fault_class": "c",
             }
         )
         assert pkt.status == ReadinessStatus.READY_SYNTHETIC
@@ -66,7 +68,8 @@ class TestMega06RecoveryMatrix:
         assert pkt.summary["resume_run"]["completed_count"] == 6
         assert pkt.summary["resume_run"]["recomputed_count"] == 0
         assert pkt.summary["resume_run"]["corrupted_count"] == 0
-        assert pkt.summary["fault"]["fault_class"] == "PARTIAL_WRITE"
+        assert pkt.summary["fault"]["fault_class"] == "c"
+        assert pkt.summary["fault"]["detected"] is True
 
     def test_tampered_binding_or_corrupt_artifact_refused_fail_closed(self) -> None:
         tampered_pkt = inspect_recovery_scenario(
@@ -101,21 +104,19 @@ class TestMega06MeasurementReview:
                         "unit": "ms",
                         "value": 12.5,
                         "evidence_class": "MEASURED",
-                        "status": "OBSERVED",
-                        "provenance_digest": "b" * 64,
+                        "status": "MEASURED",
+                        "derivation": "synthetic_timer",
                     },
                     {
                         "metric_id": "real_archive_throughput",
-                        "unit": "clips_per_sec",
-                        "value": None,
-                        "evidence_class": "NOT_OBSERVED",
                         "status": "NOT_OBSERVED",
-                        "provenance_digest": "c" * 64,
+                        "reason": "real_archive_not_authorized",
                     },
                 ]
             }
         )
         assert pkt.status == ReadinessStatus.READY_SYNTHETIC
+        assert pkt.summary["measurement_count"] == 2
         assert pkt.summary["real_workload_evidence"] == "NOT_OBSERVED"
         assert pkt.summary["model_runtime_provenance"] == "NOT_OBSERVED"
         assert pkt.summary["threshold_suitability"] == "NOT_OBSERVED"
@@ -142,8 +143,8 @@ class TestMega06MeasurementReview:
                         "unit": "ms",
                         "value": 1.0,
                         "evidence_class": "INVENTED_EVIDENCE_CLASS",
-                        "status": "OBSERVED",
-                        "provenance_digest": "d" * 64,
+                        "status": "MEASURED",
+                        "derivation": "synthetic_timer",
                     }
                 ]
             }

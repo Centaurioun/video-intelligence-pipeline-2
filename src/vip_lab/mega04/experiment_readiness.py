@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from gate0.config import ConfigError
 from gate0.config_freeze import inspect_freeze_readiness
 
 from ..common import (
@@ -99,7 +100,7 @@ def inspect_gate0_entry(payload: Mapping[str, Any]) -> ReadinessPacket:
             ),
             execution_authorized=False,
         )
-    except ValueError as exc:
+    except (ConfigError, ValueError, TypeError) as exc:
         code = "GATE0_CONFIG_FREEZE_SCHEMA_ERROR"
         reasons.append(code)
         blockers.append(code)
@@ -127,26 +128,28 @@ def inspect_gate0_entry(payload: Mapping[str, Any]) -> ReadinessPacket:
             },
         )
 
-    freeze_blockers = list(freeze_report.get("blockers", ()))
-    non_auth_freeze_blockers = [
-        b
-        for b in freeze_blockers
-        if b
-        not in (
-            "EXECUTION_NOT_AUTHORIZED",
-            "REAL_ARCHIVE_NOT_OBSERVED",
-        )
+    freeze_failures = list(freeze_report.get("failures", ()))
+    freeze_blockers = [
+        f"{item.get('code', 'FREEZE_FAILURE')}:{item.get('identity', 'unknown')}"
+        for item in freeze_failures
+        if isinstance(item, Mapping)
     ]
-    if non_auth_freeze_blockers:
-        for b_code in non_auth_freeze_blockers:
-            reasons.append(b_code)
-            blockers.append(b_code)
+    if freeze_failures or freeze_report.get("status") != "READY_FOR_FREEZE_REVIEW":
+        for item in freeze_failures:
+            if not isinstance(item, Mapping):
+                continue
+            f_code = str(item.get("code", "FREEZE_FAILURE"))
+            f_id = str(item.get("identity", "unknown"))
+            combined = f"{f_code}:{f_id}"
+            reasons.append(combined)
+            blockers.append(combined)
             findings.append(
                 ReadinessFinding(
-                    code=b_code,
+                    code=f_code,
                     status=ReadinessStatus.BLOCKED,
-                    message=f"Config freeze readiness blocker: {b_code}",
-                    field_path="config",
+                    message=f"Config freeze readiness failure on {f_id}: {item.get('detail', f_code)}",
+                    field_path=f"config.{f_id}",
+                    details=dict(item),
                 )
             )
     else:

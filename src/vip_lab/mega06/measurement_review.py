@@ -118,14 +118,33 @@ def inspect_measurement_review(payload: Mapping[str, Any]) -> ReadinessPacket:
             )
             continue
         try:
-            m = Measurement(
-                metric_id=str(item.get("metric_id", "")),
-                unit=str(item.get("unit", "")),
-                value=item.get("value"),
-                evidence_class=str(item.get("evidence_class", GATE2_NOT_OBSERVED)),
-                status=str(item.get("status", "OBSERVED")),
-                provenance_digest=str(item.get("provenance_digest", "a" * 64)),
-            )
+            raw_status = str(item.get("status", "MEASURED"))
+            raw_ev_class = item.get("evidence_class")
+            if (
+                raw_status == GATE2_NOT_OBSERVED
+                or raw_ev_class == GATE2_NOT_OBSERVED
+                or item.get("value") is None
+            ):
+                m = Measurement.not_observed(
+                    metric_id=str(item.get("metric_id", "")),
+                    reason=str(item.get("reason") or "synthetic_not_observed"),
+                )
+            else:
+                # Accept legacy "OBSERVED" alias as "MEASURED" when value is numeric
+                norm_status = "MEASURED" if raw_status in ("MEASURED", "OBSERVED") else raw_status
+                if norm_status != "MEASURED":
+                    raise ValueError(f"invalid status: {raw_status!r}")
+                m = Measurement.measured(
+                    metric_id=str(item.get("metric_id", "")),
+                    value=item.get("value"),  # type: ignore[arg-type]
+                    unit=str(item.get("unit", "")),
+                    derivation=str(
+                        item.get("derivation")
+                        or item.get("provenance_digest")
+                        or "synthetic_lab_declaration"
+                    ),
+                    evidence_class=str(raw_ev_class or "MEASURED"),
+                )
             mset.add(m)
         except ValueError as exc:
             code = "MEASUREMENT_SCHEMA_VIOLATION"
@@ -153,7 +172,7 @@ def inspect_measurement_review(payload: Mapping[str, Any]) -> ReadinessPacket:
                     "provenance, and threshold suitability remain NOT_OBSERVED"
                 ),
                 details={
-                    "measurement_count": len(mset.items),
+                    "measurement_count": len(mset.measurements),
                     "canonical_evidence_classes": sorted(CANONICAL_EVIDENCE_CLASSES),
                     "candidate_mechanisms": list(MECHANISMS),
                 },
@@ -177,7 +196,7 @@ def inspect_measurement_review(payload: Mapping[str, Any]) -> ReadinessPacket:
         blockers=tuple(blockers),
         findings=tuple(findings),
         summary={
-            "measurement_count": len(mset.items),
+            "measurement_count": len(mset.measurements),
             "synthetic_generated_only": True,
             "real_workload_evidence": NOT_OBSERVED,
             "model_runtime_provenance": NOT_OBSERVED,
