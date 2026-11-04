@@ -1,0 +1,81 @@
+{
+  "schema_version": "vip_lab.mega17.test_manifest.v1",
+  "spec_version": "LAB-MEGA-17-v1.0.0",
+  "target_repository": "https://github.com/Centaurioun/video-intelligence-pipeline-2",
+  "canonical_reference_repository": "https://github.com/Centaurioun/video-intelligence-pipeline",
+  "canonical_reference_sha": "592952daf475b1bbae2eebdee64d992c1a744f08",
+  "declared_lab_pr1_repair_sha": "85a4190925fbb2c6ca11c4b354ad9f1296daf82f",
+  "workspace_git_sha": "NOT_OBSERVED",
+  "verification_status": "TESTS_AUTHORED_NOT_HOSTED_VERIFIED",
+  "final_delivery_status": "MEGA17_AUTHORING_DELIVERED_UNVERIFIED",
+  "gate0_media_modules_verified_present": [
+    "src/gate0/media/__init__.py",
+    "src/gate0/media/decode.py",
+    "src/gate0/media/probe.py",
+    "src/gate0/media/proc.py",
+    "src/gate0/media/source_guard.py",
+    "src/gate0/media/tool_identity.py"
+  ],
+  "publication_guardrail": "Publish ONLY the 19 new MEGA-17 files onto post-PR #1 main. Never overwrite .gitignore or existing files from a raw AI Studio container ZIP export.",
+  "new_source_modules": [
+    "src/vip_lab/mega17/__init__.py",
+    "src/vip_lab/mega17/canonical_integration.py",
+    "src/vip_lab/mega17/source_readiness.py",
+    "src/vip_lab/mega17/gate0_readiness.py",
+    "src/vip_lab/mega17/editorial_readiness.py",
+    "src/vip_lab/mega17/release_readiness.py",
+    "src/vip_lab/mega17/orchestrator.py",
+    "src/vip_lab/mega17/verification.py"
+  ],
+  "new_test_modules": [
+    "tests/vip_lab/test_mega17_integration_readiness.py",
+    "tests/vip_lab/test_mega17_source_readiness.py",
+    "tests/vip_lab/test_mega17_gate0_readiness.py",
+    "tests/vip_lab/test_mega17_editorial_readiness.py",
+    "tests/vip_lab/test_mega17_release_readiness.py",
+    "tests/vip_lab/test_mega17_end_to_end.py"
+  ],
+  "new_documentation_files": [
+    "docs/ai-studio-tasks/MEGA_17_PROGRESS.md",
+    "docs/ai-studio-tasks/MEGA_17_DESIGN_AND_GAP_LEDGER.md",
+    "docs/ai-studio-tasks/MEGA_17_CROSS_WORKSTREAM_ACCEPTANCE.md",
+    "docs/ai-studio-tasks/MEGA_17_REAL_EXECUTION_PREREQUISITES.md",
+    "docs/ai-studio-tasks/MEGA_17_TEST_MANIFEST.json"
+  ],
+  "hosted_ci_commands": [
+    "PYTHONPATH=src pytest -q tests/vip_lab/test_mega17_integration_readiness.py tests/vip_lab/test_mega17_source_readiness.py tests/vip_lab/test_mega17_gate0_readiness.py tests/vip_lab/test_mega17_editorial_readiness.py tests/vip_lab/test_mega17_release_readiness.py tests/vip_lab/test_mega17_end_to_end.py",
+    "PYTHONPATH=src pytest -q"
+  ],
+  "thirty_test_categories_coverage": [
+    {"category_id": "T01", "title": "MEGA-03..16 & 6 gate0/media baseline inventory", "test_file": "tests/vip_lab/test_mega17_integration_readiness.py"},
+    {"category_id": "T02", "title": "Module classification into closed canonical integration categories", "test_file": "tests/vip_lab/test_mega17_integration_readiness.py"},
+    {"category_id": "T03", "title": "Transplant conflict detector (duplicate paths, canonical core overwrite, PR #258/#259 overlap)", "test_file": "tests/vip_lab/test_mega17_integration_readiness.py"},
+    {"category_id": "T04", "title": "Refusal to mark canonical integration executed or canonical main modified", "test_file": "tests/vip_lab/test_mega17_integration_readiness.py"},
+    {"category_id": "T05", "title": "Closed 30-field synthetic D-2 fixture (0 VERIFIED, 7 PENDING, 21 BLOCKED, 2 NOT_OBSERVED)", "test_file": "tests/vip_lab/test_mega17_source_readiness.py"},
+    {"category_id": "T06", "title": "8-layer source identity separation & preservation of duplicate SHA-256 occurrences", "test_file": "tests/vip_lab/test_mega17_source_readiness.py"},
+    {"category_id": "T07", "title": "Refusal of identical filename/locator as byte identity proof", "test_file": "tests/vip_lab/test_mega17_source_readiness.py"},
+    {"category_id": "T08", "title": "Refusal of forged Owner attestation and unauthorized D-3 execution claims", "test_file": "tests/vip_lab/test_mega17_source_readiness.py"},
+    {"category_id": "T09", "title": "Seven-permission boundary separation (discovery does not grant processing/models/egress/export)", "test_file": "tests/vip_lab/test_mega17_source_readiness.py"},
+    {"category_id": "T10", "title": "Source-disjoint DEVELOPMENT vs EVALUATION partition leakage refusal", "test_file": "tests/vip_lab/test_mega17_source_readiness.py"},
+    {"category_id": "T11", "title": "Gate-0 40-query protocol cardinality (24 positive across 4x6 families, 8 absent, 8 dev)", "test_file": "tests/vip_lab/test_mega17_gate0_readiness.py"},
+    {"category_id": "T12", "title": "Dual independent reviewer & disagreement adjudication requirement", "test_file": "tests/vip_lab/test_mega17_gate0_readiness.py"},
+    {"category_id": "T13", "title": "Withholding gold labels from retrieval ranking inputs", "test_file": "tests/vip_lab/test_mega17_gate0_readiness.py"},
+    {"category_id": "T14", "title": "4-second non-overlapping half-open windows & 2-FPS presentation-frame sampling", "test_file": "tests/vip_lab/test_mega17_gate0_readiness.py"},
+    {"category_id": "T15", "title": "Validation of all 12 Gate-0 contract artifacts", "test_file": "tests/vip_lab/test_mega17_gate0_readiness.py"},
+    {"category_id": "T16", "title": "Deterministic synthetic scoring against exact thresholds (Hit@10 >= 20/24, lift >= 5/24, family >= 3/6)", "test_file": "tests/vip_lab/test_mega17_gate0_readiness.py"},
+    {"category_id": "T17", "title": "Gate-0 vs Gate-1 boundary & non-interchangeable 768-D V1/V2 representations", "test_file": "tests/vip_lab/test_mega17_gate0_readiness.py"},
+    {"category_id": "T18", "title": "Consumption of MEGA-15 artifacts & preservation of v1->v2->v3 proposal lineage", "test_file": "tests/vip_lab/test_mega17_editorial_readiness.py"},
+    {"category_id": "T19", "title": "5-way coordinate domain separation (semantic, synthetic PTS, source-native PTS, human decision, timeline)", "test_file": "tests/vip_lab/test_mega17_editorial_readiness.py"},
+    {"category_id": "T20", "title": "Reviewer-handoff requirements packet distinguished from completed human review", "test_file": "tests/vip_lab/test_mega17_editorial_readiness.py"},
+    {"category_id": "T21", "title": "A-7 stream namespace ambiguity refusal", "test_file": "tests/vip_lab/test_mega17_editorial_readiness.py"},
+    {"category_id": "T22", "title": "IT-6 terminal-tail duration consistency mismatch refusal", "test_file": "tests/vip_lab/test_mega17_editorial_readiness.py"},
+    {"category_id": "T23", "title": "VFR seconds * nominal_fps derivation refusal", "test_file": "tests/vip_lab/test_mega17_editorial_readiness.py"},
+    {"category_id": "T24", "title": "7-stage release workflow separation (preview, prep, render, tech QC, visual QC, audio QC, release)", "test_file": "tests/vip_lab/test_mega17_release_readiness.py"},
+    {"category_id": "T25", "title": "Bare PASS QC refusal via gate3.qc.bare_pass_is_insufficient", "test_file": "tests/vip_lab/test_mega17_release_readiness.py"},
+    {"category_id": "T26", "title": "Derived receipt provenance upgrade refusal", "test_file": "tests/vip_lab/test_mega17_release_readiness.py"},
+    {"category_id": "T27", "title": "Inert dry-run render intent vs executable FFmpeg command refusal", "test_file": "tests/vip_lab/test_mega17_release_readiness.py"},
+    {"category_id": "T28", "title": "All 12 E12 negative refusal conditions fail closed", "test_file": "tests/vip_lab/test_mega17_release_readiness.py"},
+    {"category_id": "T29", "title": "Single-arm & three-arm end-to-end deterministic replay & 8 readiness dimensions", "test_file": "tests/vip_lab/test_mega17_end_to_end.py"},
+    {"category_id": "T30", "title": "Cross-workstream foreign-key, maturity ceiling (M0..M5), and digest tampering refusal", "test_file": "tests/vip_lab/test_mega17_end_to_end.py"}
+  ]
+}
