@@ -7,7 +7,7 @@
 **Protected:** Centaurioun/video-intelligence-pipeline, canonical main
 **Verified lab starting commit:** 22f1ffa7064f697d4049e39587945b1decabec4e
 **Historical GitHub CI:** run 41756569162, 307 tests PASS per Python 3.11 and Python 3.14
-**Mode:** Google AI Studio writes code + test source but does NOT execute pytest or Git pushes
+**Mode:** Google AI Studio writes code + test source in LAB main, without running pytest. If its Owner-enabled GitHub publishing is used, publish ONLY changed authorized paths to LAB main; no automatic destructive ZIP mirror or canonical push.
 **Parallel:** local Codex audits immutable commits in a separate worktree/branch, never writes LAB main
 
 ## 0. Mission and explicit authorization boundary
@@ -94,7 +94,7 @@ Use Superpowers skills only when triggered:
 
 One-turn authoring order: verify baseline -> prepare progress ledger -> P08 -> P09 -> P10 -> P11 -> P12 -> P13 -> P14 -> conditional stretch gaps -> static review -> Turkish report. P12 can proceed if an earlier wave is blocked. Do not ask the Owner to repeat already-known preferences or turn this into seven separate initial prompts.
 
-**No pytest, no unittest runner, no package install, no network, no actual model, no media, no FFmpeg/FFprobe, no GitHub push, no canonical repo write.** Offline ast.parse / compile syntax-only checks are allowed and NEVER count as runtime PASS.
+**No pytest, no unittest runner, no package install, no network, no actual model, no media, no FFmpeg/FFprobe, no canonical repo write.** GitHub publishing is permitted ONLY as Owner-configured safe changed-path delivery to LAB main, never destructive synchronization. Offline ast.parse / compile syntax-only checks are allowed and NEVER count as runtime PASS.
 
 ## 4. Write ownership and tests
 
@@ -387,9 +387,9 @@ After P08–P14, inspect remaining opportunities; write additional code only whe
 
 ## 16. CI execution and direct-to-main safeguards
 
-Google AI Studio must write Python code and pytest test source ONLY. Do not run pytest, unittest, CLI, installations, downloads, network, real models, real/protected media or FFmpeg; do not push GitHub from the AI Studio agent; do not edit the workflow. Syntax-only ast.parse/compile permitted, label it STATIC_ONLY.
+Google AI Studio must write Python code and pytest test source ONLY. Do not run pytest, unittest, CLI, installations, downloads, network, real models, real/protected media or FFmpeg; do not edit the workflow. LAB main publication is allowed only through the Owner's configured GitHub workflow, and only for new/modified authorized paths with NO unrelated deletions. Syntax-only ast.parse/compile permitted, label it STATIC_ONLY.
 
-The Owner's LAB GitHub integration may direct files to main. Publication is a separately controlled human action. Preserve .github/ and all preexisting paths, particularly src/gate0/media/. NEVER mirror a reduced ZIP to remote with delete semantics. If the integration cannot upload changed files only, STOP and ask the Owner to use a safe selective upload before any push.
+The Owner's LAB GitHub integration may publish directly to main. This is permitted for the SECOND LAB repository only. Preserve .github/ and all preexisting paths, particularly src/gate0/media/. NEVER mirror a reduced ZIP to remote with delete semantics. If the integration cannot upload changed files only or risks an unrelated delete, STOP publication and request the Owner to use safe selective upload before any push.
 
 The LAB controller will configure conditional MEGA-08–14 CI with Python 3.11/3.14. Every submitted wave must run its new test file and any missing expected sibling file must fail completeness. A not-submitted wave may be SKIPPED but cannot be counted as completed. A partially submitted wave should FAIL rather than be hidden by an empty placeholder.
 
@@ -424,7 +424,7 @@ Fields:
 If AI Studio reaches context/response limits, save completed coherent code and an exact checkpoint, do not redo previous waves. It may stop with PARTIAL_BLOCKED; the Owner can invoke a later continuation using the ledger. No background processing promise.
 
 Continuation prompt for a future user-issued request:
-Read docs/ai-studio-tasks/MEGA_08_TO_14_ALL_REMAINING_LAB_CODE_PROGRAM.md and MEGA_08_14_PROGRESS.md. Verify source, continue from next_safe_packet, preserve completed paths, write code + tests, no local pytest/install/model/media/CI edits/GitHub push, update ledger, report Turkish status.
+Read docs/ai-studio-tasks/MEGA_08_TO_14_ALL_REMAINING_LAB_CODE_PROGRAM.md and MEGA_08_14_PROGRESS.md. Verify source, continue from next_safe_packet, preserve completed paths, write code + tests, no local pytest/install/model/media/CI edits; publication only via Owner-enabled safe LAB main changed-path sync, update ledger, report Turkish status.
 
 ## 18. Review and evidence discipline — final failure checklist
 
