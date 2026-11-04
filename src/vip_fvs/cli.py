@@ -559,6 +559,44 @@ def _parser() -> argparse.ArgumentParser:
     fixture.add_argument("--max-store-bytes", type=int, default=None)
     fixture.add_argument("--device", default=None)
     fixture.add_argument("--fake-embedder", action="store_true", default=False)
+    query_batch_syn = subparsers.add_parser(
+        "query-batch-synthetic",
+        help="run an explicit fake-only single-arm multi-source batch query",
+    )
+    query_batch_syn.add_argument("--catalog", required=True, help="explicit lab query catalog JSON")
+    query_batch_syn.add_argument("--manifest", required=True, help="persisted multi-source manifest JSON")
+    query_batch_syn.add_argument("--index-root", required=True, help="existing local semantic index root")
+    query_batch_syn.add_argument("--model-profile-json", default=None,
+                                 help="closed synthetic profile JSON (required)")
+    query_batch_syn.add_argument("--fake-embedder", action="store_true", default=False,
+                                 help="explicit synthetic-only execution flag (required)")
+    query_batch_syn.add_argument("--top-k", type=int, default=5)
+    _add_query_modality_arguments(query_batch_syn)
+    query_batch_syn.add_argument("--pilot-authorization", default=None)
+    query_batch_syn.add_argument("--output-root", default=None)
+    query_batch_syn.add_argument("--model-root", default=None)
+    query_batch_syn.add_argument("--model-identity", default=None)
+    query_batch_syn.add_argument("--model-revision", default=None)
+    query_batch_syn.add_argument("--weights-sha256", default=None)
+    query_batch_syn.add_argument("--device", default=None)
+    query_three_arm_syn = subparsers.add_parser(
+        "query-three-arm-synthetic",
+        help="run an explicit fake-only three-arm multi-source batch query",
+    )
+    query_three_arm_syn.add_argument("--catalog", required=True, help="explicit lab query catalog JSON")
+    query_three_arm_syn.add_argument("--arm-map", required=True, help="closed three-arm configuration map JSON")
+    query_three_arm_syn.add_argument("--fake-embedder", action="store_true", default=False,
+                                     help="explicit synthetic-only execution flag (required)")
+    query_three_arm_syn.add_argument("--top-k", type=int, default=5)
+    _add_query_modality_arguments(query_three_arm_syn)
+    query_three_arm_syn.add_argument("--pilot-authorization", default=None)
+    query_three_arm_syn.add_argument("--output-root", default=None)
+    query_three_arm_syn.add_argument("--model-root", default=None)
+    query_three_arm_syn.add_argument("--model-identity", default=None)
+    query_three_arm_syn.add_argument("--model-revision", default=None)
+    query_three_arm_syn.add_argument("--weights-sha256", default=None)
+    query_three_arm_syn.add_argument("--device", default=None)
+    query_three_arm_syn.add_argument("--model-profile-json", default=None)
     return parser
 
 
@@ -1030,6 +1068,87 @@ def main(argv: Sequence[str] | None = None) -> int:
             summary = dict(result)
             summary["runtime_mode"] = "fake" if runtime.fake else "real"
             print(json.dumps(summary, sort_keys=True, separators=(",", ":")))
+            return 0
+        if args.command in {"query-batch-synthetic", "query-three-arm-synthetic"}:
+            from .batch_report import (
+                build_single_arm_batch_report,
+                build_three_arm_batch_report,
+                serialize_batch_report,
+            )
+            from .batch_retrieval import run_batch_retrieval
+            from .query_batch import load_query_catalog, validate_lab_top_k
+            from .query_modality import QueryModality
+            from .semantic_index import PersistentLocalSemanticIndexEngine
+            from .source_adapter import load_multi_source_manifest
+            from .synthetic_profiles import load_synthetic_profile_bundle
+            from .three_arm_batch import load_three_arm_map, run_three_arm_batch
+
+            modality_by_cli = {
+                "text": QueryModality.TEXT,
+                "image-reference": QueryModality.IMAGE_REFERENCE,
+                "video-reference": QueryModality.VIDEO_REFERENCE,
+            }
+            selected_modality = modality_by_cli[args.modality]
+            if selected_modality is not QueryModality.TEXT:
+                raise ValueError(f"QUERY_MODALITY_NOT_EXECUTABLE:{selected_modality.value}")
+            if any((
+                args.reference_id,
+                args.provenance_ref,
+                args.source_revision_ref,
+                args.interval_start_seconds is not None,
+                args.interval_end_seconds is not None,
+            )):
+                raise ValueError("TEXT_QUERY_CANNOT_INCLUDE_REFERENCE_FIELDS")
+
+            real_inputs = (
+                getattr(args, "pilot_authorization", None),
+                getattr(args, "output_root", None),
+                getattr(args, "model_root", None),
+                getattr(args, "model_identity", None),
+                getattr(args, "model_revision", None),
+                getattr(args, "weights_sha256", None),
+                getattr(args, "device", None),
+            )
+            if any(value is not None for value in real_inputs):
+                raise ValueError("FAKE_AND_REAL_MODE_INPUTS_ARE_AMBIGUOUS")
+            if not args.fake_embedder:
+                raise ValueError(
+                    "MODEL_PROFILE_JSON_REQUIRES_EXPLICIT_FAKE_MODE:SYNTHETIC_BATCH_REQUIRES_EXPLICIT_FAKE_MODE"
+                )
+            top_k = validate_lab_top_k(args.top_k)
+
+            if args.command == "query-batch-synthetic":
+                if not args.model_profile_json:
+                    raise ValueError("MODEL_PROFILE_JSON_REQUIRED")
+                catalog = load_query_catalog(Path(args.catalog))
+                bundle = load_synthetic_profile_bundle(Path(args.model_profile_json))
+                manifest = load_multi_source_manifest(Path(args.manifest))
+                engine = PersistentLocalSemanticIndexEngine()
+                single_result = run_batch_retrieval(
+                    catalog,
+                    manifest,
+                    Path(args.index_root),
+                    runtime=bundle.runtime,
+                    semantic_space=bundle.semantic_space,
+                    engine=engine,
+                    top_k=top_k,
+                    profile_id=bundle.profile.profile_id,
+                )
+                report = build_single_arm_batch_report(single_result)
+            else:
+                if getattr(args, "model_profile_json", None) is not None:
+                    raise ValueError("THREE_ARM_PROFILE_MUST_COME_FROM_ARM_MAP")
+                catalog = load_query_catalog(Path(args.catalog))
+                arm_map = load_three_arm_map(Path(args.arm_map))
+                three_arm_result = run_three_arm_batch(
+                    catalog,
+                    arm_map,
+                    top_k=top_k,
+                    engine_factory=lambda _arm_id: PersistentLocalSemanticIndexEngine(),
+                )
+                report = build_three_arm_batch_report(three_arm_result)
+
+            print(serialize_batch_report(report))
             return 0
         if args.command != "run":  # pragma: no cover - argparse enforces this
             return 2
