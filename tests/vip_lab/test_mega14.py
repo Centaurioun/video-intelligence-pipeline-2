@@ -74,7 +74,7 @@ def test_scenario_workload_serialization_round_trip_preserves_all_nondefault_fie
         c04_sha="8" * 40,
         e05_sha="7" * 40,
         config_digest="6" * 64,
-        concurrency=4,
+        concurrency=1,
         repetitions=3,
     )
     base_dict = default_single_arm_scenario().to_dict()
@@ -93,6 +93,51 @@ def test_scenario_workload_serialization_round_trip_preserves_all_nondefault_fie
     reconstructed_again, reconstructed_id_again = coerce_canonical_workload_spec(reparsed.workload)
     assert reconstructed_id_again == "wl-nondefault-roundtrip"
     assert reconstructed_again == nondefault_spec
+    assert reconstructed_again.to_dict() == nondefault_spec.to_dict()
+
+    # Flat workload representation round-trip through scenario parser
+    flat_scenario_dict = default_single_arm_scenario().to_dict()
+    flat_scenario_dict["workload"] = {
+        "workload_id": "wl-nondefault-flat",
+        "jobs": 5,
+        "stages": 3,
+        "artifact_bytes": 96,
+        "cost_units": 25,
+        "fault_position": 2,
+        "seed": 135792468,
+        "f01_sha": "9" * 40,
+        "c04_sha": "8" * 40,
+        "e05_sha": "7" * 40,
+        "config_digest": "6" * 64,
+        "concurrency": 1,
+        "repetitions": 3,
+    }
+    parsed_from_flat = parse_e2e_scenario_mapping(flat_scenario_dict)
+    spec_from_flat, id_from_flat = coerce_canonical_workload_spec(parsed_from_flat.workload)
+    assert id_from_flat == "wl-nondefault-flat"
+    assert spec_from_flat == nondefault_spec
+    assert spec_from_flat.to_dict() == nondefault_spec.to_dict()
+
+    # Reject out-of-range concurrency=4 and concurrency=5 in both nested and flat scenario workloads
+    for invalid_conc in (4, 5):
+        bad_nested = copy.deepcopy(base_dict)
+        bad_nested["workload"]["dimensions"]["concurrency"] = invalid_conc
+        with pytest.raises(VipLabError) as exc_bad_nested:
+            parse_e2e_scenario_mapping(bad_nested)
+        assert exc_bad_nested.value.code == "SCENARIO_WORKLOAD_INVALID"
+
+        bad_flat = copy.deepcopy(flat_scenario_dict)
+        bad_flat["workload"]["concurrency"] = invalid_conc
+        with pytest.raises(VipLabError) as exc_bad_flat:
+            parse_e2e_scenario_mapping(bad_flat)
+        assert exc_bad_flat.value.code == "SCENARIO_WORKLOAD_INVALID"
+
+    # Reject bool value in scenario workload integer field
+    bad_bool = copy.deepcopy(flat_scenario_dict)
+    bad_bool["workload"]["concurrency"] = True
+    with pytest.raises(VipLabError) as exc_bad_bool:
+        parse_e2e_scenario_mapping(bad_bool)
+    assert exc_bad_bool.value.code == "SCENARIO_WORKLOAD_INVALID"
 
     # Conflicting mixed flat + nested workload representation must fail closed
     conflicting = copy.deepcopy(base_dict)

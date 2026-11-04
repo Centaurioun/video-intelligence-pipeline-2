@@ -2,15 +2,15 @@
 
 ## 1. Program & Environment Metadata
 
-- **`spec_version`:** `LAB-MEGA-08-14-v1.0.0` (Remediated under `LAB-MEGA-08-14-REMEDIATION-v1.0` + Phase B Addendum `ecc873794cb49ad0d79e4bf97bc0e13fc8938cbf`)
+- **`spec_version`:** `LAB-MEGA-08-14-v1.0.0` (Remediated under `LAB-MEGA-08-14-REMEDIATION-v1.0` + Phase B Addendum `ecc873794cb49ad0d79e4bf97bc0e13fc8938cbf` + Final CI Correction against `4076e59e4dfd1f758e82b10fbbaaf2d4b69fe630`)
 - **`workspace_git_sha`:** `NOT_OBSERVED (GIT_DIR_ABSENT / ZIP_IMPORTED_WORKSPACE)`
 - **`declared_lab_baseline_revision`:** `22f1ffa7064f697d4049e39587945b1decabec4e`
-- **`verified_lab_main_ci_commit`:** `e5cf7feb879bfd3804d90b0dc79ab42a2bc64e83` (GitHub Actions run `41841839080`)
+- **`verified_lab_main_ci_commit`:** `4076e59e4dfd1f758e82b10fbbaaf2d4b69fe630` (GitHub Actions run `41846684517`)
 - **`canonical_vip_reference_sha`:** `592952daf475b1bbae2eebdee64d992c1a744f08`
-- **`baseline_ci_status`:** `334 PASS` per Python 3.11 and Python 3.14 on GitHub Actions run `41841839080` (`307` prior baseline + `MEGA-08` `10 PASS` + `MEGA-09` `6 PASS` + `MEGA-10` `6 PASS` + `MEGA-11` `5 PASS`).
+- **`baseline_ci_status`:** `342 PASS / 8 FAIL` per Python 3.11 and Python 3.14 on GitHub Actions run `41846684517` (`307` prior baseline + `MEGA-08` `10 PASS` + `MEGA-09` `6 PASS` + `MEGA-10` `6 PASS` + `MEGA-11` `5 PASS` + `MEGA-12` `3 PASS / 3 FAIL` + `MEGA-13` `4 PASS` + `MEGA-14` `1 PASS / 5 FAIL`).
 - **`AI_STUDIO_PYTEST`:** `NOT_EXECUTED_BY_DESIGN`
 - **`AI_STUDIO_IMPORT_SMOKE`:** `NOT_EXECUTED_BY_DESIGN`
-- **`GITHUB_ACTIONS_STATUS`:** `MEGA-08/09/10/11 CI_VERIFIED (41841839080); MEGA-12/13/14 REMEDIATED_PENDING_SELECTIVE_CI_RERUN`
+- **`GITHUB_ACTIONS_STATUS`:** `MEGA-08/09/10/11/13 CI_VERIFIED (41846684517); MEGA-12/14 REMEDIATED_PENDING_SELECTIVE_CI_RERUN`
 
 ---
 
@@ -41,47 +41,38 @@ All eight Section 1 baseline checks passed prior to writing or remediating any P
 - **`vip_fvs.real_plan`:** `SourceTimelineMapping`, `RealPlanArtifacts`, `RealPlanLineage`, `RealPlanSelection`, `build_real_edit_plan`, `build_fixture_plan_artifacts`.
 - **`gate3.pts` / `gate3.temporal` / `gate3.rational` / `gate3.qc`:** `PtsTable(time_base, ticks)`, `TimeBase(num, den)`, `Rational(numerator, denominator)`, `SnapResult`, `resolve_start(table, requested_ticks)`, `resolve_end(table, requested_ticks)`, `classify_vfr(table, declared_rate=None)`, `detect_discontinuity(table, start_ticks, end_ticks)`, `subdivide_on_discontinuity(table, start_ticks, end_ticks)`, `tail_end`, `QCReport`, `bare_pass_is_insufficient(record)`, `may_consume_for_binding_origin(record, attestation, *, source_content_digest)`.
 - **`gate2.workload` / `gate2.recovery` / `gate2.faults` / `gate2.measure`:**
-  - `WorkloadSpec(jobs, stages, artifact_bytes, cost_units, fault_position, seed, f01_sha, c04_sha, e05_sha, config_digest, concurrency=1, repetitions=2)`; `WorkloadSpec.to_dict()` emits nested `{"dimensions": {...}, "seed": ..., "identity": {...}, "workload_digest": ...}`
+  - `WorkloadSpec(jobs, stages, artifact_bytes, cost_units, fault_position, seed, f01_sha, c04_sha, e05_sha, config_digest, concurrency=1, repetitions=2)`; `_LIMITS["concurrency"] = (1, 1)`; `WorkloadSpec.to_dict()` emits nested `{"dimensions": {...}, "seed": ..., "identity": {...}, "workload_digest": ...}`
   - `generate(spec: WorkloadSpec) -> SyntheticFixture` (`jobs: tuple[SyntheticJob, ...]`, `stages: tuple[SyntheticStage, ...]`, `stage.artifact: bytes`, `stage.artifact_digest: str`, `fixture.fixture_digest: str`)
   - `RecoveryBinding(f01_sha, c04_sha, e05_sha, workload_digest, configuration_digest, previous_manifest_digest, current_manifest_digest, generation_id, semantic_space_id, receipt_identity)`
   - `RecoveryHarness.open(checkpoint_path, binding, adapter) -> RecoveryHarness` and `harness.run(crash_point=None)`; `crash_point="after_side_effect_before_completion"` raises `RuntimeError("synthetic crash after side effect before completion")` (no `SimulatedCrash` class exists in `gate2.recovery`)
-  - `FaultClass` (`A_BEFORE_STAGE_START = "a"` through `M_REFERENTIAL_DIVERGENCE = "m"`), `capability(fc)`, `inject(fc, payload: Mapping[str, Any]) -> InjectionResult`
+  - `FaultClass` (`A_BEFORE_STAGE_START = "a"` through `M_REFERENTIAL_DIVERGENCE = "m"`), `capability(fc)`, `inject(fc, payload: Mapping[str, Any]) -> InjectionResult` (non-mutating detector returning `InjectionResult(fault_class, capability, detected, disposition, details)`)
   - `Measurement.measured(metric_id=..., value=..., unit=..., derivation=..., evidence_class="MEASURED")`, `Measurement.not_observed(metric_id=..., reason=...)`, `MeasurementSet.to_dict()`.
 
 ---
 
-## 3. Hosted CI Run `41841839080` Diagnostics & Final Targeted `MEGA-12–14` Remediation
+## 3. Hosted CI Run `41846684517` Diagnostics & Final `MEGA-12/14` Corrections
 
-### 3.1 Observed Hosted CI Results on Run `41841839080` (`e5cf7feb879bfd3804d90b0dc79ab42a2bc64e83`)
+### 3.1 Observed Hosted CI Results on Run `41846684517` (`4076e59e4dfd1f758e82b10fbbaaf2d4b69fe630`)
 
 - **Prior baseline + `MEGA-02..07`:** `307 PASS` (Python 3.11 and Python 3.14)
 - **`MEGA-08`:** `10 PASS` (`CI_VERIFIED` — preserved untouched)
 - **`MEGA-09`:** `6 PASS` (`CI_VERIFIED` — preserved untouched)
 - **`MEGA-10`:** `6 PASS` (`CI_VERIFIED` — preserved untouched)
 - **`MEGA-11`:** `5 PASS` (`CI_VERIFIED` — preserved untouched)
-- **Total Passing:** `334 PASS` per Python version
-- **`MEGA-12` / `MEGA-13` / `MEGA-14`:** Blocked by collection error `ImportError: cannot import name 'SimulatedCrash' from 'gate2.recovery'` in `src/vip_lab/mega12/replay_graph.py`.
+- **`MEGA-12`:** `3 PASS / 3 FAIL`
+- **`MEGA-13`:** `4 PASS` (`CI_VERIFIED` — preserved untouched)
+- **`MEGA-14` (including E2E):** `1 PASS / 5 FAIL`
+- **Total Passing / Failing:** `342 PASS / 8 FAIL` per Python version
 
-### 3.2 Final Targeted Remediations Executed (Tasks 1–5 + Section 9 Phase B Addendum)
+### 3.2 Exact Root Causes & Corrections Executed for the 8 Remaining Failures
 
-1. **Task 1 — `RecoveryHarness` Crash Contract (`src/vip_lab/mega12/replay_graph.py`, `src/vip_lab/mega12/__init__.py`, `tests/vip_lab/test_mega12.py`):**
-   - Removed the nonexistent `SimulatedCrash` import from `src/vip_lab/mega12/replay_graph.py`.
-   - Caught only the exact `RuntimeError("synthetic crash after side effect before completion")` (`type(exc) is RuntimeError and str(exc) == EXPECTED_AFTER_SIDE_EFFECT_CRASH_MSG`) raised by `RecoveryHarness.run(crash_point="after_side_effect_before_completion")`, re-raising any unexpected `RuntimeError` or `RecoveryRefusal` subclass and failing closed with `RECOVERY_CRASH_POINT_NOT_TRIGGERED` if the simulated crash does not fire.
-   - Added `test_unexpected_runtime_error_from_adapter_propagates_unswallowed` in `tests/vip_lab/test_mega12.py`.
-2. **Task 2 — Canonical `FaultClass` & `RecoveryRefusal` Matrix (`src/vip_lab/mega12/fault_scenarios.py`):**
-   - Replaced invalid `FaultClass.A / E / F` references and `bytes` `inject()` calls with canonical `FaultClass` enum iteration (`fc.name.split("_", 1)[0]` for letter code `"A".."M"`, `fc.value` for `"a".."m"`) and structured `Mapping[str, Any]` payloads for `inject(fc, payload) -> InjectionResult`.
-   - Exercised all 6 `refusal_checks` (`GENERATION_MISMATCH`, `SEMANTIC_SPACE_MISMATCH`, `TRUNCATED_PAYLOAD`, `PARTIAL_RECORD`, `PARTIAL_INDEX`, `DIGEST_MISMATCH`) through `RecoveryHarness.open` + `harness.run(crash_point=None)` and verified `state_unchanged is True`.
-3. **Task 3 — Lossless Nested & Flat `WorkloadSpec` Coercion & Scenario Round-Trip (`src/vip_lab/mega12/replay_graph.py`, `src/vip_lab/mega14/scenario.py`, `tests/vip_lab/test_mega12.py`, `tests/vip_lab/test_mega14.py`):**
-   - Updated `coerce_canonical_workload_spec()` to parse both canonical nested `WorkloadSpec.to_dict()` mappings (`dimensions`, `identity`, `seed`, `workload_digest`) and flat canonical field mappings without replacing missing/conflicting fields with defaults.
-   - Rejected unknown keys, missing required fields, non-integer booleans, or mixed flat+nested keys with `VipLabError("INVALID_WORKLOAD_SPEC", ...)`.
-   - Updated `default_three_arm_scenario()` and `SyntheticLabScenario.to_dict()` in `src/vip_lab/mega14/scenario.py` to store and deep-copy canonical nested `WorkloadSpec.to_dict()` structures.
-   - Added round-trip and negative conflict tests with nondefault values in `tests/vip_lab/test_mega12.py` and `tests/vip_lab/test_mega14.py`.
-4. **Task 4 & Section 9 Phase B Addendum — `MEGA-12` Evidence Integrity (`src/vip_lab/mega12/consistency_review.py`, `src/vip_lab/mega14/report.py`, `tests/vip_lab/test_mega12.py`, `tests/vip_lab/test_mega08_14_end_to_end.py`):**
-   - Set aggregate `evidence_state=NOT_OBSERVED` on both the `RECOVERY_REPLAY_CONSISTENCY_VERIFIED` `ReadinessFinding` and the aggregate `MEGA-12` `ReadinessPacket`.
-   - Prefixed synthetic fixture counter derivations in `build_synthetic_recovery_measurement_set()` with `"SYNTHETIC_FIXTURE_ONLY:"` and expanded `REQUIRED_NOT_OBSERVED_METRICS` to all 6 required archive/scale metrics (`archive_reliability`, `archive_scale`, `wall_clock_throughput`, `protected_media_behavior`, `authentic_model_performance`, `production_scale`).
-   - Added machine-checkable `"observation_domain": "SYNTHETIC_FIXTURE_ONLY"`, `"real_archive_metrics_status": NOT_OBSERVED`, `"real_source_measured_claimed": False`, and `"gate2_scale_evidence_proven": False` to `MEGA-12` packet summary, and enforced these invariants in `verify_e2e_lab_report()` (`src/vip_lab/mega14/report.py`).
-5. **Task 5 — End-to-End `MEGA-12 -> MEGA-13 -> MEGA-14` Chain:**
-   - Verified full contract alignment across `MEGA-12` (`ReplayGraph`, `fault_matrix`, `MeasurementSet`), `MEGA-13` (`audit_cross_stage_lineage`, `evaluate_qc_readiness`, `build_release_blocker_summary`), and `MEGA-14` (`run_end_to_end_synthetic_lab`, `verify_e2e_lab_report`, `cli.main`).
+1. **Task 1 — Canonical `FaultClass` Injection Payloads & Non-Mutating Detection Semantics (`src/vip_lab/mega12/fault_scenarios.py`, `tests/vip_lab/test_mega12.py`, `tests/vip_lab/test_mega08_14_end_to_end.py`):**
+   - **Root Cause (6 failures across `test_mega12.py`, `test_mega14.py`, `test_mega08_14_end_to_end.py`):** `src/gate2/faults.py:inject(fault_class, payload)` is a non-mutating detector over structured `Mapping[str, Any]` payloads. `FaultClass.L_CONCURRENT_WRITER` passed `"writers": 2`, causing `tuple(str(w) for w in payload.get("writers", ()))` to raise `TypeError: 'int' object is not iterable`. In addition, several other `HARNESSED` classes (`E`, `F`, `H`, `J`, `K`, `M`) passed non-canonical keys that would have returned `detected=False` (`disposition="NOT_TRIGGERED"`).
+   - **Correction:** Updated `_build_canonical_fault_payload()` in `src/vip_lab/mega12/fault_scenarios.py` to provide exact canonical trigger payloads for all 9 `HARNESSED` classes (`A`: `predecessor_succeeded=False`; `E`: `second_submission=True`; `F`: differing `decision_vector_a`/`decision_vector_b`; `H`: `interruption_observed=True`, `recovery_swallowed=False`; `I`: invalid JSON `'{"payload": "{"}'`; `J`: illegal transition `["AVAILABLE", "CLEANED"]`; `K`: differing `sealed_digest`/`observed_digest`; `L`: `writers=["writer-b", "writer-a"]`; `M`: `attempts`/`referenced_attempt_ids` with missing attempt `"att-missing-001"`).
+   - **Non-Mutating Verification & Fail-Closed Enforcement:** Replaced misleading `"mutated_differs_from_input"` with `"input_mutated": False` (verified via deep-copy equality before/after `inject()`), added `"harnessed_detected_count": 9` to the matrix output, and enforced fail-closed `VipLabError("HARNESSED_FAULT_NOT_DETECTED", ...)` if any `HARNESSED` fault is not detected (`detected is True` and `disposition == "PASS"`). Preserved `NOT_YET_HARNESSED` (`B`, `C`) and `UNREACHABLE` (`D`, `G`).
+2. **Task 2 — Canonical `WorkloadSpec` `concurrency=1` Domain & Negative Rejection Tests (`tests/vip_lab/test_mega12.py`, `tests/vip_lab/test_mega14.py`):**
+   - **Root Cause (2 failures in `test_mega12.py` and `test_mega14.py`):** Canonical `src/gate2/workload.py` defines `_LIMITS["concurrency"] = (1, 1)`. The round-trip tests in `test_mega12.py` (`concurrency=5`) and `test_mega14.py` (`concurrency=4`) violated this invariant and raised `WorkloadError: concurrency must be an integer in [1, 1]`.
+   - **Correction:** Preserved `src/gate2/workload.py` untouched, updated the valid round-trip fixtures in `tests/vip_lab/test_mega12.py` and `tests/vip_lab/test_mega14.py` to use `concurrency=1` alongside nondefault valid values (`jobs=4..5`, `stages=5..6`, `artifact_bytes=128..256`, `cost_units=17..23`, `fault_position=2..3`, `seed=777..999`, `repetitions=3..4`, and distinct identity digests), and added explicit negative assertions confirming that `concurrency=4`, `concurrency=5`, and `concurrency=True` are rejected.
 
 ---
 
@@ -89,13 +80,13 @@ All eight Section 1 baseline checks passed prior to writing or remediating any P
 
 | Wave | Packet ID | Scope | Status | Production Files | Test Files | Blockers / Notes |
 |---|---|---|---|---|---|---|
-| Wave 1 | `P08` (`MEGA-08`) | Capability & Gap Inventory + Stretch S1/S4/S5 Advisory Crosswalks | `CI_VERIFIED` | `src/vip_lab/mega08/{__init__,capability_inventory,contract_gate,gap_digest}.py` | `tests/vip_lab/test_mega08.py` | `10 PASS` on GitHub Actions run `41841839080` (Python 3.11 & 3.14); untouched. |
-| Wave 2 | `P09` (`MEGA-09`) | Batch Retrieval to Nonbinding Review Queue | `CI_VERIFIED` | `src/vip_lab/mega09/{__init__,candidate_queue,queue_validation,review_intake}.py` | `tests/vip_lab/test_mega09.py` | `6 PASS` on GitHub Actions run `41841839080` (Python 3.11 & 3.14); untouched. |
-| Wave 3 | `P10` (`MEGA-10`) | Candidate Temporal Request & Source-Native Diagnostic | `CI_VERIFIED` | `src/vip_lab/mega10/{__init__,temporal_request,pts_fixture_diagnostics,measurement_boundary}.py` | `tests/vip_lab/test_mega10.py` | `6 PASS` on GitHub Actions run `41841839080` (Python 3.11 & 3.14); untouched. |
-| Wave 4 | `P11` (`MEGA-11`) | Versioned Editorial Proposal (Not an Edit Plan) | `CI_VERIFIED` | `src/vip_lab/mega11/{__init__,editorial_proposal,proposal_revisions,decision_boundary}.py` | `tests/vip_lab/test_mega11.py` | `5 PASS` on GitHub Actions run `41841839080` (Python 3.11 & 3.14); untouched. |
-| Wave 5 | `P12` (`MEGA-12`) | Generated-Only Recovery & Replay Consistency + Stretch S3 | `REMEDIATED_UNVERIFIED` | `src/vip_lab/mega12/{__init__,replay_graph,fault_scenarios,consistency_review}.py` | `tests/vip_lab/test_mega12.py` | Remediated `RecoveryHarness` crash contract, nested/flat `WorkloadSpec` coercion, `FaultClass` enum/`inject()` mapping contract, and `NOT_OBSERVED` aggregate evidence state. |
-| Wave 6 | `P13` (`MEGA-13`) | QC Evidence Completeness & Export Refusal | `REMEDIATED_UNVERIFIED` | `src/vip_lab/mega13/{__init__,lineage_audit,qc_readiness,release_blockers}.py` | `tests/vip_lab/test_mega13.py` | Unblocked by `MEGA-12` `ReplayGraph` / `RecoveryHarness` remediation. |
-| Wave 7 | `P14` (`MEGA-14`) | Real End-to-End Synthetic Integration, CLI & Report + Stretch S2 | `REMEDIATED_UNVERIFIED` | `src/vip_lab/mega14/{__init__,scenario,report,orchestrator,cli}.py` | `tests/vip_lab/test_mega14.py`, `tests/vip_lab/test_mega08_14_end_to_end.py` | Remediated lossless `WorkloadSpec.to_dict()` scenario round-trip and `MEGA-12` `NOT_OBSERVED` evidence-state verification in `verify_e2e_lab_report()`. |
+| Wave 1 | `P08` (`MEGA-08`) | Capability & Gap Inventory + Stretch S1/S4/S5 Advisory Crosswalks | `CI_VERIFIED` | `src/vip_lab/mega08/{__init__,capability_inventory,contract_gate,gap_digest}.py` | `tests/vip_lab/test_mega08.py` | `10 PASS` on GitHub Actions run `41846684517` (Python 3.11 & 3.14); untouched. |
+| Wave 2 | `P09` (`MEGA-09`) | Batch Retrieval to Nonbinding Review Queue | `CI_VERIFIED` | `src/vip_lab/mega09/{__init__,candidate_queue,queue_validation,review_intake}.py` | `tests/vip_lab/test_mega09.py` | `6 PASS` on GitHub Actions run `41846684517` (Python 3.11 & 3.14); untouched. |
+| Wave 3 | `P10` (`MEGA-10`) | Candidate Temporal Request & Source-Native Diagnostic | `CI_VERIFIED` | `src/vip_lab/mega10/{__init__,temporal_request,pts_fixture_diagnostics,measurement_boundary}.py` | `tests/vip_lab/test_mega10.py` | `6 PASS` on GitHub Actions run `41846684517` (Python 3.11 & 3.14); untouched. |
+| Wave 4 | `P11` (`MEGA-11`) | Versioned Editorial Proposal (Not an Edit Plan) | `CI_VERIFIED` | `src/vip_lab/mega11/{__init__,editorial_proposal,proposal_revisions,decision_boundary}.py` | `tests/vip_lab/test_mega11.py` | `5 PASS` on GitHub Actions run `41846684517` (Python 3.11 & 3.14); untouched. |
+| Wave 5 | `P12` (`MEGA-12`) | Generated-Only Recovery & Replay Consistency + Stretch S3 | `REMEDIATED_UNVERIFIED` | `src/vip_lab/mega12/{__init__,replay_graph,fault_scenarios,consistency_review}.py` | `tests/vip_lab/test_mega12.py` | `3 PASS / 3 FAIL` on run `41846684517`; remediated all 9 `HARNESSED` `FaultClass` payloads (`detected=True`, `input_mutated=False`) in `fault_scenarios.py` and `concurrency=1` fixture + negative `concurrency=4/5` checks in `test_mega12.py`. |
+| Wave 6 | `P13` (`MEGA-13`) | QC Evidence Completeness & Export Refusal | `CI_VERIFIED` | `src/vip_lab/mega13/{__init__,lineage_audit,qc_readiness,release_blockers}.py` | `tests/vip_lab/test_mega13.py` | `4 PASS` on GitHub Actions run `41846684517` (Python 3.11 & 3.14); untouched. |
+| Wave 7 | `P14` (`MEGA-14`) | Real End-to-End Synthetic Integration, CLI & Report + Stretch S2 | `REMEDIATED_UNVERIFIED` | `src/vip_lab/mega14/{__init__,scenario,report,orchestrator,cli}.py` | `tests/vip_lab/test_mega14.py`, `tests/vip_lab/test_mega08_14_end_to_end.py` | `1 PASS / 5 FAIL` on run `41846684517`; unblocked by `MEGA-12` `fault_scenarios.py` fix and `concurrency=1` fixture + negative `concurrency=4/5` checks in `test_mega14.py`. |
 
 ---
 
@@ -103,15 +94,15 @@ All eight Section 1 baseline checks passed prior to writing or remediating any P
 
 | Stretch ID | Scope | Host Wave / Module | Status |
 |---|---|---|---|
-| `S1` | Gate-0 D-2 30-Field Readiness Crosswalk (`0 VERIFIED`, `7 PENDING`, `21 BLOCKED`, `2 NOT_OBSERVED`, `DECLARED_NOT_AUTHENTICATED`) | `MEGA-08` (`src/vip_lab/mega08/capability_inventory.py`) | `CI_VERIFIED` (`41841839080`) |
+| `S1` | Gate-0 D-2 30-Field Readiness Crosswalk (`0 VERIFIED`, `7 PENDING`, `21 BLOCKED`, `2 NOT_OBSERVED`, `DECLARED_NOT_AUTHENTICATED`) | `MEGA-08` (`src/vip_lab/mega08/capability_inventory.py`) | `CI_VERIFIED` (`41846684517`) |
 | `S2` | Cross-Artifact Digest & Foreign-Key Report Verifier (`verify_e2e_lab_report`) | `MEGA-14` (`src/vip_lab/mega14/report.py`) | `REMEDIATED_UNVERIFIED` |
-| `S3` | Gate-2 `MeasurementSet` & `NOT_OBSERVED` Discipline (`build_synthetic_recovery_measurement_set`) | `MEGA-12` (`src/vip_lab/mega12/consistency_review.py`) | `REMEDIATED_UNVERIFIED` |
-| `S4` | Gate-1 SigLIP2 3-Profile & Provisional Tokenizer Crosswalk (`GATE_B_NO_GO_BLOCKED`) | `MEGA-08` (`src/vip_lab/mega08/capability_inventory.py`) | `CI_VERIFIED` (`41841839080`) |
-| `S5` | Gate-3 A-7 S5 Test-Only Resource Profile Crosswalk (`4096 B` / `8 MiB` / `20,000` samples; `PENDING_EVIDENCE`) | `MEGA-08` (`src/vip_lab/mega08/capability_inventory.py`) | `CI_VERIFIED` (`41841839080`) |
+| `S3` | Gate-2 `MeasurementSet` & `NOT_OBSERVED` Discipline (`build_synthetic_recovery_measurement_set`) | `MEGA-12` (`src/vip_lab/mega12/consistency_review.py`) | `CI_VERIFIED` (`41846684517`) |
+| `S4` | Gate-1 SigLIP2 3-Profile & Provisional Tokenizer Crosswalk (`GATE_B_NO_GO_BLOCKED`) | `MEGA-08` (`src/vip_lab/mega08/capability_inventory.py`) | `CI_VERIFIED` (`41846684517`) |
+| `S5` | Gate-3 A-7 S5 Test-Only Resource Profile Crosswalk (`4096 B` / `8 MiB` / `20,000` samples; `PENDING_EVIDENCE`) | `MEGA-08` (`src/vip_lab/mega08/capability_inventory.py`) | `CI_VERIFIED` (`41846684517`) |
 
 ---
 
 ## 6. Exact Continuation Point
 
-- **Current State:** `FINAL_MEGA_12_14_REMEDIATION_COMPLETE_LOCAL` (`334 PASS` verified on GitHub Actions run `41841839080` including `MEGA-08..11`; `MEGA-12`, `MEGA-13`, `MEGA-14` remediated in local workspace).
-- **Next Action:** Publish only the 10 modified files (`src/vip_lab/mega12/{__init__,replay_graph,fault_scenarios,consistency_review}.py`, `src/vip_lab/mega14/{scenario,report}.py`, `tests/vip_lab/{test_mega12,test_mega14,test_mega08_14_end_to_end}.py`, `docs/ai-studio-tasks/MEGA_08_14_PROGRESS.md`) onto `Centaurioun/video-intelligence-pipeline-2` `main` (`e5cf7feb879bfd3804d90b0dc79ab42a2bc64e83`), preserving all 6 `src/gate0/media/` files and all 334 passing tests, and run `.github/workflows/vip-ai-studio-synthetic-ci.yml` on GitHub Actions (`Python 3.11` and `Python 3.14`).
+- **Current State:** `FINAL_MEGA_12_14_CI_CORRECTIONS_COMPLETE_LOCAL` (`342 PASS / 8 FAIL` observed on GitHub Actions run `41846684517` at commit `4076e59e4dfd1f758e82b10fbbaaf2d4b69fe630`; all 8 failures remediated locally across 5 files).
+- **Next Action:** Publish only the 5 modified files (`src/vip_lab/mega12/fault_scenarios.py`, `tests/vip_lab/test_mega12.py`, `tests/vip_lab/test_mega14.py`, `tests/vip_lab/test_mega08_14_end_to_end.py`, `docs/ai-studio-tasks/MEGA_08_14_PROGRESS.md`) onto `Centaurioun/video-intelligence-pipeline-2` `main` (`4076e59e4dfd1f758e82b10fbbaaf2d4b69fe630`), ensuring all 6 `src/gate0/media/` files (`__init__.py`, `decode.py`, `probe.py`, `proc.py`, `source_guard.py`, `tool_identity.py`) are preserved untouched, and run `.github/workflows/vip-ai-studio-synthetic-ci.yml` on GitHub Actions (`Python 3.11` and `Python 3.14`) to verify `350/350 PASS`.

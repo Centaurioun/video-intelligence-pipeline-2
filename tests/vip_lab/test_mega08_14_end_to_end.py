@@ -66,6 +66,16 @@ def test_end_to_end_three_arm_pipeline_connects_all_waves_deterministically() ->
     assert proposal["is_edit_plan"] is False
     assert replay_graph["idempotent_replay_verified"] is True
     assert replay_graph["duplicate_side_effects"] == 0
+    fault_matrix = artifacts["fault_matrix"]
+    assert fault_matrix["harnessed_count"] == 9
+    assert fault_matrix["harnessed_detected_count"] == 9
+    assert fault_matrix["not_yet_harnessed_count"] == 2
+    assert fault_matrix["unreachable_count"] == 2
+    for f_row in fault_matrix["fault_rows"]:
+        assert f_row["input_mutated"] is False
+        if f_row["capability"] == "HARNESSED":
+            assert f_row["detected"] is True
+            assert f_row["disposition"] == "PASS"
     assert lineage_receipt["lineage_valid"] is True
     assert lineage_receipt["queue_digest"] == queue["queue_digest"]
     assert lineage_receipt["temporal_request_digest"] == temp_req["request_digest"]

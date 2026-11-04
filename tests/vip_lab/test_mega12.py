@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from gate2.recovery import RecoveryBinding
-from gate2.workload import WorkloadSpec, generate
+from gate2.workload import WorkloadError, WorkloadSpec, generate
 from vip_lab.common import NOT_OBSERVED, ReadinessStatus, VipLabError
 from vip_lab.mega12 import (
     REPLAY_GRAPH_SCHEMA_VERSION,
@@ -121,22 +121,48 @@ def test_fault_scenario_matrix_distinguishes_harnessed_and_non_harnessed() -> No
     assert matrix["workload_id"] == "wl-mega12-synth"
     assert matrix["total_fault_classes"] == 13
     assert matrix["harnessed_count"] == 9
+    assert matrix["harnessed_detected_count"] == 9
     assert matrix["not_yet_harnessed_count"] == 2
     assert matrix["unreachable_count"] == 2
 
     by_code = {row["fault_class"]: row for row in matrix["fault_rows"]}
-    for code in ("A", "E", "F", "H", "I", "J", "K", "L", "M"):
-        assert by_code[code]["capability"] == "HARNESSED"
-        assert by_code[code]["execution_state"] == "EXECUTED_SYNTHETIC"
-        assert by_code[code]["mutated_differs_from_input"] is True
+    expected_detail_dispositions = {
+        "A": "BLOCKED_PREREQUISITE",
+        "E": "EQUAL_NO_MUTATION",
+        "F": "BLOCKED_PREREQUISITE",
+        "H": "BLOCKED_PREREQUISITE",
+        "I": "BLOCKED_PREREQUISITE",
+        "J": "ILLEGAL_TRANSITION",
+        "K": "BLOCKED_PREREQUISITE",
+        "L": "WRITE_CONFLICT",
+        "M": "BLOCKED_PREREQUISITE",
+    }
+    for code, expected_detail_disp in expected_detail_dispositions.items():
+        row = by_code[code]
+        assert row["capability"] == "HARNESSED"
+        assert row["execution_state"] == "EXECUTED_SYNTHETIC"
+        assert row["disposition"] == "PASS"
+        assert row["detected"] is True
+        assert row["input_mutated"] is False
+        assert row["details"]["disposition"] == expected_detail_disp
+
+    assert by_code["H"]["details"]["false_success"] is False
+    assert by_code["L"]["details"]["schedule"] == (("writer-a", 0), ("writer-b", 1))
+    assert by_code["M"]["details"]["divergent_attempt_ids"] == ("att-missing-001",)
 
     for code in ("B", "C"):
         assert by_code[code]["capability"] == "NOT_YET_HARNESSED"
         assert by_code[code]["execution_state"] == "NOT_EXECUTED"
+        assert by_code[code]["disposition"] == "NOT_YET_HARNESSED"
+        assert by_code[code]["detected"] is False
+        assert by_code[code]["input_mutated"] is False
 
     for code in ("D", "G"):
         assert by_code[code]["capability"] == "UNREACHABLE"
         assert by_code[code]["execution_state"] == "NOT_EXECUTED"
+        assert by_code[code]["disposition"] == "UNREACHABLE"
+        assert by_code[code]["detected"] is False
+        assert by_code[code]["input_mutated"] is False
 
     refusal_codes = {r["expected_code"]: r["observed_code"] for r in matrix["refusal_checks"]}
     assert refusal_codes["GENERATION_MISMATCH"] == "GENERATION_MISMATCH"
@@ -258,7 +284,7 @@ def test_coerce_canonical_workload_spec_preserves_nondefault_nested_and_flat_and
         c04_sha="b" * 40,
         e05_sha="c" * 40,
         config_digest="d" * 64,
-        concurrency=5,
+        concurrency=1,
         repetitions=6,
     )
     # 1. Nested WorkloadSpec.to_dict() round-trip
@@ -284,29 +310,65 @@ def test_coerce_canonical_workload_spec_preserves_nondefault_nested_and_flat_and
         "c04_sha": "b" * 40,
         "e05_sha": "c" * 40,
         "config_digest": "d" * 64,
-        "concurrency": 5,
+        "concurrency": 1,
         "repetitions": 6,
     }
     parsed_flat, wl_id_flat = coerce_canonical_workload_spec(flat_payload)
     assert wl_id_flat == "wl-flat-7x4"
     assert parsed_flat == nondefault
+    assert parsed_flat.to_dict() == nondefault.to_dict()
 
-    # 3. Reject conflicting mixed flat + nested keys
+    # 3. Reject out-of-range concurrency=4 and concurrency=5 (canonical bound is [1, 1])
+    for invalid_conc in (4, 5):
+        with pytest.raises(WorkloadError, match="concurrency"):
+            WorkloadSpec(
+                jobs=7,
+                stages=4,
+                artifact_bytes=128,
+                cost_units=42,
+                fault_position=3,
+                seed=99887766,
+                f01_sha="a" * 40,
+                c04_sha="b" * 40,
+                e05_sha="c" * 40,
+                config_digest="d" * 64,
+                concurrency=invalid_conc,
+                repetitions=6,
+            )
+        bad_nested_conc = nondefault.to_dict()
+        bad_nested_conc["dimensions"]["concurrency"] = invalid_conc
+        with pytest.raises(VipLabError) as exc_nested_conc:
+            coerce_canonical_workload_spec(bad_nested_conc)
+        assert exc_nested_conc.value.code == "INVALID_WORKLOAD_SPEC"
+
+        bad_flat_conc = {**flat_payload, "concurrency": invalid_conc}
+        with pytest.raises(VipLabError) as exc_flat_conc:
+            coerce_canonical_workload_spec(bad_flat_conc)
+        assert exc_flat_conc.value.code == "INVALID_WORKLOAD_SPEC"
+
+    # 4. Reject bool values in integer fields
+    bad_bool_payload = {**flat_payload, "concurrency": True}
+    with pytest.raises(VipLabError) as exc_bool:
+        coerce_canonical_workload_spec(bad_bool_payload)
+    assert exc_bool.value.code == "INVALID_WORKLOAD_SPEC"
+
+    # 5. Reject conflicting mixed flat + nested keys
     mixed = {**nested_payload, "jobs": 7}
     with pytest.raises(VipLabError) as exc_mixed:
         coerce_canonical_workload_spec(mixed)
     assert exc_mixed.value.code == "INVALID_WORKLOAD_SPEC"
 
-    # 4. Reject unknown dimension key
+    # 6. Reject unknown dimension key
     bad_dim = nondefault.to_dict()
     bad_dim["dimensions"]["extra_dim"] = 1
     with pytest.raises(VipLabError) as exc_dim:
         coerce_canonical_workload_spec(bad_dim)
     assert exc_dim.value.code == "INVALID_WORKLOAD_SPEC"
 
-    # 5. Reject missing required dimension key (no silent default replacement)
+    # 7. Reject missing required dimension key (no silent default replacement)
     missing_dim = nondefault.to_dict()
     del missing_dim["dimensions"]["repetitions"]
     with pytest.raises(VipLabError) as exc_missing:
         coerce_canonical_workload_spec(missing_dim)
     assert exc_missing.value.code == "INVALID_WORKLOAD_SPEC"
+

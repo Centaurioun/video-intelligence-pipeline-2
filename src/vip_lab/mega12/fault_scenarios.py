@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 from pathlib import Path
 import tempfile
@@ -10,6 +11,7 @@ from typing import Any
 from gate2.faults import Capability, FaultClass, capability, inject
 from gate2.recovery import RecoveryHarness, RecoveryRefusal
 from gate2.workload import WorkloadSpec, generate
+from vip_lab.common import VipLabError
 from vip_lab.mega12.replay_graph import (
     DEFAULT_CURR_MANIFEST_DIGEST,
     SyntheticReplayHarnessAdapter,
@@ -44,57 +46,56 @@ def _build_canonical_fault_payload(
 ) -> dict[str, Any]:
     if fc == FaultClass.A_BEFORE_STAGE_START:
         return {
-            "crash_point": "before_stage_start",
-            "truncate": True,
+            "predecessor_succeeded": False,
             "stage_digest": sample_stage_digest,
         }
     if fc == FaultClass.E_REPEATED_IDEMPOTENCY_KEY:
         return {
-            "idempotency_keys": ["job_000_stage_000", "job_000_stage_000"],
+            "second_submission": True,
+            "idempotency_key": "job_000_stage_000",
             "stage_digest": sample_stage_digest,
         }
     if fc == FaultClass.F_RESTART_RECONSTRUCTION:
         return {
-            "pre_digest": sample_stage_digest,
-            "post_digest": sample_stage_digest,
+            "decision_vector_a": sample_stage_digest,
+            "decision_vector_b": (
+                "f" * 64 if sample_stage_digest != "f" * 64 else "0" * 64
+            ),
         }
     if fc == FaultClass.H_INTERRUPTED_RECOVERY:
         return {
-            "interrupted_recovery": True,
+            "interruption_observed": True,
+            "recovery_swallowed": False,
             "stage_digest": sample_stage_digest,
         }
     if fc == FaultClass.I_CORRUPT_AT_REST:
         return {
-            "corrupt_at_rest": True,
-            "truncated_bytes": True,
-            "partial_record": True,
+            "payload": '{"payload": "{"}',
             "stage_digest": sample_stage_digest,
         }
     if fc == FaultClass.J_POST_SUCCESS_INVALIDATION:
         return {
-            "expected_digest": sample_stage_digest,
-            "actual_digest": "f" * 64 if sample_stage_digest != "f" * 64 else "0" * 64,
+            "chain": ["AVAILABLE", "CLEANED"],
+            "stage_digest": sample_stage_digest,
         }
     if fc == FaultClass.K_IDENTITY_DRIFT:
         return {
-            "expected_manifest_digest": DEFAULT_CURR_MANIFEST_DIGEST,
-            "current_manifest_digest": "e" * 64,
-            "expected_c04_sha": workload_spec.c04_sha,
-            "current_c04_sha": workload_spec.c04_sha,
-            "expected_e05_sha": workload_spec.e05_sha,
-            "current_e05_sha": workload_spec.e05_sha,
-            "expected_config_digest": workload_spec.config_digest,
-            "current_config_digest": workload_spec.config_digest,
+            "sealed_digest": DEFAULT_CURR_MANIFEST_DIGEST,
+            "observed_digest": "e" * 64,
+            "c04_sha": workload_spec.c04_sha,
+            "e05_sha": workload_spec.e05_sha,
+            "config_digest": workload_spec.config_digest,
         }
     if fc == FaultClass.L_CONCURRENT_WRITER:
         return {
-            "writers": 2,
+            "writers": ["writer-b", "writer-a"],
             "stage_digest": sample_stage_digest,
         }
     if fc == FaultClass.M_REFERENTIAL_DIVERGENCE:
         return {
-            "sqlite_keys": ["seg_000", "seg_001"],
-            "vector_keys": ["seg_000"],
+            "attempts": [{"attempt_id": "att-000"}],
+            "referenced_attempt_ids": ["att-000", "att-missing-001"],
+            "stage_digest": sample_stage_digest,
         }
     return {
         "fault_class": fc.value,
@@ -122,6 +123,7 @@ def evaluate_fault_scenario_matrix(
 
     fault_rows: list[dict[str, Any]] = []
     harnessed_count = 0
+    harnessed_detected_count = 0
     not_yet_harnessed_count = 0
     unreachable_count = 0
 
@@ -133,9 +135,22 @@ def evaluate_fault_scenario_matrix(
             workload_spec=workload_spec,
             sample_stage_digest=sample_stage_digest,
         )
+        before_snapshot = copy.deepcopy(fault_payload)
         inj_res = inject(fc, fault_payload)
+        input_mutated = fault_payload != before_snapshot
+        if input_mutated:
+            raise VipLabError(
+                "FAULT_INJECTION_MUTATED_INPUT",
+                f"gate2.faults.inject() unexpectedly mutated input payload for {fc.name}.",
+            )
         if cap == Capability.HARNESSED:
             harnessed_count += 1
+            if not inj_res.detected or inj_res.disposition != "PASS":
+                raise VipLabError(
+                    "HARNESSED_FAULT_NOT_DETECTED",
+                    f"Deliberately triggered HARNESSED fault {fc.name} was not detected (disposition={inj_res.disposition!r}, detected={inj_res.detected!r}).",
+                )
+            harnessed_detected_count += 1
             fault_rows.append(
                 {
                     "fault_class": letter_code,
@@ -145,9 +160,9 @@ def evaluate_fault_scenario_matrix(
                     "execution_state": "EXECUTED_SYNTHETIC",
                     "disposition": inj_res.disposition,
                     "detected": inj_res.detected,
+                    "input_mutated": input_mutated,
                     "payload_digest": inj_res.payload_digest,
-                    "details": inj_res.details,
-                    "mutated_differs_from_input": bool(inj_res.detected),
+                    "details": dict(inj_res.details),
                 }
             )
         elif cap == Capability.NOT_YET_HARNESSED:
@@ -161,9 +176,9 @@ def evaluate_fault_scenario_matrix(
                     "execution_state": "NOT_EXECUTED",
                     "disposition": inj_res.disposition,
                     "detected": inj_res.detected,
+                    "input_mutated": input_mutated,
                     "payload_digest": inj_res.payload_digest,
-                    "details": inj_res.details,
-                    "mutated_differs_from_input": None,
+                    "details": dict(inj_res.details),
                 }
             )
         else:
@@ -177,9 +192,9 @@ def evaluate_fault_scenario_matrix(
                     "execution_state": "NOT_EXECUTED",
                     "disposition": inj_res.disposition,
                     "detected": inj_res.detected,
+                    "input_mutated": input_mutated,
                     "payload_digest": inj_res.payload_digest,
-                    "details": inj_res.details,
-                    "mutated_differs_from_input": None,
+                    "details": dict(inj_res.details),
                 }
             )
 
@@ -305,6 +320,7 @@ def evaluate_fault_scenario_matrix(
         "workload_id": resolved_workload_id,
         "total_fault_classes": len(fault_rows),
         "harnessed_count": harnessed_count,
+        "harnessed_detected_count": harnessed_detected_count,
         "not_yet_harnessed_count": not_yet_harnessed_count,
         "unreachable_count": unreachable_count,
         "fault_rows": fault_rows,
