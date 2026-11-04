@@ -260,9 +260,9 @@ def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
             )
 
     operation_ids = [
-        f"{job.job_id}:stage_{stage_idx}"
+        f"{job.job_index}:stage_{stage_idx}"
         for job in fixture.jobs
-        for stage_idx in range(job.stages)
+        for stage_idx in range(len(job.stages))
     ]
     step_limit = (
         int(interrupt_at_step)

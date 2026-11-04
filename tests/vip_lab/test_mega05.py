@@ -24,27 +24,9 @@ def _make_three_arm_claims() -> list[dict[str, Any]]:
         "top_k": 5,
     }
     return [
-        {
-            "profile_id": "vip-v1-siglip-base-224",
-            "weights_sha256": "a" * 64,
-            "processor_digest": "b" * 64,
-            "image_preprocessing_digest": "c" * 64,
-            **common_proto,
-        },
-        {
-            "profile_id": "vip-v2-siglip2-base-224",
-            "weights_sha256": "d" * 64,
-            "processor_digest": "e" * 64,
-            "image_preprocessing_digest": "f" * 64,
-            **common_proto,
-        },
-        {
-            "profile_id": "vip-v2-siglip2-so400m-384",
-            "weights_sha256": "4" * 64,
-            "processor_digest": "5" * 64,
-            "image_preprocessing_digest": "6" * 64,
-            **common_proto,
-        },
+        {"profile_id": "vip-v1-siglip-base-224", **common_proto},
+        {"profile_id": "vip-v2-siglip2-base-224", **common_proto},
+        {"profile_id": "vip-v2-siglip2-so400m-384", **common_proto},
     ]
 
 

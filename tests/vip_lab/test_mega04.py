@@ -45,7 +45,7 @@ def _make_d2_artifacts() -> dict[str, dict[str, Any]]:
             {
                 "query_id": f"q_eval_absent_{index}",
                 "text": f"editor absent query {index}",
-                "family": FAMILIES[index % 4],
+                "family": sorted(FAMILIES)[index % 4],
                 "presence": "ABSENT",
                 "split": "EVALUATION",
             }
@@ -55,7 +55,7 @@ def _make_d2_artifacts() -> dict[str, dict[str, Any]]:
             {
                 "query_id": f"q_dev_{index}",
                 "text": f"editor development query {index}",
-                "family": FAMILIES[index % 4],
+                "family": sorted(FAMILIES)[index % 4],
                 "presence": "POSITIVE",
                 "split": "DEVELOPMENT",
             }
@@ -79,11 +79,11 @@ def _make_d2_artifacts() -> dict[str, dict[str, Any]]:
                 "session_id": f"sess_{idx % sessions}",
                 "duration_minutes": total_minutes // revisions,
                 "split": "DEVELOPMENT" if idx == revisions - 1 else "EVALUATION",
-                "families": [FAMILIES[idx % 4]],
+                "families": [sorted(FAMILIES)[idx % 4]],
             }
             for idx in range(revisions)
         ],
-        "family_coverage": list(FAMILIES),
+        "family_coverage": sorted(FAMILIES),
     }
 
     return {
@@ -163,7 +163,7 @@ def _make_40_queries_and_splits() -> tuple[
     splits: dict[str, str] = {}
     idx = 1
     # 24 EVALUATION POSITIVE queries: 6 per family across 4 FAMILIES
-    for fam in FAMILIES:
+    for fam in sorted(FAMILIES):
         for _ in range(6):
             qid = f"q_{idx:02d}"
             specs.append(
@@ -172,14 +172,14 @@ def _make_40_queries_and_splits() -> tuple[
             splits[qid] = "EVALUATION"
             idx += 1
     # 8 EVALUATION ABSENT queries: 2 per family
-    for fam in FAMILIES:
+    for fam in sorted(FAMILIES):
         for _ in range(2):
             qid = f"q_{idx:02d}"
             specs.append((qid, f"Eval absent query {qid} for {fam}", (fam, "ABSENT")))
             splits[qid] = "EVALUATION"
             idx += 1
     # 8 DEVELOPMENT queries: 2 per family
-    for fam in FAMILIES:
+    for fam in sorted(FAMILIES):
         for _ in range(2):
             qid = f"q_{idx:02d}"
             specs.append((qid, f"Dev query {qid} for {fam}", (fam, "POSITIVE")))
@@ -209,56 +209,29 @@ def _make_gold_events() -> list[dict[str, Any]]:
 
 
 def _make_reviewer_inputs(config_digest: str = "c" * 64) -> dict[str, Any]:
-    rows = [
-        {
-            "query_id": "q_01",
-            "window_id": "w_01",
-            "blind_arm_token": "arm-a",
-            "reviewer_id": "rev_alice",
-            "grade": 2,
-            "rationale": "Exact match in window",
-            "ambiguity": "RESOLVED",
-            "review_status": "FINAL",
-            "adjudication_ref": None,
-            "evidence_class": "VISUALLY_OBSERVED",
-        },
-        {
-            "query_id": "q_01",
-            "window_id": "w_01",
-            "blind_arm_token": "arm-a",
-            "reviewer_id": "rev_bob",
-            "grade": 2,
-            "rationale": "Confirmed match in window",
-            "ambiguity": "RESOLVED",
-            "review_status": "FINAL",
-            "adjudication_ref": None,
-            "evidence_class": "VISUALLY_OBSERVED",
-        },
-        {
-            "query_id": "q_01",
-            "window_id": "w_01",
-            "blind_arm_token": "arm-b",
-            "reviewer_id": "rev_alice",
-            "grade": 1,
-            "rationale": "Partial relevance",
-            "ambiguity": "RESOLVED",
-            "review_status": "FINAL",
-            "adjudication_ref": None,
-            "evidence_class": "VISUALLY_OBSERVED",
-        },
-        {
-            "query_id": "q_01",
-            "window_id": "w_01",
-            "blind_arm_token": "arm-b",
-            "reviewer_id": "rev_bob",
-            "grade": 1,
-            "rationale": "Agreed partial relevance",
-            "ambiguity": "RESOLVED",
-            "review_status": "FINAL",
-            "adjudication_ref": None,
-            "evidence_class": "VISUALLY_OBSERVED",
-        },
-    ]
+    rows = []
+    for token, grade, assertion_id, assertion_text, assertion_digest in (
+        ("arm-a", 2, "synthetic-assertion-01", "Synthetic match", "1" * 64),
+        ("arm-b", 1, "synthetic-assertion-02", "Synthetic partial relevance", "2" * 64),
+    ):
+        for reviewer_id in ("rev_alice", "rev_bob"):
+            rows.append(
+                {
+                    "assertion_id": assertion_id,
+                    "query_id": "q_01",
+                    "window_id": "w_01",
+                    "blind_arm_token": token,
+                    "reviewer_id": reviewer_id,
+                    "grade": grade,
+                    "ambiguity": "NONE",
+                    "review_status": "ACCEPTED",
+                    "assertion": {
+                        "version": "synthetic-v1",
+                        "text": assertion_text,
+                        "digest": assertion_digest,
+                    },
+                }
+            )
     return {
         "rows": rows,
         "token_map": [
@@ -424,4 +397,4 @@ class TestMega04ExperimentEntryReadiness:
             }
         )
         assert pkt.status == ReadinessStatus.BLOCKED
-        assert "MODEL_ASSET_MISMATCH:model.weights_digest" in pkt.blockers
+        assert "MODEL_DIGEST_MISMATCH:model.weights_digest" in pkt.blockers
