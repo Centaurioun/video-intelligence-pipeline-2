@@ -24,6 +24,13 @@ caches/
 models/
 model_weights/
 media/
+!src/gate0/media/
+!src/gate0/media/__init__.py
+!src/gate0/media/decode.py
+!src/gate0/media/probe.py
+!src/gate0/media/proc.py
+!src/gate0/media/source_guard.py
+!src/gate0/media/tool_identity.py
 videos/
 proxies/
 renders/

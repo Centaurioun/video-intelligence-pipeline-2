@@ -22,6 +22,7 @@ from pathlib import Path
 import sys
 from typing import Any
 import pytest
+import vip_lab.mega16.cli as mega16_cli_module
 
 from vip_fvs.real_preview_receipt import (
     _FIELDS as REAL_PREVIEW_RECEIPT_REQUIRED_FIELDS,
@@ -381,3 +382,82 @@ def test_cli_run_verify_and_refusals(
     assert (
         mega16_cli_main(["run-offline", "--output=s3://bucket/report.json"]) == 2
     )
+
+
+def test_cli_verify_missing_report_does_not_create_parent_directories(
+    tmp_path: Path,
+) -> None:
+    missing_report = tmp_path / "missing-parent" / "nested" / "report.json"
+    assert not missing_report.parent.exists()
+
+    assert mega16_cli_main(["verify-report", "--input", str(missing_report)]) == 2
+
+    assert not missing_report.parent.exists()
+
+
+def test_cli_output_refuses_symlinked_ancestor(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    link = tmp_path / "linked-parent"
+    link.symlink_to(outside, target_is_directory=True)
+    output = link / "nested" / "report.json"
+
+    assert mega16_cli_main(["run-offline", "--output", str(output)]) == 2
+    assert not (outside / "nested" / "report.json").exists()
+
+
+def test_cli_output_retries_partial_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "partial-write-report.json"
+    real_write = mega16_cli_module.os.write
+
+    def partial_write(fd: int, data: bytes | bytearray | memoryview) -> int:
+        return real_write(fd, data[:7])
+
+    monkeypatch.setattr(mega16_cli_module.os, "write", partial_write)
+    assert mega16_cli_main(["run-offline", "--output", str(output)]) == 0
+    parsed = json.loads(output.read_text(encoding="utf-8"))
+    assert (
+        parsed["release_refusal_certificate"]["export_status"]
+        == "REFUSED_NOT_AUTHORIZED"
+    )
+
+
+def test_cli_output_removes_incomplete_file_after_write_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "failed-write-report.json"
+    real_write = mega16_cli_module.os.write
+    calls = 0
+
+    def fail_after_partial_write(
+        fd: int, data: bytes | bytearray | memoryview
+    ) -> int:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return real_write(fd, data[:7])
+        raise OSError("simulated disk write failure")
+
+    monkeypatch.setattr(mega16_cli_module.os, "write", fail_after_partial_write)
+    assert mega16_cli_main(["run-offline", "--output", str(output)]) == 2
+    assert not output.exists()
+
+
+def test_cli_verify_rejects_media_paths_before_reading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    media_path = tmp_path / "source.mp4"
+    media_path.write_bytes(b"not a report")
+    read_calls = 0
+    real_read = mega16_cli_module.os.read
+
+    def track_read(fd: int, size: int) -> bytes:
+        nonlocal read_calls
+        read_calls += 1
+        return real_read(fd, size)
+
+    monkeypatch.setattr(mega16_cli_module.os, "read", track_read)
+    assert mega16_cli_main(["verify-report", "--input", str(media_path)]) == 2
+    assert read_calls == 0
