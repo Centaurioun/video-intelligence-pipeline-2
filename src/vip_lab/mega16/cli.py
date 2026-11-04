@@ -9,7 +9,8 @@ Supports two closed offline subcommands:
 Strictly refuses:
 - Forbidden execution, network, model-download, real-archive, FFmpeg, or export flags
 - URL arguments (`http://`, `https://`, `s3://`, `gs://`, `file://`)
-- Symlink targets, existing-file overwrites (no-clobber), traversal (`..`), or media paths
+- Paths outside the fixed `outputs/vip_lab/synthetic-reports` root, symlinks,
+  existing-file overwrites (no-clobber), traversal (`..`), or media paths
 """
 
 from __future__ import annotations
@@ -35,6 +36,12 @@ REFUSAL_CLI_OUTPUT_PATH_UNSAFE = "REFUSAL_CLI_OUTPUT_PATH_UNSAFE"
 REFUSAL_CLI_INPUT_PATH_UNSAFE = "REFUSAL_CLI_INPUT_PATH_UNSAFE"
 
 MAX_CLI_REPORT_BYTES = 16 * 1024 * 1024
+_TRUSTED_SYNTHETIC_REPORT_ROOT = (
+    Path(__file__).resolve().parents[3]
+    / "outputs"
+    / "vip_lab"
+    / "synthetic-reports"
+)
 
 FORBIDDEN_CLI_FLAGS: tuple[str, ...] = (
     "--execute-ffmpeg",
@@ -129,6 +136,9 @@ def _validate_safe_output_path(raw_path: str) -> Path:
             REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
             f"Offline report output must use a .json path, got {p.suffix!r}.",
         )
+    p = _confine_synthetic_report_path(
+        p, raw_path, REFUSAL_CLI_OUTPUT_PATH_UNSAFE
+    )
     if p.is_symlink() or p.exists():
         raise_mega15_error(
             REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
@@ -141,6 +151,27 @@ def _validate_safe_output_path(raw_path: str) -> Path:
             f"Output parent directory {str(parent)!r} cannot be a symlink.",
         )
     return p
+
+
+def _confine_synthetic_report_path(
+    path: Path, raw_path: str, refusal_code: str
+) -> Path:
+    """Resolve relative report names under the fixed, code-trusted report root."""
+    root = _TRUSTED_SYNTHETIC_REPORT_ROOT
+    if not root.is_absolute():
+        raise_mega15_error(
+            refusal_code,
+            "Configured synthetic-report root must be an absolute path.",
+        )
+    candidate = path if path.is_absolute() else root / path
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        raise_mega15_error(
+            refusal_code,
+            f"Report path {raw_path!r} is outside the trusted synthetic-report directory.",
+        )
+    return candidate
 
 
 def _open_parent_directory_without_symlinks(
@@ -246,6 +277,9 @@ def _safe_read_report_file(raw_path: str) -> dict:
             REFUSAL_CLI_INPUT_PATH_UNSAFE,
             f"Input must be a JSON synthetic report, got {p.suffix!r}.",
         )
+    p = _confine_synthetic_report_path(
+        p, raw_path, REFUSAL_CLI_INPUT_PATH_UNSAFE
+    )
     if p.is_symlink():
         raise_mega15_error(
             REFUSAL_CLI_INPUT_PATH_UNSAFE,
@@ -325,7 +359,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         type=str,
         default=None,
-        help="Optional new non-existing JSON file path to write the canonical report.",
+        help=(
+            "Optional new JSON report path under outputs/vip_lab/synthetic-reports; "
+            "relative paths are rooted there."
+        ),
     )
 
     ver_p = sub.add_parser(
@@ -336,7 +373,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--input",
         type=str,
         required=True,
-        help="Path to the Mega1516OfflineReport JSON file.",
+        help=(
+            "Mega1516OfflineReport JSON path under outputs/vip_lab/synthetic-reports; "
+            "relative paths are rooted there."
+        ),
     )
     return parser
 
