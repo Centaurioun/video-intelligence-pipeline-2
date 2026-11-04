@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, codex/repair-mega15-16-final-ci-20261104]
   workflow_dispatch:
 
 permissions:
@@ -541,3 +541,49 @@ jobs:
             fi
           done
           echo "No submitted MEGA-15–16 suite failed. SKIPPED waves are NOT verified."
+
+      - name: Verify and run all MEGA-17 synthetic acceptance suites
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          suites=(
+            tests/vip_lab/test_mega17_editorial_readiness.py
+            tests/vip_lab/test_mega17_end_to_end.py
+            tests/vip_lab/test_mega17_gate0_readiness.py
+            tests/vip_lab/test_mega17_integration_readiness.py
+            tests/vip_lab/test_mega17_release_readiness.py
+            tests/vip_lab/test_mega17_source_readiness.py
+          )
+          for suite in "${suites[@]}"; do
+            if [[ ! -f "$suite" ]]; then
+              echo "::error::MEGA-17 acceptance suite is missing: $suite"
+              exit 1
+            fi
+          done
+          report="$RUNNER_TEMP/mega17-junit.xml"
+          python -m pytest -q --junitxml="$report" "${suites[@]}"
+          python - "$report" "${suites[@]}" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          report, *files = sys.argv[1:]
+          root = ET.parse(report).getroot()
+          cases = list(root.iter("testcase"))
+          errors = []
+          for filename in files:
+              module = f"tests.vip_lab.{Path(filename).stem}"
+              selected = [case for case in cases if case.get("classname") == module]
+              skipped = sum(case.find("skipped") is not None for case in selected)
+              if not selected:
+                  errors.append(f"suite did not execute: {filename}")
+              elif skipped:
+                  errors.append(f"suite had {skipped} skipped test(s): {filename}")
+          if errors:
+              for error in errors:
+                  print(f"::error::{error}")
+              raise SystemExit(1)
+          print(f"MEGA-17 executed {len(cases)} pytest cases across all {len(files)} submitted suites; no skips.")
+          PY
