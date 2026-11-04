@@ -130,7 +130,7 @@ def inspect_stream_namespace(payload: Mapping[str, Any]) -> ReadinessPacket:
             )
         )
 
-    if derivation == POSITIONAL_IDENTITY_DERIVATION or bool(
+    if derivation in (POSITIONAL_IDENTITY_DERIVATION, "POSITIONAL_INDEX_EQUALITY") or bool(
         cleaned.get("assume_positional_equality", False)
     ):
         code = REASON_POSITIONAL_STREAM_IDENTITY_FORBIDDEN

@@ -186,6 +186,8 @@ jobs:
           check_cross_gate
 
       - name: Test MEGA-03 synthetic lab preparation
+        id: mega03
+        continue-on-error: true
         if: hashFiles('tests/vip_lab/test_mega03.py') != ''
         env:
           PYTHONPATH: src:experiments:scripts
@@ -193,6 +195,8 @@ jobs:
         run: python -m pytest -q tests/vip_lab/test_mega03.py
 
       - name: Test MEGA-04 synthetic lab preparation
+        id: mega04
+        continue-on-error: true
         if: hashFiles('tests/vip_lab/test_mega04.py') != ''
         env:
           PYTHONPATH: src:experiments:scripts
@@ -200,6 +204,8 @@ jobs:
         run: python -m pytest -q tests/vip_lab/test_mega04.py
 
       - name: Test MEGA-05 synthetic lab preparation
+        id: mega05
+        continue-on-error: true
         if: hashFiles('tests/vip_lab/test_mega05.py') != ''
         env:
           PYTHONPATH: src:experiments:scripts
@@ -207,6 +213,8 @@ jobs:
         run: python -m pytest -q tests/vip_lab/test_mega05.py
 
       - name: Test MEGA-06 synthetic lab preparation
+        id: mega06
+        continue-on-error: true
         if: hashFiles('tests/vip_lab/test_mega06.py') != ''
         env:
           PYTHONPATH: src:experiments:scripts
@@ -214,6 +222,8 @@ jobs:
         run: python -m pytest -q tests/vip_lab/test_mega06.py
 
       - name: Test MEGA-07 synthetic lab preparation
+        id: mega07
+        continue-on-error: true
         if: hashFiles('tests/vip_lab/test_mega07.py') != ''
         env:
           PYTHONPATH: src:experiments:scripts
@@ -221,6 +231,8 @@ jobs:
         run: python -m pytest -q tests/vip_lab/test_mega07.py
 
       - name: Test MEGA-03–07 cross-gate lab integration
+        id: mega_cross
+        continue-on-error: true
         if: hashFiles('tests/vip_lab/test_cross_gate_integration.py') != ''
         env:
           PYTHONPATH: src:experiments:scripts
@@ -229,3 +241,21 @@ jobs:
           python -m pytest -q \
             tests/vip_lab/test_cross_gate_integration.py \
             tests/vip_lab/test_lab_cli.py
+
+      - name: Enforce complete MEGA-03–07 CI status
+        if: always()
+        env:
+          M03: ${{ steps.mega03.outcome }}
+          M04: ${{ steps.mega04.outcome }}
+          M05: ${{ steps.mega05.outcome }}
+          M06: ${{ steps.mega06.outcome }}
+          M07: ${{ steps.mega07.outcome }}
+          MCROSS: ${{ steps.mega_cross.outcome }}
+        run: |
+          echo "MEGA-03=$M03 MEGA-04=$M04 MEGA-05=$M05 MEGA-06=$M06 MEGA-07=$M07 CROSS=$MCROSS"
+          for outcome in "$M03" "$M04" "$M05" "$M06" "$M07" "$MCROSS"; do
+            if [[ "$outcome" == "failure" ]]; then
+              echo "::error::One or more MEGA wave suites failed; inspect earlier steps"
+              exit 1
+            fi
+          done
