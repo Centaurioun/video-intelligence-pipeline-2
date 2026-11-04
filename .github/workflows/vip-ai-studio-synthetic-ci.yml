@@ -259,3 +259,185 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Check MEGA-08–14 submitted wave completeness
+        id: mega0814complete
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_wave() {
+            local wave="$1"; shift
+            local seen=0
+            for file in "$@"; do
+              [[ -f "$file" ]] && seen=1 || true
+            done
+            if [[ "$seen" -eq 0 ]]; then
+              echo "MEGA-$wave: NOT_SUBMITTED"
+              return 0
+            fi
+            if [[ ! -f docs/ai-studio-tasks/MEGA_08_14_PROGRESS.md ]]; then
+              echo "::error::MEGA-$wave: missing durable progress ledger"
+              return 1
+            fi
+            for file in "$@"; do
+              if [[ ! -f "$file" ]]; then
+                echo "::error::MEGA-$wave: incomplete submission, missing $file"
+                return 1
+              fi
+            done
+            echo "MEGA-$wave: DELIVERED_UNVERIFIED"
+          }
+          check_wave 08 \
+            "src/vip_lab/mega08/__init__.py" \
+            "src/vip_lab/mega08/capability_inventory.py" \
+            "src/vip_lab/mega08/contract_gate.py" \
+            "src/vip_lab/mega08/gap_digest.py" \
+            "tests/vip_lab/test_mega08.py"
+          check_wave 09 \
+            "src/vip_lab/mega09/__init__.py" \
+            "src/vip_lab/mega09/candidate_queue.py" \
+            "src/vip_lab/mega09/queue_validation.py" \
+            "src/vip_lab/mega09/review_intake.py" \
+            "tests/vip_lab/test_mega09.py"
+          check_wave 10 \
+            "src/vip_lab/mega10/__init__.py" \
+            "src/vip_lab/mega10/temporal_request.py" \
+            "src/vip_lab/mega10/pts_fixture_diagnostics.py" \
+            "src/vip_lab/mega10/measurement_boundary.py" \
+            "tests/vip_lab/test_mega10.py"
+          check_wave 11 \
+            "src/vip_lab/mega11/__init__.py" \
+            "src/vip_lab/mega11/editorial_proposal.py" \
+            "src/vip_lab/mega11/proposal_revisions.py" \
+            "src/vip_lab/mega11/decision_boundary.py" \
+            "tests/vip_lab/test_mega11.py"
+          check_wave 12 \
+            "src/vip_lab/mega12/__init__.py" \
+            "src/vip_lab/mega12/replay_graph.py" \
+            "src/vip_lab/mega12/fault_scenarios.py" \
+            "src/vip_lab/mega12/consistency_review.py" \
+            "tests/vip_lab/test_mega12.py"
+          check_wave 13 \
+            "src/vip_lab/mega13/__init__.py" \
+            "src/vip_lab/mega13/qc_readiness.py" \
+            "src/vip_lab/mega13/lineage_audit.py" \
+            "src/vip_lab/mega13/release_blockers.py" \
+            "tests/vip_lab/test_mega13.py"
+          check_wave 14 \
+            "src/vip_lab/mega14/__init__.py" \
+            "src/vip_lab/mega14/scenario.py" \
+            "src/vip_lab/mega14/orchestrator.py" \
+            "src/vip_lab/mega14/report.py" \
+            "src/vip_lab/mega14/cli.py" \
+            "tests/vip_lab/test_mega14.py" \
+            "tests/vip_lab/test_mega08_14_end_to_end.py"
+
+      - name: Test MEGA-08 synthetic integration
+        id: mega08
+        continue-on-error: true
+        if: ${{ hashFiles('tests/vip_lab/test_mega08.py') != '' }}
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q \
+            tests/vip_lab/test_mega08.py
+
+      - name: Test MEGA-09 synthetic integration
+        id: mega09
+        continue-on-error: true
+        if: ${{ hashFiles('tests/vip_lab/test_mega09.py') != '' }}
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q \
+            tests/vip_lab/test_mega09.py
+
+      - name: Test MEGA-10 synthetic integration
+        id: mega10
+        continue-on-error: true
+        if: ${{ hashFiles('tests/vip_lab/test_mega10.py') != '' }}
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q \
+            tests/vip_lab/test_mega10.py
+
+      - name: Test MEGA-11 synthetic integration
+        id: mega11
+        continue-on-error: true
+        if: ${{ hashFiles('tests/vip_lab/test_mega11.py') != '' }}
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q \
+            tests/vip_lab/test_mega11.py
+
+      - name: Test MEGA-12 synthetic integration
+        id: mega12
+        continue-on-error: true
+        if: ${{ hashFiles('tests/vip_lab/test_mega12.py') != '' }}
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q \
+            tests/vip_lab/test_mega12.py
+
+      - name: Test MEGA-13 synthetic integration
+        id: mega13
+        continue-on-error: true
+        if: ${{ hashFiles('tests/vip_lab/test_mega13.py') != '' }}
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q \
+            tests/vip_lab/test_mega13.py
+
+      - name: Test MEGA-14 synthetic integration
+        id: mega14
+        continue-on-error: true
+        if: ${{ hashFiles('tests/vip_lab/test_mega14.py') != '' }}
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q \
+            tests/vip_lab/test_mega14.py \
+            tests/vip_lab/test_mega08_14_end_to_end.py
+
+      - name: Enforce MEGA-08–14 wave outcomes
+        if: always()
+        env:
+          M08_COMPLETE: ${{ steps.mega0814complete.outcome }}
+          M08: ${{ steps.mega08.outcome }}
+          M09: ${{ steps.mega09.outcome }}
+          M10: ${{ steps.mega10.outcome }}
+          M11: ${{ steps.mega11.outcome }}
+          M12: ${{ steps.mega12.outcome }}
+          M13: ${{ steps.mega13.outcome }}
+          M14: ${{ steps.mega14.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "MEGA-08–14 outcomes (unsubmitted waves SKIPPED):"
+          echo "M08_COMPLETE=$M08_COMPLETE"
+          echo "M08=$M08"
+          echo "M09=$M09"
+          echo "M10=$M10"
+          echo "M11=$M11"
+          echo "M12=$M12"
+          echo "M13=$M13"
+          echo "M14=$M14"
+          for outcome in "$M08_COMPLETE" "$M08" "$M09" "$M10" "$M11" "$M12" "$M13" "$M14"; do
+            if [[ "$outcome" == "failure" ]]; then
+              echo "::error::MEGA-08–14 selected suite or completeness failed"
+              exit 1
+            fi
+          done
+          echo 'No submitted MEGA-08–14 suite failed. SKIPPED does not mean complete.'
