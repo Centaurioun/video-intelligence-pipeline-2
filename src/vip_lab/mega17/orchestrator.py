@@ -25,6 +25,7 @@ And tracks the 6 maturity levels (Section 12):
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -78,6 +79,76 @@ MATURITY_LEVELS: tuple[str, ...] = (
     "M4_AUTHORIZED_LOCAL_VALIDATED",
     "M5_GATE_EVIDENCE_COMPLETE",
 )
+
+
+def _validate_mega15_16_scenario_lineage(
+    scenario: SyntheticLabScenario,
+    preparation_packet: Any,
+) -> None:
+    """Require complete query/source/arm membership for the selected scenario."""
+    query_rows = preparation_packet.query_identities
+    occurrence_rows = preparation_packet.occurrence_identities
+    temporal_records = preparation_packet.temporal_records
+
+    query_by_item = {
+        row["queue_item_id"]: (row["query_id"], row["query_text"])
+        for row in query_rows
+    }
+    occurrence_by_item = {
+        row["queue_item_id"]: (
+            row["revision_id"],
+            row["content_id"],
+            row["source_path"],
+            row["source_sha256"],
+        )
+        for row in occurrence_rows
+    }
+    arm_by_item = {record.queue_item_id: record.arm_id for record in temporal_records}
+    item_ids = set(query_by_item)
+    actual_arms = set(arm_by_item.values())
+    expected_arm_count = 1 if scenario.mode == "SINGLE_ARM" else 3
+
+    if (
+        len(query_by_item) != len(query_rows)
+        or len(occurrence_by_item) != len(occurrence_rows)
+        or len(arm_by_item) != len(temporal_records)
+        or set(occurrence_by_item) != item_ids
+        or set(arm_by_item) != item_ids
+        or len(actual_arms) != expected_arm_count
+    ):
+        raise VipLabError(
+            "MEGA17_UPSTREAM_SCENARIO_MISMATCH",
+            "MEGA-15/16 queue-item, query, occurrence, or arm lineage is incomplete or duplicated.",
+        )
+
+    actual_membership = Counter(
+        (
+            query_by_item[item_id],
+            occurrence_by_item[item_id],
+            arm_by_item[item_id],
+        )
+        for item_id in item_ids
+    )
+    expected_membership = Counter(
+        (
+            (str(query["query_id"]), str(query["text"])),
+            (
+                str(source["revision_id"]),
+                str(source["content_id"]),
+                str(source["source_path"]),
+                str(source["source_sha256"]),
+            ),
+            arm_id,
+        )
+        for query in scenario.queries
+        for source in scenario.sources[: scenario.top_k]
+        for arm_id in actual_arms
+    )
+    if actual_membership != expected_membership:
+        raise VipLabError(
+            "MEGA17_UPSTREAM_SCENARIO_MISMATCH",
+            "MEGA-15/16 candidate lineage does not preserve the scenario's complete query/source/arm membership.",
+        )
 
 
 @dataclass(frozen=True)

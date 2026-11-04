@@ -9,6 +9,7 @@ import pytest
 from vip_lab.common import ReadinessStatus, VipLabError, canonical_sha256
 from vip_lab.mega14.scenario import default_single_arm_scenario, default_three_arm_scenario
 from vip_lab.mega16.release_refusal import run_mega15_16_offline_pipeline
+from vip_lab.mega17.orchestrator import _validate_mega15_16_scenario_lineage
 from vip_lab.mega17 import (
     MATURITY_LEVELS,
     MEGA17_REPORT_SCHEMA_VERSION,
@@ -140,6 +141,22 @@ def test_mega15_16_pipeline_preserves_custom_single_arm_membership() -> None:
     assert report.mode == scenario.mode
     assert report.workstream_d.lineage_spine["query_id"] == "q-mega17-pin"
     assert report.workstream_d.lineage_spine["source_revision_id"] == "rev-mega17-pin"
+
+
+def test_mega17_rejects_upstream_occurrence_drop_even_when_membership_sets_match() -> None:
+    scenario = default_three_arm_scenario()
+    packet = run_mega15_16_offline_pipeline(scenario=scenario).preparation_packet
+    tampered_packet = replace(
+        packet,
+        occurrence_identities=packet.occurrence_identities[:-1],
+    )
+    tampered_packet = replace(
+        tampered_packet,
+        packet_digest=canonical_sha256(tampered_packet._digest_payload()),
+    )
+
+    with pytest.raises(VipLabError, match="MEGA17_UPSTREAM_SCENARIO_MISMATCH"):
+        _validate_mega15_16_scenario_lineage(scenario, tampered_packet)
 
 
 def test_mega17_eight_readiness_dimensions_and_maturity_model_ceilings() -> None:
