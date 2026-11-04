@@ -1,3 +1,20 @@
+"""MEGA-15.2 — Non-Authoritative Editorial Decision & Plan Handoff Envelopes.
+
+Bridges MEGA-09 (`CandidateQueueItem`), MEGA-11 (`EditorialProposal` & revision chains),
+and MEGA-15.1 (`TemporalPreparationRecord`) into a non-authoritative Gate-3 handoff
+envelope while enforcing Gate-3's human-principal and measured-refinement boundaries.
+
+Strict Non-Negotiable Invariants:
+- Real human editorial decisions remain `NOT_OBSERVED`.
+- Only `HUMAN` principals can ever mint an accepting/modifying `EditorialDecision` in Gate-3;
+  `MODEL` and `TOOL` principals are unconditionally refused, and `HUMAN` is refused in
+  offline synthetic preparation because no real human review has been observed.
+- Synthetic `EditorialProposal` items cannot be promoted into authoritative
+  `gate3.plan.EditPlanRevision` or compiled via `gate3.plan.compile_handoff`.
+- Duplicate source occurrences (`same source_sha256`, distinct `source_path` / `revision_id` /
+  `content_id`) and identical `query_text` under distinct `query_id` are preserved 1-to-1.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,474 +23,966 @@ from typing import Any, Mapping, Sequence
 from gate3.editorial import EditorialDecision, ModelToolPrincipalError
 from gate3.plan import EditPlanRevision
 from vip_lab.common import (
-    FORBIDDEN_EXTERNAL_AUTHORITY_KEYS,
-    NOT_OBSERVED,
     SyntheticContextMarker,
-    VipLabError,
     canonical_sha256,
-    validate_hex_digest,
 )
 from vip_lab.mega09 import CandidateQueueItem, CandidateReviewQueue, verify_candidate_queue
 from vip_lab.mega11 import (
     ALLOWED_PROPOSED_ACTIONS,
     EditorialProposal,
+    verify_editorial_proposal,
     verify_proposal_revision_chain,
 )
 from vip_lab.mega15.temporal_preflight import (
+    REFUSAL_BINDING_ELIGIBILITY_ESCALATION,
+    REFUSAL_FORGED_SOURCE_MEASUREMENT,
     TemporalPreparationRecord,
+    ensure_non_empty_str,
+    make_synthetic_context,
+    parse_synthetic_context_dict,
+    raise_mega15_error,
+    serialize_synthetic_context,
+    validate_synthetic_context,
     verify_temporal_preparation_record,
 )
 
-REFUSAL_HUMAN_DECISION_NOT_OBSERVED = "REFUSAL_HUMAN_DECISION_NOT_OBSERVED"
-REFUSAL_MODEL_OR_TOOL_PRINCIPAL_FORBIDDEN = "REFUSAL_MODEL_OR_TOOL_PRINCIPAL_FORBIDDEN"
-REFUSAL_AUTHORITATIVE_EDIT_PLAN_FORBIDDEN = "REFUSAL_AUTHORITATIVE_EDIT_PLAN_FORBIDDEN"
-REFUSAL_REVIEW_BUNDLE_REAL_MEASURED_FORBIDDEN = "REFUSAL_REVIEW_BUNDLE_REAL_MEASURED_FORBIDDEN"
+EDITORIAL_HANDOFF_SCHEMA_VERSION = "1.0.0"
+EDITORIAL_HANDOFF_KIND = "vip_lab.mega15.editorial_handoff_envelope"
+PREPARATION_PACKET_KIND = "vip_lab.mega15.gate3_offline_preparation_packet"
+
+# Explicit refusal codes for MEGA-15.2
+REFUSAL_NON_HUMAN_PRINCIPAL = "REFUSAL_NON_HUMAN_EDITORIAL_PRINCIPAL_FORBIDDEN"
+REFUSAL_HUMAN_DECISION_NOT_OBSERVED = "REFUSAL_REAL_HUMAN_DECISION_NOT_OBSERVED"
+REFUSAL_PROPOSAL_AS_AUTHORITATIVE_PLAN = "REFUSAL_PROPOSAL_AS_AUTHORITATIVE_EDIT_PLAN_FORBIDDEN"
+REFUSAL_AUTHORITATIVE_EDIT_PLAN_FORBIDDEN = "REFUSAL_AUTHORITATIVE_EDIT_PLAN_MINTING_FORBIDDEN"
+REFUSAL_COMPILE_HANDOFF_FORBIDDEN = "REFUSAL_GATE3_COMPILE_HANDOFF_FORBIDDEN"
+REFUSAL_PROPOSAL_CHAIN_BROKEN = "REFUSAL_PROPOSAL_REVISION_CHAIN_BROKEN"
+REFUSAL_OCCURRENCE_IDENTITY_COLLAPSE = "REFUSAL_SOURCE_OCCURRENCE_IDENTITY_COLLAPSE"
+REFUSAL_QUERY_IDENTITY_COLLAPSE = "REFUSAL_QUERY_IDENTITY_COLLAPSE"
+REFUSAL_CROSS_STAGE_JOIN_MISMATCH = "REFUSAL_CROSS_STAGE_JOIN_MISMATCH"
 
 
 def refuse_non_human_or_unobserved_principal(
-    principal_kind: str,
     *,
-    claim_real_human_approval: bool = False,
+    principal_kind: str,
+    real_human_decision_state: str = "NOT_OBSERVED",
+    claim_human_approval: bool = False,
 ) -> None:
-    try:
-        decision = EditorialDecision(
-            decision_id="preflight_principal_probe",
-            refinement_id="ref_probe",
-            principal_id="principal_probe",
-            principal_kind=principal_kind,
-            action="ACCEPT",
-            timestamp_utc="2026-11-04T00:00:00Z",
-        )
-    except ModelToolPrincipalError as exc:
-        raise VipLabError(
-            f"{REFUSAL_MODEL_OR_TOOL_PRINCIPAL_FORBIDDEN}: {exc}"
-        ) from exc
-
-    if decision.principal_authority_evidence is not None:
-        raise VipLabError(
-            f"{REFUSAL_HUMAN_DECISION_NOT_OBSERVED}: principal_authority_evidence must remain None in synthetic mode."
-        )
-    if claim_real_human_approval or principal_kind == "human":
-        if claim_real_human_approval:
-            raise VipLabError(
-                f"{REFUSAL_HUMAN_DECISION_NOT_OBSERVED}: real human editorial approval is NOT_OBSERVED in synthetic lab preparation."
-            )
-
-
-def refuse_authoritative_handoff_minting(payload: Mapping[str, Any]) -> None:
-    if not isinstance(payload, Mapping):
-        raise VipLabError("Handoff minting check requires a mapping payload.")
-    forbidden_present = sorted(
-        k for k in FORBIDDEN_EXTERNAL_AUTHORITY_KEYS if bool(payload.get(k))
+    """Fail closed if a caller attempts to mint an EditorialDecision in synthetic offline preparation."""
+    probe_kind = "human" if principal_kind == "HUMAN" else principal_kind
+    principal_ref = (
+        f"{principal_kind.lower()}:synthetic_probe"
+        if principal_kind in ("MODEL", "TOOL")
+        else "fixture:principal_probe"
     )
-    if forbidden_present:
-        raise VipLabError(
-            f"{REFUSAL_HUMAN_DECISION_NOT_OBSERVED}: forbidden authority keys asserted: {forbidden_present}"
+    try:
+        EditorialDecision(
+            decision_id="preflight_principal_probe",
+            principal_kind=probe_kind,
+            principal_ref=principal_ref,
+            decided_on_refinement="ref_probe",
+            decided_on_revision=1,
+            decision_class="ACCEPT",
+            rationale="Synthetic principal preflight check.",
+            fixture_scope="SYNTHETIC_FIXTURE",
+        )
+    except (ModelToolPrincipalError, TypeError, ValueError) as exc:
+        raise_mega15_error(
+            REFUSAL_NON_HUMAN_PRINCIPAL,
+            f"Non-HUMAN principal {principal_kind!r} cannot mint an EditorialDecision: {exc}",
         )
 
-    artifact_kind = str(payload.get("artifact_kind", ""))
-    if artifact_kind == "HumanDecisionArtifact" or bool(payload.get("human_decision_artifact_minted")):
-        raise VipLabError(
-            f"{REFUSAL_HUMAN_DECISION_NOT_OBSERVED}: cannot mint HumanDecisionArtifact in synthetic offline preparation."
+    if principal_kind not in ("HUMAN", "human", "SYNTHETIC_HUMAN"):
+        raise_mega15_error(
+            REFUSAL_NON_HUMAN_PRINCIPAL,
+            f"Only 'HUMAN' principal exists in Gate-3; got {principal_kind!r}",
         )
-    if artifact_kind == "ReviewBundle" and payload.get("source_pts_evidence_state") == "MEASURED":
-        raise VipLabError(
-            f"{REFUSAL_REVIEW_BUNDLE_REAL_MEASURED_FORBIDDEN}: synthetic preparation cannot mint ReviewBundle claiming real MEASURED source PTS."
+
+    if real_human_decision_state != "OBSERVED" or claim_human_approval:
+        raise_mega15_error(
+            REFUSAL_HUMAN_DECISION_NOT_OBSERVED,
+            "Real HUMAN editorial decision is NOT_OBSERVED in synthetic offline preparation; "
+            "cannot mint an authoritative Gate-3 EditorialDecision.",
         )
-    if artifact_kind == "EditPlanRevision" or bool(payload.get("authoritative_edit_plan_created")) or bool(payload.get("export_eligible")):
-        # Also verify that gate3.plan.EditPlanRevision.export_eligible is False on synthetic/unmeasured inputs
-        probe_plan = EditPlanRevision(
-            plan_id="probe_plan",
-            revision=1,
-            decisions=(),
-            pinned_refinements={},
+
+
+def refuse_authoritative_handoff_minting(
+    *,
+    attempt_edit_plan: bool = False,
+    attempt_compile_handoff: bool = False,
+    attempt_promote_proposal: bool = False,
+) -> None:
+    """Fail closed if a caller attempts to mint an EditPlanRevision or call compile_handoff."""
+    if attempt_promote_proposal:
+        raise_mega15_error(
+            REFUSAL_PROPOSAL_AS_AUTHORITATIVE_PLAN,
+            "Synthetic EditorialProposal cannot be promoted to an authoritative EditPlanRevision.",
         )
-        if probe_plan.export_eligible:
-            raise VipLabError("Unexpected export_eligible=True on empty EditPlanRevision.")
-        raise VipLabError(
-            f"{REFUSAL_AUTHORITATIVE_EDIT_PLAN_FORBIDDEN}: cannot create authoritative EditPlanRevision or claim export_eligible=True in synthetic offline preparation."
+    if attempt_edit_plan:
+        # Demonstrate that Gate-3 EditPlanRevision itself refuses unpinned/unmeasured plans
+        try:
+            EditPlanRevision(
+                plan_id="forbidden_synthetic_plan",
+                plan_revision=1,
+                placements=[],
+                pinned_refinements={},
+                pinned_decisions={},
+                plan_scope="SYNTHETIC_FIXTURE",
+            )
+        except (ValueError, TypeError):
+            pass
+        raise_mega15_error(
+            REFUSAL_AUTHORITATIVE_EDIT_PLAN_FORBIDDEN,
+            "Minting an authoritative Gate-3 EditPlanRevision is forbidden in offline synthetic preparation; "
+            "requires real source PTS measurement and real HUMAN EditorialDecision.",
+        )
+    if attempt_compile_handoff:
+        raise_mega15_error(
+            REFUSAL_COMPILE_HANDOFF_FORBIDDEN,
+            "Calling gate3.plan.compile_handoff is forbidden when source PTS measurement and "
+            "real HUMAN editorial decisions are NOT_OBSERVED.",
+        )
+
+
+@dataclass(frozen=True)
+class EditorialProposalRevisionEntry:
+    """Immutable revision link inside an `EditorialHandoffEnvelope`."""
+
+    proposal_id: str
+    proposal_version: int
+    proposed_action: str
+    rationale_note: str
+    parent_proposal_digest: str | None
+    proposal_digest: str
+
+    @property
+    def revision_number(self) -> int:
+        """Compatibility alias for ``proposal_version``."""
+        return self.proposal_version
+
+    @property
+    def rationale(self) -> str:
+        """Compatibility alias for ``rationale_note``."""
+        return self.rationale_note
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "proposal_id": self.proposal_id,
+            "proposal_version": self.proposal_version,
+            "proposed_action": self.proposed_action,
+            "rationale_note": self.rationale_note,
+            "parent_proposal_digest": self.parent_proposal_digest,
+            "proposal_digest": self.proposal_digest,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "EditorialProposalRevisionEntry":
+        if not isinstance(payload, Mapping):
+            raise_mega15_error(
+                REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                "Revision entry must be a mapping",
+            )
+        parent = payload.get("parent_proposal_digest")
+        version_val = payload.get(
+            "proposal_version", payload.get("revision_number", 0)
+        )
+        rationale_val = payload.get(
+            "rationale_note", payload.get("rationale", "")
+        )
+        return cls(
+            proposal_id=str(payload.get("proposal_id", "")),
+            proposal_version=int(version_val),
+            proposed_action=str(payload.get("proposed_action", "")),
+            rationale_note=str(rationale_val),
+            parent_proposal_digest=None if parent is None else str(parent),
+            proposal_digest=str(payload.get("proposal_digest", "")),
         )
 
 
 @dataclass(frozen=True)
 class EditorialHandoffEnvelope:
-    handoff_id: str
-    queue_id: str
+    """Non-authoritative Gate-3 editorial handoff preparation envelope."""
+
+    schema_version: str
+    kind: str
+    envelope_id: str
     queue_item_id: str
-    candidate_id: str
+    arm_id: str
+    profile_id: str
     query_id: str
     query_text: str
-    arm_id: str
-    source_id: str
-    source_revision_id: str
-    source_sha256: str
+    revision_id: str
+    content_id: str
     source_path: str
-    selected_stream_index: int
-    time_base: str
-    preparation_id: str
-    preparation_digest: str
-    active_proposal_id: str
-    active_revision_number: int
-    active_proposal_digest: str
-    revision_chain_digests: tuple[str, ...]
-    proposed_action: str
-    proposed_interval_ticks: tuple[int, int]
-    evidence_class: str
+    source_sha256: str
+    temporal_record_id: str
+    temporal_record_digest: str
+    proposal_id: str
+    latest_proposal_version: int
+    latest_proposed_action: str
+    latest_rationale_note: str
+    latest_proposal_digest: str
+    revision_history: tuple[EditorialProposalRevisionEntry, ...]
     real_human_decision_state: str
-    human_decision_artifact_minted: bool
-    authoritative_edit_plan_created: bool
-    source_native_exact_edit_eligible: bool
-    production_export_authorized: bool
+    accepted_authority: bool
+    is_edit_plan: bool
+    is_compiled_handoff: bool
+    authoritative_plan_eligible: bool
+    binding_eligible: bool
+    synthetic_context: SyntheticContextMarker
     envelope_digest: str
 
-    def _body_without_digest(self) -> dict[str, Any]:
+    @property
+    def candidate_item_id(self) -> str:
+        """Compatibility alias for ``queue_item_id``."""
+        return self.queue_item_id
+
+    @property
+    def source_revision_id(self) -> str:
+        """Compatibility alias for ``revision_id``."""
+        return self.revision_id
+
+    @property
+    def latest_revision_number(self) -> int:
+        """Compatibility alias for ``latest_proposal_version``."""
+        return self.latest_proposal_version
+
+    @property
+    def latest_rationale(self) -> str:
+        """Compatibility alias for ``latest_rationale_note``."""
+        return self.latest_rationale_note
+
+    def _digest_payload(self) -> dict[str, Any]:
         return {
-            "handoff_id": self.handoff_id,
-            "queue_id": self.queue_id,
+            "schema_version": self.schema_version,
+            "kind": self.kind,
+            "envelope_id": self.envelope_id,
             "queue_item_id": self.queue_item_id,
-            "candidate_id": self.candidate_id,
+            "arm_id": self.arm_id,
+            "profile_id": self.profile_id,
             "query_id": self.query_id,
             "query_text": self.query_text,
-            "arm_id": self.arm_id,
-            "source_id": self.source_id,
-            "source_revision_id": self.source_revision_id,
-            "source_sha256": self.source_sha256,
+            "revision_id": self.revision_id,
+            "content_id": self.content_id,
             "source_path": self.source_path,
-            "selected_stream_index": self.selected_stream_index,
-            "time_base": self.time_base,
-            "preparation_id": self.preparation_id,
-            "preparation_digest": self.preparation_digest,
-            "active_proposal_id": self.active_proposal_id,
-            "active_revision_number": self.active_revision_number,
-            "active_proposal_digest": self.active_proposal_digest,
-            "revision_chain_digests": list(self.revision_chain_digests),
-            "proposed_action": self.proposed_action,
-            "proposed_interval_ticks": list(self.proposed_interval_ticks),
-            "evidence_class": self.evidence_class,
+            "source_sha256": self.source_sha256,
+            "temporal_record_id": self.temporal_record_id,
+            "temporal_record_digest": self.temporal_record_digest,
+            "proposal_id": self.proposal_id,
+            "latest_proposal_version": self.latest_proposal_version,
+            "latest_proposed_action": self.latest_proposed_action,
+            "latest_rationale_note": self.latest_rationale_note,
+            "latest_proposal_digest": self.latest_proposal_digest,
+            "revision_history": [entry.to_dict() for entry in self.revision_history],
             "real_human_decision_state": self.real_human_decision_state,
-            "human_decision_artifact_minted": self.human_decision_artifact_minted,
-            "authoritative_edit_plan_created": self.authoritative_edit_plan_created,
-            "source_native_exact_edit_eligible": self.source_native_exact_edit_eligible,
-            "production_export_authorized": self.production_export_authorized,
+            "accepted_authority": self.accepted_authority,
+            "is_edit_plan": self.is_edit_plan,
+            "is_compiled_handoff": self.is_compiled_handoff,
+            "authoritative_plan_eligible": self.authoritative_plan_eligible,
+            "binding_eligible": self.binding_eligible,
+            "synthetic_context": serialize_synthetic_context(self.synthetic_context),
         }
 
     def to_dict(self) -> dict[str, Any]:
-        body = self._body_without_digest()
-        body["envelope_digest"] = self.envelope_digest
-        return body
+        payload = self._digest_payload()
+        payload["envelope_digest"] = self.envelope_digest
+        return payload
+
+    def validate(self) -> None:
+        if self.schema_version != EDITORIAL_HANDOFF_SCHEMA_VERSION:
+            raise_mega15_error(
+                "EDITORIAL_HANDOFF_SCHEMA_MISMATCH",
+                f"Unsupported schema_version: {self.schema_version!r}",
+            )
+        if self.kind != EDITORIAL_HANDOFF_KIND:
+            raise_mega15_error(
+                "EDITORIAL_HANDOFF_KIND_MISMATCH",
+                f"Unsupported kind: {self.kind!r}",
+            )
+        ensure_non_empty_str(self.envelope_id, "envelope_id")
+        ensure_non_empty_str(self.queue_item_id, "queue_item_id")
+        ensure_non_empty_str(self.arm_id, "arm_id")
+        ensure_non_empty_str(self.profile_id, "profile_id")
+        ensure_non_empty_str(self.query_id, "query_id")
+        ensure_non_empty_str(self.query_text, "query_text")
+        ensure_non_empty_str(self.revision_id, "revision_id")
+        ensure_non_empty_str(self.content_id, "content_id")
+        ensure_non_empty_str(self.source_path, "source_path")
+        ensure_non_empty_str(self.source_sha256, "source_sha256")
+        ensure_non_empty_str(self.temporal_record_id, "temporal_record_id")
+        ensure_non_empty_str(self.temporal_record_digest, "temporal_record_digest")
+        ensure_non_empty_str(self.proposal_id, "proposal_id")
+        ensure_non_empty_str(self.latest_rationale_note, "latest_rationale_note")
+        ensure_non_empty_str(self.latest_proposal_digest, "latest_proposal_digest")
+
+        validate_synthetic_context(self.synthetic_context)
+
+        if self.real_human_decision_state != "NOT_OBSERVED":
+            raise_mega15_error(
+                REFUSAL_HUMAN_DECISION_NOT_OBSERVED,
+                f"real_human_decision_state must remain 'NOT_OBSERVED', got {self.real_human_decision_state!r}",
+            )
+        if self.accepted_authority is not False:
+            raise_mega15_error(
+                REFUSAL_PROPOSAL_AS_AUTHORITATIVE_PLAN,
+                "accepted_authority must remain False in synthetic handoff envelope",
+            )
+        if self.is_edit_plan is not False:
+            raise_mega15_error(
+                REFUSAL_AUTHORITATIVE_EDIT_PLAN_FORBIDDEN,
+                "is_edit_plan must remain False in synthetic handoff envelope",
+            )
+        if self.is_compiled_handoff is not False:
+            raise_mega15_error(
+                REFUSAL_COMPILE_HANDOFF_FORBIDDEN,
+                "is_compiled_handoff must remain False in synthetic handoff envelope",
+            )
+        if self.authoritative_plan_eligible is not False:
+            raise_mega15_error(
+                REFUSAL_AUTHORITATIVE_EDIT_PLAN_FORBIDDEN,
+                "authoritative_plan_eligible must remain False in synthetic handoff envelope",
+            )
+        if self.binding_eligible is not False:
+            raise_mega15_error(
+                REFUSAL_BINDING_ELIGIBILITY_ESCALATION,
+                "binding_eligible must remain False in synthetic handoff envelope",
+            )
+        if self.latest_proposed_action not in ALLOWED_PROPOSED_ACTIONS:
+            raise_mega15_error(
+                "EDITORIAL_HANDOFF_INVALID_ACTION",
+                f"Unsupported proposed_action: {self.latest_proposed_action!r}",
+            )
+        if not self.revision_history:
+            raise_mega15_error(
+                REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                "revision_history must contain at least one proposal revision",
+            )
+
+        prev_digest: str | None = None
+        for idx, entry in enumerate(self.revision_history, start=1):
+            ensure_non_empty_str(entry.proposal_id, f"revision_history[{idx}].proposal_id")
+            if entry.proposal_version != idx:
+                raise_mega15_error(
+                    REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                    f"Revision version must be contiguous starting at 1; expected {idx}, got {entry.proposal_version}",
+                )
+            if entry.proposed_action not in ALLOWED_PROPOSED_ACTIONS:
+                raise_mega15_error(
+                    "EDITORIAL_HANDOFF_INVALID_ACTION",
+                    f"Unsupported proposed_action in history: {entry.proposed_action!r}",
+                )
+            ensure_non_empty_str(entry.rationale_note, f"revision_history[{idx}].rationale_note")
+            ensure_non_empty_str(entry.proposal_digest, f"revision_history[{idx}].proposal_digest")
+            if idx == 1:
+                if entry.parent_proposal_digest is not None:
+                    raise_mega15_error(
+                        REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                        "First revision must have parent_proposal_digest=None",
+                    )
+            else:
+                if entry.parent_proposal_digest != prev_digest:
+                    raise_mega15_error(
+                        REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                        f"Revision {idx} parent_proposal_digest {entry.parent_proposal_digest!r} != "
+                        f"previous digest {prev_digest!r}",
+                    )
+            prev_digest = entry.proposal_digest
+
+        last_entry = self.revision_history[-1]
+        if (
+            self.proposal_id != last_entry.proposal_id
+            or self.latest_proposal_version != last_entry.proposal_version
+            or self.latest_proposed_action != last_entry.proposed_action
+            or self.latest_rationale_note != last_entry.rationale_note
+            or self.latest_proposal_digest != last_entry.proposal_digest
+        ):
+            raise_mega15_error(
+                REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                "Envelope latest_* fields do not match tip of revision_history",
+            )
+
+        expected_digest = canonical_sha256(self._digest_payload())
+        if self.envelope_digest != expected_digest:
+            raise_mega15_error(
+                "EDITORIAL_HANDOFF_DIGEST_MISMATCH",
+                f"envelope_digest mismatch: expected {expected_digest}, got {self.envelope_digest}",
+            )
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> EditorialHandoffEnvelope:
+    def from_dict(cls, payload: Mapping[str, Any]) -> "EditorialHandoffEnvelope":
         if not isinstance(payload, Mapping):
-            raise VipLabError("EditorialHandoffEnvelope payload must be a mapping.")
-        refuse_authoritative_handoff_minting(payload)
-        if payload.get("real_human_decision_state") != NOT_OBSERVED:
-            raise VipLabError(
-                f"{REFUSAL_HUMAN_DECISION_NOT_OBSERVED}: real_human_decision_state must be {NOT_OBSERVED!r}."
+            raise_mega15_error(
+                "EDITORIAL_HANDOFF_INVALID_PAYLOAD",
+                "Payload must be a mapping",
             )
-        interval = payload["proposed_interval_ticks"]
-        env = cls(
-            handoff_id=str(payload["handoff_id"]),
-            queue_id=str(payload["queue_id"]),
-            queue_item_id=str(payload["queue_item_id"]),
-            candidate_id=str(payload["candidate_id"]),
-            query_id=str(payload["query_id"]),
-            query_text=str(payload["query_text"]),
-            arm_id=str(payload["arm_id"]),
-            source_id=str(payload["source_id"]),
-            source_revision_id=str(payload["source_revision_id"]),
-            source_sha256=validate_hex_digest(str(payload["source_sha256"]), field_name="source_sha256"),
-            source_path=str(payload["source_path"]),
-            selected_stream_index=int(payload["selected_stream_index"]),
-            time_base=str(payload["time_base"]),
-            preparation_id=str(payload["preparation_id"]),
-            preparation_digest=validate_hex_digest(str(payload["preparation_digest"]), field_name="preparation_digest"),
-            active_proposal_id=str(payload["active_proposal_id"]),
-            active_revision_number=int(payload["active_revision_number"]),
-            active_proposal_digest=validate_hex_digest(str(payload["active_proposal_digest"]), field_name="active_proposal_digest"),
-            revision_chain_digests=tuple(
-                validate_hex_digest(str(d), field_name="revision_chain_digest")
-                for d in payload["revision_chain_digests"]
+        raw_ctx = payload.get("synthetic_context")
+        if not isinstance(raw_ctx, Mapping):
+            raise_mega15_error(
+                "EDITORIAL_HANDOFF_INVALID_SYNTHETIC_CONTEXT",
+                "synthetic_context must be a mapping",
+            )
+        raw_history = payload.get("revision_history")
+        if not isinstance(raw_history, Sequence) or isinstance(raw_history, (str, bytes)):
+            raise_mega15_error(
+                REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                "revision_history must be a sequence",
+            )
+        history = tuple(EditorialProposalRevisionEntry.from_dict(item) for item in raw_history)
+        envelope = cls(
+            schema_version=str(payload.get("schema_version", "")),
+            kind=str(payload.get("kind", "")),
+            envelope_id=str(payload.get("envelope_id", "")),
+            queue_item_id=str(
+                payload.get("queue_item_id", payload.get("candidate_item_id", ""))
             ),
-            proposed_action=str(payload["proposed_action"]),
-            proposed_interval_ticks=(int(interval[0]), int(interval[1])),
-            evidence_class=str(payload["evidence_class"]),
-            real_human_decision_state=NOT_OBSERVED,
-            human_decision_artifact_minted=bool(payload["human_decision_artifact_minted"]),
-            authoritative_edit_plan_created=bool(payload["authoritative_edit_plan_created"]),
-            source_native_exact_edit_eligible=bool(payload["source_native_exact_edit_eligible"]),
-            production_export_authorized=bool(payload["production_export_authorized"]),
-            envelope_digest=validate_hex_digest(str(payload["envelope_digest"]), field_name="envelope_digest"),
+            arm_id=str(payload.get("arm_id", "")),
+            profile_id=str(payload.get("profile_id", "")),
+            query_id=str(payload.get("query_id", "")),
+            query_text=str(payload.get("query_text", "")),
+            revision_id=str(
+                payload.get("revision_id", payload.get("source_revision_id", ""))
+            ),
+            content_id=str(payload.get("content_id", "")),
+            source_path=str(payload.get("source_path", "")),
+            source_sha256=str(payload.get("source_sha256", "")),
+            temporal_record_id=str(payload.get("temporal_record_id", "")),
+            temporal_record_digest=str(payload.get("temporal_record_digest", "")),
+            proposal_id=str(payload.get("proposal_id", "")),
+            latest_proposal_version=int(
+                payload.get(
+                    "latest_proposal_version",
+                    payload.get("latest_revision_number", 0),
+                )
+            ),
+            latest_proposed_action=str(payload.get("latest_proposed_action", "")),
+            latest_rationale_note=str(
+                payload.get(
+                    "latest_rationale_note", payload.get("latest_rationale", "")
+                )
+            ),
+            latest_proposal_digest=str(payload.get("latest_proposal_digest", "")),
+            revision_history=history,
+            real_human_decision_state=str(payload.get("real_human_decision_state", "")),
+            accepted_authority=bool(payload.get("accepted_authority", True)),
+            is_edit_plan=bool(payload.get("is_edit_plan", True)),
+            is_compiled_handoff=bool(payload.get("is_compiled_handoff", True)),
+            authoritative_plan_eligible=bool(payload.get("authoritative_plan_eligible", True)),
+            binding_eligible=bool(payload.get("binding_eligible", True)),
+            synthetic_context=parse_synthetic_context_dict(raw_ctx),
+            envelope_digest=str(payload.get("envelope_digest", "")),
         )
-        verify_editorial_handoff_envelope(env)
-        return env
+        envelope.validate()
+        return envelope
 
 
 def build_editorial_handoff_envelope(
     *,
-    queue_id: str = "queue_default",
-    queue_item: CandidateQueueItem,
+    candidate_item: CandidateQueueItem,
     temporal_record: TemporalPreparationRecord,
-    proposal_chain: Sequence[EditorialProposal],
+    proposal_revisions: Sequence[EditorialProposal],
+    principal_kind: str | None = None,
+    claim_human_approval: bool = False,
+    attempt_edit_plan: bool = False,
+    attempt_compile_handoff: bool = False,
+    attempt_promote_proposal: bool = False,
 ) -> EditorialHandoffEnvelope:
-    verify_temporal_preparation_record(temporal_record)
-    verify_proposal_revision_chain(proposal_chain)
-
-    if queue_item.queue_item_id != temporal_record.queue_item_id:
-        raise VipLabError("queue_item_id mismatch between queue_item and temporal_record.")
-    if queue_item.candidate_id != temporal_record.candidate_id:
-        raise VipLabError("candidate_id mismatch between queue_item and temporal_record.")
-    if queue_item.source_id != temporal_record.source_id:
-        raise VipLabError("source_id mismatch between queue_item and temporal_record.")
-    if queue_item.source_revision_id != temporal_record.source_revision_id:
-        raise VipLabError("source_revision_id mismatch between queue_item and temporal_record.")
-    if queue_item.source_sha256 != temporal_record.source_sha256:
-        raise VipLabError("source_sha256 mismatch between queue_item and temporal_record.")
-    if queue_item.source_path != temporal_record.source_path:
-        raise VipLabError("source_path mismatch between queue_item and temporal_record.")
-    if queue_item.selected_stream_index != temporal_record.selected_stream_index:
-        raise VipLabError("selected_stream_index mismatch between queue_item and temporal_record.")
-    if queue_item.time_base != temporal_record.time_base:
-        raise VipLabError("time_base mismatch between queue_item and temporal_record.")
-
-    tip = proposal_chain[-1]
-    if tip.queue_item_id != queue_item.queue_item_id:
-        raise VipLabError("proposal_chain tip queue_item_id mismatch.")
-    if tip.candidate_id != queue_item.candidate_id:
-        raise VipLabError("proposal_chain tip candidate_id mismatch.")
-    if tip.refinement_request_id != temporal_record.refinement_request_id:
-        raise VipLabError("proposal_chain tip refinement_request_id mismatch.")
-    if tip.source_sha256 != queue_item.source_sha256:
-        raise VipLabError("proposal_chain tip source_sha256 mismatch.")
-    if tip.selected_stream_index != queue_item.selected_stream_index:
-        raise VipLabError("proposal_chain tip selected_stream_index mismatch.")
-    if tip.time_base != queue_item.time_base:
-        raise VipLabError("proposal_chain tip time_base mismatch.")
-
-    temp = EditorialHandoffEnvelope(
-        handoff_id=f"handoff_{queue_item.queue_item_id}_r{tip.revision_number}",
-        queue_id=queue_id,
-        queue_item_id=queue_item.queue_item_id,
-        candidate_id=queue_item.candidate_id,
-        query_id=queue_item.query_id,
-        query_text=queue_item.query_text,
-        arm_id=queue_item.arm_id,
-        source_id=queue_item.source_id,
-        source_revision_id=queue_item.source_revision_id,
-        source_sha256=queue_item.source_sha256,
-        source_path=queue_item.source_path,
-        selected_stream_index=queue_item.selected_stream_index,
-        time_base=queue_item.time_base,
-        preparation_id=temporal_record.preparation_id,
-        preparation_digest=temporal_record.record_digest,
-        active_proposal_id=tip.proposal_id,
-        active_revision_number=tip.revision_number,
-        active_proposal_digest=tip.proposal_digest,
-        revision_chain_digests=tuple(p.proposal_digest for p in proposal_chain),
-        proposed_action=tip.proposed_action,
-        proposed_interval_ticks=(tip.proposed_start_ticks, tip.proposed_end_ticks),
-        evidence_class="EDITORIAL_INFERENCE",
-        real_human_decision_state=NOT_OBSERVED,
-        human_decision_artifact_minted=False,
-        authoritative_edit_plan_created=False,
-        source_native_exact_edit_eligible=False,
-        production_export_authorized=False,
-        envelope_digest="0" * 64,
+    """Build a verified non-authoritative `EditorialHandoffEnvelope` for a single candidate occurrence."""
+    if principal_kind is not None or claim_human_approval:
+        refuse_non_human_or_unobserved_principal(
+            principal_kind=principal_kind or "HUMAN",
+            real_human_decision_state="NOT_OBSERVED",
+            claim_human_approval=claim_human_approval,
+        )
+    refuse_authoritative_handoff_minting(
+        attempt_edit_plan=attempt_edit_plan,
+        attempt_compile_handoff=attempt_compile_handoff,
+        attempt_promote_proposal=attempt_promote_proposal,
     )
-    digest = canonical_sha256(temp._body_without_digest())
-    env = EditorialHandoffEnvelope(**{**temp.__dict__, "envelope_digest": digest})
-    verify_editorial_handoff_envelope(env)
-    return env
+
+    if not isinstance(candidate_item, CandidateQueueItem):
+        raise_mega15_error(
+            "EDITORIAL_HANDOFF_INVALID_CANDIDATE_ITEM",
+            "candidate_item must be a CandidateQueueItem instance",
+        )
+    verify_temporal_preparation_record(temporal_record)
+
+    if not isinstance(proposal_revisions, Sequence) or not proposal_revisions:
+        raise_mega15_error(
+            REFUSAL_PROPOSAL_CHAIN_BROKEN,
+            "proposal_revisions must be a non-empty sequence of EditorialProposal",
+        )
+
+    for prop in proposal_revisions:
+        if not isinstance(prop, EditorialProposal):
+            raise_mega15_error(
+                REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                "All elements of proposal_revisions must be EditorialProposal instances",
+            )
+        if prop.accepted_authority is not False or prop.is_edit_plan is not False:
+            raise_mega15_error(
+                REFUSAL_PROPOSAL_AS_AUTHORITATIVE_PLAN,
+                "EditorialProposal cannot claim accepted_authority or is_edit_plan",
+            )
+        if prop.human_decision_state != "NOT_OBSERVED":
+            raise_mega15_error(
+                REFUSAL_HUMAN_DECISION_NOT_OBSERVED,
+                f"EditorialProposal human_decision_state must be 'NOT_OBSERVED', got {prop.human_decision_state!r}",
+            )
+        if prop.binding_eligible is not False:
+            raise_mega15_error(
+                REFUSAL_BINDING_ELIGIBILITY_ESCALATION,
+                "EditorialProposal binding_eligible must be False",
+            )
+        try:
+            verify_editorial_proposal(prop.to_dict())
+        except Exception as exc:
+            raise_mega15_error(
+                REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                f"EditorialProposal failed canonical verification: {exc}",
+            )
+
+    try:
+        verify_proposal_revision_chain([prop.to_dict() for prop in proposal_revisions])
+    except Exception as exc:
+        raise_mega15_error(
+            REFUSAL_PROPOSAL_CHAIN_BROKEN,
+            f"Proposal revision chain verification failed: {exc}",
+        )
+
+    if candidate_item.binding_eligible is not False or candidate_item.evidence_class != "MATCHED":
+        raise_mega15_error(
+            REFUSAL_BINDING_ELIGIBILITY_ESCALATION,
+            "CandidateQueueItem must remain MATCHED and binding_eligible=False",
+        )
+    if candidate_item.human_decision_state != "NOT_OBSERVED":
+        raise_mega15_error(
+            REFUSAL_HUMAN_DECISION_NOT_OBSERVED,
+            "CandidateQueueItem human_decision_state must remain NOT_OBSERVED",
+        )
+    if candidate_item.synthetic_only is not True or candidate_item.authentic_model_evidence is not False:
+        raise_mega15_error(
+            REFUSAL_FORGED_SOURCE_MEASUREMENT,
+            "CandidateQueueItem must remain synthetic_only=True and authentic_model_evidence=False",
+        )
+
+    # Verify strict cross-stage occurrence & identity alignment between candidate_item and temporal_record
+    if (
+        candidate_item.queue_item_id != temporal_record.queue_item_id
+        or candidate_item.revision_id != temporal_record.revision_id
+        or candidate_item.content_id != temporal_record.content_id
+        or candidate_item.source_path != temporal_record.source_path
+        or candidate_item.source_sha256 != temporal_record.source_sha256
+        or candidate_item.query_id != temporal_record.query_id
+        or candidate_item.arm_id != temporal_record.arm_id
+        or candidate_item.profile_id != temporal_record.profile_id
+    ):
+        raise_mega15_error(
+            REFUSAL_CROSS_STAGE_JOIN_MISMATCH,
+            "CandidateQueueItem and TemporalPreparationRecord identity fields do not match",
+        )
+
+    history_entries: list[EditorialProposalRevisionEntry] = []
+    prev_digest: str | None = None
+    for idx, prop in enumerate(proposal_revisions, start=1):
+        if prop.proposal_version != idx:
+            raise_mega15_error(
+                REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                f"Expected proposal_version={idx}, got {prop.proposal_version}",
+            )
+        if idx == 1 and prop.parent_proposal_digest is not None:
+            raise_mega15_error(
+                REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                "Revision 1 must have parent_proposal_digest=None",
+            )
+        if idx > 1 and prop.parent_proposal_digest != prev_digest:
+            raise_mega15_error(
+                REFUSAL_PROPOSAL_CHAIN_BROKEN,
+                f"Broken parent_proposal_digest link at revision {idx}",
+            )
+        if (
+            prop.queue_item_id != candidate_item.queue_item_id
+            or prop.temporal_request_id != temporal_record.upstream_request_id
+            or prop.upstream_temporal_request_digest != temporal_record.upstream_request_digest
+            or prop.revision_id != candidate_item.revision_id
+            or prop.source_path != candidate_item.source_path
+            or prop.source_sha256 != candidate_item.source_sha256
+        ):
+            raise_mega15_error(
+                REFUSAL_CROSS_STAGE_JOIN_MISMATCH,
+                f"Proposal revision {idx} does not match candidate/temporal identity",
+            )
+        history_entries.append(
+            EditorialProposalRevisionEntry(
+                proposal_id=prop.proposal_id,
+                proposal_version=prop.proposal_version,
+                proposed_action=prop.proposed_action,
+                rationale_note=prop.rationale_note,
+                parent_proposal_digest=prop.parent_proposal_digest,
+                proposal_digest=prop.proposal_digest,
+            )
+        )
+        prev_digest = prop.proposal_digest
+
+    latest = proposal_revisions[-1]
+    syn_ctx = make_synthetic_context()
+    envelope_id = f"ehandoff_{candidate_item.queue_item_id}_r{latest.proposal_version}"
+
+    provisional = EditorialHandoffEnvelope(
+        schema_version=EDITORIAL_HANDOFF_SCHEMA_VERSION,
+        kind=EDITORIAL_HANDOFF_KIND,
+        envelope_id=envelope_id,
+        queue_item_id=candidate_item.queue_item_id,
+        arm_id=candidate_item.arm_id,
+        profile_id=candidate_item.profile_id,
+        query_id=candidate_item.query_id,
+        query_text=candidate_item.query_text,
+        revision_id=candidate_item.revision_id,
+        content_id=candidate_item.content_id,
+        source_path=candidate_item.source_path,
+        source_sha256=candidate_item.source_sha256,
+        temporal_record_id=temporal_record.record_id,
+        temporal_record_digest=temporal_record.record_digest,
+        proposal_id=latest.proposal_id,
+        latest_proposal_version=latest.proposal_version,
+        latest_proposed_action=latest.proposed_action,
+        latest_rationale_note=latest.rationale_note,
+        latest_proposal_digest=latest.proposal_digest,
+        revision_history=tuple(history_entries),
+        real_human_decision_state="NOT_OBSERVED",
+        accepted_authority=False,
+        is_edit_plan=False,
+        is_compiled_handoff=False,
+        authoritative_plan_eligible=False,
+        binding_eligible=False,
+        synthetic_context=syn_ctx,
+        envelope_digest="",
+    )
+    digest = canonical_sha256(provisional._digest_payload())
+    final_envelope = EditorialHandoffEnvelope(
+        **{**provisional.__dict__, "envelope_digest": digest}
+    )
+    final_envelope.validate()
+    return final_envelope
 
 
-def verify_editorial_handoff_envelope(envelope: EditorialHandoffEnvelope) -> None:
-    if not isinstance(envelope, EditorialHandoffEnvelope):
-        raise VipLabError("Expected EditorialHandoffEnvelope instance.")
-    validate_hex_digest(envelope.source_sha256, field_name="source_sha256")
-    validate_hex_digest(envelope.preparation_digest, field_name="preparation_digest")
-    validate_hex_digest(envelope.active_proposal_digest, field_name="active_proposal_digest")
-    validate_hex_digest(envelope.envelope_digest, field_name="envelope_digest")
-    if not envelope.revision_chain_digests:
-        raise VipLabError("revision_chain_digests must not be empty.")
-    if envelope.active_revision_number != len(envelope.revision_chain_digests):
-        raise VipLabError("active_revision_number must equal len(revision_chain_digests).")
-    if envelope.active_proposal_digest != envelope.revision_chain_digests[-1]:
-        raise VipLabError("active_proposal_digest must match final digest in revision_chain_digests.")
-    if envelope.proposed_action not in ALLOWED_PROPOSED_ACTIONS:
-        raise VipLabError(f"Unsupported proposed_action: {envelope.proposed_action!r}")
-    if envelope.evidence_class != "EDITORIAL_INFERENCE":
-        raise VipLabError("EditorialHandoffEnvelope.evidence_class must be 'EDITORIAL_INFERENCE'.")
-    if envelope.real_human_decision_state != NOT_OBSERVED:
-        raise VipLabError(
-            f"{REFUSAL_HUMAN_DECISION_NOT_OBSERVED}: real_human_decision_state must be {NOT_OBSERVED!r}."
-        )
-    if envelope.human_decision_artifact_minted is not False:
-        raise VipLabError("human_decision_artifact_minted must be False.")
-    if envelope.authoritative_edit_plan_created is not False:
-        raise VipLabError("authoritative_edit_plan_created must be False.")
-    if envelope.source_native_exact_edit_eligible is not False:
-        raise VipLabError("source_native_exact_edit_eligible must be False.")
-    if envelope.production_export_authorized is not False:
-        raise VipLabError("production_export_authorized must be False.")
-    expected_digest = canonical_sha256(envelope._body_without_digest())
-    if envelope.envelope_digest != expected_digest:
-        raise VipLabError(
-            f"EditorialHandoffEnvelope digest mismatch: expected {expected_digest}, got {envelope.envelope_digest}"
-        )
+def verify_editorial_handoff_envelope(
+    envelope: EditorialHandoffEnvelope | Mapping[str, Any],
+) -> EditorialHandoffEnvelope:
+    """Verify and return an `EditorialHandoffEnvelope`."""
+    if isinstance(envelope, EditorialHandoffEnvelope):
+        envelope.validate()
+        return envelope
+    return EditorialHandoffEnvelope.from_dict(envelope)
 
 
 @dataclass(frozen=True)
-class Gate3PreparationPacket:
-    packet_id: str
+class Gate3OfflinePreparationPacket:
+    """Combined MEGA-15 offline Gate-3 preparation packet across all queue items."""
+
     schema_version: str
-    synthetic_context: SyntheticContextMarker
-    queue_id: str
+    kind: str
+    packet_id: str
+    catalog_id: str
     queue_digest: str
     temporal_records: tuple[TemporalPreparationRecord, ...]
     handoff_envelopes: tuple[EditorialHandoffEnvelope, ...]
+    occurrence_identities: tuple[dict[str, str], ...]
+    query_identities: tuple[dict[str, str], ...]
     real_human_decision_state: str
     source_pts_evidence_state: str
-    source_native_exact_edit_eligible: bool
-    authoritative_edit_plan_created: bool
-    production_export_authorized: bool
+    authoritative_plan_eligible: bool
+    synthetic_context: SyntheticContextMarker
     packet_digest: str
 
-    def _body_without_digest(self) -> dict[str, Any]:
+    @property
+    def queue_id(self) -> str:
+        """Compatibility alias returning ``catalog_id``."""
+        return self.catalog_id
+
+    def _digest_payload(self) -> dict[str, Any]:
         return {
-            "packet_id": self.packet_id,
             "schema_version": self.schema_version,
-            "synthetic_context": self.synthetic_context.to_dict(),
-            "queue_id": self.queue_id,
+            "kind": self.kind,
+            "packet_id": self.packet_id,
+            "catalog_id": self.catalog_id,
             "queue_digest": self.queue_digest,
-            "temporal_records": [r.to_dict() for r in self.temporal_records],
-            "handoff_envelopes": [e.to_dict() for e in self.handoff_envelopes],
+            "temporal_records": [rec.to_dict() for rec in self.temporal_records],
+            "handoff_envelopes": [env.to_dict() for env in self.handoff_envelopes],
+            "occurrence_identities": list(self.occurrence_identities),
+            "query_identities": list(self.query_identities),
             "real_human_decision_state": self.real_human_decision_state,
             "source_pts_evidence_state": self.source_pts_evidence_state,
-            "source_native_exact_edit_eligible": self.source_native_exact_edit_eligible,
-            "authoritative_edit_plan_created": self.authoritative_edit_plan_created,
-            "production_export_authorized": self.production_export_authorized,
+            "authoritative_plan_eligible": self.authoritative_plan_eligible,
+            "synthetic_context": serialize_synthetic_context(self.synthetic_context),
         }
 
     def to_dict(self) -> dict[str, Any]:
-        body = self._body_without_digest()
-        body["packet_digest"] = self.packet_digest
-        return body
+        payload = self._digest_payload()
+        payload["packet_digest"] = self.packet_digest
+        return payload
+
+    def validate(self) -> None:
+        if self.schema_version != EDITORIAL_HANDOFF_SCHEMA_VERSION:
+            raise_mega15_error(
+                "PREPARATION_PACKET_SCHEMA_MISMATCH",
+                f"Unsupported schema_version: {self.schema_version!r}",
+            )
+        if self.kind != PREPARATION_PACKET_KIND:
+            raise_mega15_error(
+                "PREPARATION_PACKET_KIND_MISMATCH",
+                f"Unsupported kind: {self.kind!r}",
+            )
+        ensure_non_empty_str(self.packet_id, "packet_id")
+        ensure_non_empty_str(self.catalog_id, "catalog_id")
+        ensure_non_empty_str(self.queue_digest, "queue_digest")
+        validate_synthetic_context(self.synthetic_context)
+
+        if self.real_human_decision_state != "NOT_OBSERVED":
+            raise_mega15_error(
+                REFUSAL_HUMAN_DECISION_NOT_OBSERVED,
+                "real_human_decision_state must remain NOT_OBSERVED",
+            )
+        if self.source_pts_evidence_state != "NOT_OBSERVED":
+            raise_mega15_error(
+                REFUSAL_FORGED_SOURCE_MEASUREMENT,
+                "source_pts_evidence_state must remain NOT_OBSERVED",
+            )
+        if self.authoritative_plan_eligible is not False:
+            raise_mega15_error(
+                REFUSAL_AUTHORITATIVE_EDIT_PLAN_FORBIDDEN,
+                "authoritative_plan_eligible must remain False",
+            )
+        if not self.temporal_records or not self.handoff_envelopes:
+            raise_mega15_error(
+                "PREPARATION_PACKET_EMPTY",
+                "temporal_records and handoff_envelopes must be non-empty",
+            )
+        if len(self.temporal_records) != len(self.handoff_envelopes):
+            raise_mega15_error(
+                REFUSAL_CROSS_STAGE_JOIN_MISMATCH,
+                "temporal_records and handoff_envelopes counts must match 1-to-1",
+            )
+
+        seen_item_ids: set[str] = set()
+        for rec, env in zip(self.temporal_records, self.handoff_envelopes):
+            rec.validate()
+            env.validate()
+            if (
+                rec.queue_item_id != env.queue_item_id
+                or rec.record_id != env.temporal_record_id
+                or rec.record_digest != env.temporal_record_digest
+                or rec.revision_id != env.revision_id
+                or rec.content_id != env.content_id
+                or rec.source_path != env.source_path
+                or rec.source_sha256 != env.source_sha256
+                or rec.query_id != env.query_id
+            ):
+                raise_mega15_error(
+                    REFUSAL_CROSS_STAGE_JOIN_MISMATCH,
+                    f"Mismatch between TemporalPreparationRecord {rec.record_id} and EditorialHandoffEnvelope {env.envelope_id}",
+                )
+            if rec.queue_item_id in seen_item_ids:
+                raise_mega15_error(
+                    REFUSAL_OCCURRENCE_IDENTITY_COLLAPSE,
+                    f"Duplicate queue_item_id in preparation packet: {rec.queue_item_id!r}",
+                )
+            seen_item_ids.add(rec.queue_item_id)
+
+        expected_digest = canonical_sha256(self._digest_payload())
+        if self.packet_digest != expected_digest:
+            raise_mega15_error(
+                "PREPARATION_PACKET_DIGEST_MISMATCH",
+                f"packet_digest mismatch: expected {expected_digest}, got {self.packet_digest}",
+            )
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> Gate3PreparationPacket:
+    def from_dict(cls, payload: Mapping[str, Any]) -> "Gate3OfflinePreparationPacket":
         if not isinstance(payload, Mapping):
-            raise VipLabError("Gate3PreparationPacket payload must be a mapping.")
+            raise_mega15_error(
+                "PREPARATION_PACKET_INVALID_PAYLOAD",
+                "Payload must be a mapping",
+            )
+        raw_ctx = payload.get("synthetic_context")
+        if not isinstance(raw_ctx, Mapping):
+            raise_mega15_error(
+                "PREPARATION_PACKET_INVALID_SYNTHETIC_CONTEXT",
+                "synthetic_context must be a mapping",
+            )
+        raw_t = payload.get("temporal_records")
+        raw_e = payload.get("handoff_envelopes")
+        raw_occ = payload.get("occurrence_identities")
+        raw_q = payload.get("query_identities")
+        if (
+            not isinstance(raw_t, Sequence)
+            or not isinstance(raw_e, Sequence)
+            or not isinstance(raw_occ, Sequence)
+            or not isinstance(raw_q, Sequence)
+        ):
+            raise_mega15_error(
+                "PREPARATION_PACKET_INVALID_SEQUENCES",
+                "Packet sequences must be valid lists",
+            )
         packet = cls(
-            packet_id=str(payload["packet_id"]),
-            schema_version=str(payload["schema_version"]),
-            synthetic_context=SyntheticContextMarker.from_dict(payload["synthetic_context"]),
-            queue_id=str(payload["queue_id"]),
-            queue_digest=validate_hex_digest(str(payload["queue_digest"]), field_name="queue_digest"),
+            schema_version=str(payload.get("schema_version", "")),
+            kind=str(payload.get("kind", "")),
+            packet_id=str(payload.get("packet_id", "")),
+            catalog_id=str(payload.get("catalog_id", payload.get("queue_id", ""))),
+            queue_digest=str(payload.get("queue_digest", "")),
             temporal_records=tuple(
-                TemporalPreparationRecord.from_dict(r) for r in payload["temporal_records"]
+                TemporalPreparationRecord.from_dict(item) for item in raw_t
             ),
             handoff_envelopes=tuple(
-                EditorialHandoffEnvelope.from_dict(e) for e in payload["handoff_envelopes"]
+                EditorialHandoffEnvelope.from_dict(item) for item in raw_e
             ),
-            real_human_decision_state=str(payload["real_human_decision_state"]),
-            source_pts_evidence_state=str(payload["source_pts_evidence_state"]),
-            source_native_exact_edit_eligible=bool(payload["source_native_exact_edit_eligible"]),
-            authoritative_edit_plan_created=bool(payload["authoritative_edit_plan_created"]),
-            production_export_authorized=bool(payload["production_export_authorized"]),
-            packet_digest=validate_hex_digest(str(payload["packet_digest"]), field_name="packet_digest"),
+            occurrence_identities=tuple(
+                {str(k): str(v) for k, v in item.items()} for item in raw_occ
+            ),
+            query_identities=tuple(
+                {str(k): str(v) for k, v in item.items()} for item in raw_q
+            ),
+            real_human_decision_state=str(
+                payload.get("real_human_decision_state", "")
+            ),
+            source_pts_evidence_state=str(
+                payload.get("source_pts_evidence_state", "")
+            ),
+            authoritative_plan_eligible=bool(
+                payload.get("authoritative_plan_eligible", True)
+            ),
+            synthetic_context=parse_synthetic_context_dict(raw_ctx),
+            packet_digest=str(payload.get("packet_digest", "")),
         )
-        verify_gate3_preparation_packet(packet)
+        packet.validate()
         return packet
 
 
-def build_gate3_preparation_packet(
+def build_gate3_offline_preparation_packet(
     *,
-    packet_id: str,
-    queue: CandidateReviewQueue,
+    candidate_queue: CandidateReviewQueue,
     temporal_records: Sequence[TemporalPreparationRecord],
-    proposal_chains: Mapping[str, Sequence[EditorialProposal]],
-) -> Gate3PreparationPacket:
-    verify_candidate_queue(queue)
-    if len(temporal_records) != len(queue.items):
-        raise VipLabError("temporal_records count must equal queue.items count.")
-
-    records_by_qitem: dict[str, TemporalPreparationRecord] = {}
-    for rec in temporal_records:
-        verify_temporal_preparation_record(rec)
-        records_by_qitem[rec.queue_item_id] = rec
-
-    envelopes: list[EditorialHandoffEnvelope] = []
-    ordered_records: list[TemporalPreparationRecord] = []
-    for item in queue.items:
-        if item.queue_item_id not in records_by_qitem:
-            raise VipLabError(f"Missing TemporalPreparationRecord for {item.queue_item_id!r}")
-        if item.queue_item_id not in proposal_chains:
-            raise VipLabError(f"Missing proposal_chain for {item.queue_item_id!r}")
-        rec = records_by_qitem[item.queue_item_id]
-        chain = proposal_chains[item.queue_item_id]
-        env = build_editorial_handoff_envelope(
-            queue_id=queue.queue_id,
-            queue_item=item,
-            temporal_record=rec,
-            proposal_chain=chain,
+    handoff_envelopes: Sequence[EditorialHandoffEnvelope],
+    packet_id: str = "g3prep_default",
+) -> Gate3OfflinePreparationPacket:
+    """Assemble and verify a complete `Gate3OfflinePreparationPacket` preserving duplicate occurrences and queries."""
+    if not isinstance(candidate_queue, CandidateReviewQueue):
+        raise_mega15_error(
+            "PREPARATION_PACKET_INVALID_QUEUE",
+            "candidate_queue must be a CandidateReviewQueue instance",
         )
-        ordered_records.append(rec)
-        envelopes.append(env)
+    verify_candidate_queue(candidate_queue.to_dict())
 
-    temp = Gate3PreparationPacket(
+    if len(candidate_queue.items) != len(temporal_records) or len(
+        candidate_queue.items
+    ) != len(handoff_envelopes):
+        raise_mega15_error(
+            REFUSAL_OCCURRENCE_IDENTITY_COLLAPSE,
+            f"Queue items ({len(candidate_queue.items)}), temporal_records ({len(temporal_records)}), "
+            f"and handoff_envelopes ({len(handoff_envelopes)}) must match 1-to-1 without collapsing duplicate occurrences.",
+        )
+
+    occ_identities: list[dict[str, str]] = []
+    query_identities: list[dict[str, str]] = []
+
+    # Check that duplicate source_sha256 items with distinct source_path/revision_id/content_id are not collapsed
+    upstream_occ_by_item: dict[str, tuple[str, str, str, str]] = {}
+    upstream_query_by_item: dict[str, tuple[str, str]] = {}
+    for q_item in candidate_queue.items:
+        upstream_occ_by_item[q_item.queue_item_id] = (
+            q_item.revision_id,
+            q_item.content_id,
+            q_item.source_path,
+            q_item.source_sha256,
+        )
+        upstream_query_by_item[q_item.queue_item_id] = (
+            q_item.query_id,
+            q_item.query_text,
+        )
+
+    for q_item, t_rec, h_env in zip(
+        candidate_queue.items, temporal_records, handoff_envelopes
+    ):
+        if (
+            q_item.queue_item_id != t_rec.queue_item_id
+            or q_item.queue_item_id != h_env.queue_item_id
+        ):
+            raise_mega15_error(
+                REFUSAL_CROSS_STAGE_JOIN_MISMATCH,
+                f"Item order/ID mismatch at {q_item.queue_item_id!r}",
+            )
+        expected_occ = upstream_occ_by_item[q_item.queue_item_id]
+        actual_t_occ = (
+            t_rec.revision_id,
+            t_rec.content_id,
+            t_rec.source_path,
+            t_rec.source_sha256,
+        )
+        actual_h_occ = (
+            h_env.revision_id,
+            h_env.content_id,
+            h_env.source_path,
+            h_env.source_sha256,
+        )
+        if actual_t_occ != expected_occ or actual_h_occ != expected_occ:
+            raise_mega15_error(
+                REFUSAL_OCCURRENCE_IDENTITY_COLLAPSE,
+                f"Occurrence identity collapsed or mutated for item {q_item.queue_item_id!r}",
+            )
+
+        expected_q = upstream_query_by_item[q_item.queue_item_id]
+        actual_h_q = (h_env.query_id, h_env.query_text)
+        if actual_h_q != expected_q or t_rec.query_id != q_item.query_id:
+            raise_mega15_error(
+                REFUSAL_QUERY_IDENTITY_COLLAPSE,
+                f"Query identity collapsed or mutated for item {q_item.queue_item_id!r}",
+            )
+
+        occ_identities.append(
+            {
+                "queue_item_id": q_item.queue_item_id,
+                "revision_id": q_item.revision_id,
+                "content_id": q_item.content_id,
+                "source_path": q_item.source_path,
+                "source_sha256": q_item.source_sha256,
+            }
+        )
+        query_identities.append(
+            {
+                "queue_item_id": q_item.queue_item_id,
+                "query_id": q_item.query_id,
+                "query_text": q_item.query_text,
+            }
+        )
+
+    syn_ctx = make_synthetic_context()
+    provisional = Gate3OfflinePreparationPacket(
+        schema_version=EDITORIAL_HANDOFF_SCHEMA_VERSION,
+        kind=PREPARATION_PACKET_KIND,
         packet_id=packet_id,
-        schema_version="1.0.0",
-        synthetic_context=SyntheticContextMarker.default("mega15.gate3_preparation"),
-        queue_id=queue.queue_id,
-        queue_digest=queue.queue_digest,
-        temporal_records=tuple(ordered_records),
-        handoff_envelopes=tuple(envelopes),
-        real_human_decision_state=NOT_OBSERVED,
-        source_pts_evidence_state=NOT_OBSERVED,
-        source_native_exact_edit_eligible=False,
-        authoritative_edit_plan_created=False,
-        production_export_authorized=False,
-        packet_digest="0" * 64,
+        catalog_id=candidate_queue.catalog_id,
+        queue_digest=candidate_queue.queue_digest,
+        temporal_records=tuple(temporal_records),
+        handoff_envelopes=tuple(handoff_envelopes),
+        occurrence_identities=tuple(occ_identities),
+        query_identities=tuple(query_identities),
+        real_human_decision_state="NOT_OBSERVED",
+        source_pts_evidence_state="NOT_OBSERVED",
+        authoritative_plan_eligible=False,
+        synthetic_context=syn_ctx,
+        packet_digest="",
     )
-    digest = canonical_sha256(temp._body_without_digest())
-    packet = Gate3PreparationPacket(**{**temp.__dict__, "packet_digest": digest})
-    verify_gate3_preparation_packet(packet)
-    return packet
+    digest = canonical_sha256(provisional._digest_payload())
+    final_packet = Gate3OfflinePreparationPacket(
+        **{**provisional.__dict__, "packet_digest": digest}
+    )
+    final_packet.validate()
+    return final_packet
 
 
-def verify_gate3_preparation_packet(packet: Gate3PreparationPacket) -> None:
-    if not isinstance(packet, Gate3PreparationPacket):
-        raise VipLabError("Expected Gate3PreparationPacket instance.")
-    packet.synthetic_context.validate()
-    validate_hex_digest(packet.queue_digest, field_name="queue_digest")
-    validate_hex_digest(packet.packet_digest, field_name="packet_digest")
-    if not packet.temporal_records or not packet.handoff_envelopes:
-        raise VipLabError("Gate3PreparationPacket must contain non-empty records and envelopes.")
-    if len(packet.temporal_records) != len(packet.handoff_envelopes):
-        raise VipLabError("temporal_records and handoff_envelopes counts must match.")
-    for rec, env in zip(packet.temporal_records, packet.handoff_envelopes, strict=True):
-        verify_temporal_preparation_record(rec)
-        verify_editorial_handoff_envelope(env)
-        if env.queue_id != packet.queue_id:
-            raise VipLabError("Envelope queue_id mismatch in Gate3PreparationPacket.")
-        if env.queue_item_id != rec.queue_item_id:
-            raise VipLabError("Envelope/record queue_item_id mismatch in Gate3PreparationPacket.")
-        if env.preparation_id != rec.preparation_id or env.preparation_digest != rec.record_digest:
-            raise VipLabError("Envelope preparation digest/ID mismatch in Gate3PreparationPacket.")
-
-    if packet.real_human_decision_state != NOT_OBSERVED:
-        raise VipLabError("Gate3PreparationPacket.real_human_decision_state must be NOT_OBSERVED.")
-    if packet.source_pts_evidence_state != NOT_OBSERVED:
-        raise VipLabError("Gate3PreparationPacket.source_pts_evidence_state must be NOT_OBSERVED.")
-    if packet.source_native_exact_edit_eligible is not False:
-        raise VipLabError("Gate3PreparationPacket.source_native_exact_edit_eligible must be False.")
-    if packet.authoritative_edit_plan_created is not False:
-        raise VipLabError("Gate3PreparationPacket.authoritative_edit_plan_created must be False.")
-    if packet.production_export_authorized is not False:
-        raise VipLabError("Gate3PreparationPacket.production_export_authorized must be False.")
-
-    expected_digest = canonical_sha256(packet._body_without_digest())
-    if packet.packet_digest != expected_digest:
-        raise VipLabError(
-            f"Gate3PreparationPacket digest mismatch: expected {expected_digest}, got {packet.packet_digest}"
-        )
+def verify_gate3_offline_preparation_packet(
+    packet: Gate3OfflinePreparationPacket | Mapping[str, Any],
+) -> Gate3OfflinePreparationPacket:
+    """Verify and return a `Gate3OfflinePreparationPacket`."""
+    if isinstance(packet, Gate3OfflinePreparationPacket):
+        packet.validate()
+        return packet
+    return Gate3OfflinePreparationPacket.from_dict(packet)

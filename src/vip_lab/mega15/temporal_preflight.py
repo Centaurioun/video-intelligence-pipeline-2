@@ -1,27 +1,45 @@
+"""MEGA-15.1 — Deterministic Temporal Refinement Preflight & Gate-3 Request Construction.
+
+Bridges MEGA-10 (`TemporalRefinementRequest` + `PtsFixtureDiagnostic`) to canonical
+Gate-3 (`gate3.pts`, `gate3.temporal`, `gate3.refinement_request`, `gate3.refinement`)
+solely on synthetic PTS fixtures.
+
+Strict Non-Negotiable Invariants:
+- No real video files, FFmpeg, FFprobe, or container media probes are invoked.
+- Semantic retrieval candidates (`MATCHED`) are never treated as exact frame-accurate cuts.
+- `seconds * nominal_fps` derivation is strictly refused.
+- Duplicate PTS values without an explicit 0-based `occurrence` selector are refused.
+- Unresolved PTS discontinuities (> 3x median positive delta) are refused unless
+  explicitly subdivided via `gate3.temporal.subdivide_on_discontinuity`.
+- Stream identity is fixed to canonical `video:<index>` namespace; audio or ambiguous
+  stream namespaces are refused.
+- Output `TemporalPreparationRecord` remains `source_pts_evidence_state = "NOT_OBSERVED"`,
+  `binding_eligible = False`, and `authoritative_source_measurement = False`.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
-from gate3.pts import PtsTable, resolve_end, resolve_start
-from gate3.rational import TimeBase
-from gate3.refinement import is_binding_eligible
+from gate3.pts import PtsTable
+from gate3.rational import Rational, TimeBase
 from gate3.refinement_request import RefinementRequest
-from gate3.stream_identity import (
-    REASON_BOUND_EVIDENCE_UNAVAILABLE,
-    REASON_POSITIONAL_MISMATCH,
-)
 from gate3.temporal import (
+    SnapResult,
     classify_vfr,
     detect_discontinuity,
+    resolve_end,
+    resolve_start,
     subdivide_on_discontinuity,
     tail_end,
 )
 from vip_lab.common import (
-    NOT_OBSERVED,
+    FORBIDDEN_EXTERNAL_AUTHORITY_KEYS,
+    SYNTHETIC_CONTEXT_TOKEN,
+    SyntheticContextMarker,
     VipLabError,
     canonical_sha256,
-    validate_hex_digest,
 )
 from vip_lab.mega10 import (
     PtsFixtureDiagnostic,
@@ -29,414 +47,469 @@ from vip_lab.mega10 import (
     verify_temporal_refinement_request,
 )
 
-REFUSAL_SOURCE_PTS_NOT_OBSERVED = "REFUSAL_SOURCE_PTS_NOT_OBSERVED"
-REFUSAL_STREAM_NAMESPACE_UNPROVEN = "REFUSAL_STREAM_NAMESPACE_UNPROVEN"
-REFUSAL_TERMINAL_TAIL_UNCERTAIN = "REFUSAL_TERMINAL_TAIL_UNCERTAIN"
-REFUSAL_AMBIGUOUS_DUPLICATE_PTS = "REFUSAL_AMBIGUOUS_DUPLICATE_PTS"
-REFUSAL_PTS_DISCONTINUITY = "REFUSAL_PTS_DISCONTINUITY"
-REFUSAL_NOMINAL_FPS_FORBIDDEN = "REFUSAL_NOMINAL_FPS_FORBIDDEN"
-REFUSAL_FORGED_MEASURED_PTS = "REFUSAL_FORGED_MEASURED_PTS"
+TEMPORAL_PREFLIGHT_SCHEMA_VERSION = "1.0.0"
+TEMPORAL_PREFLIGHT_KIND = "vip_lab.mega15.temporal_preparation_record"
+
+# Explicit refusal codes for MEGA-15.1
+REFUSAL_NOMINAL_FPS_DERIVATION = "REFUSAL_NOMINAL_FPS_DERIVATION_FORBIDDEN"
+REFUSAL_CANDIDATE_AS_EXACT_CUT = "REFUSAL_SEMANTIC_CANDIDATE_AS_EXACT_CUT_FORBIDDEN"
+REFUSAL_DUPLICATE_PTS_AMBIGUOUS = "REFUSAL_DUPLICATE_PTS_REQUIRES_OCCURRENCE"
+REFUSAL_PTS_DISCONTINUITY_UNRESOLVED = "REFUSAL_PTS_DISCONTINUITY_UNRESOLVED"
+REFUSAL_TERMINAL_TAIL_UNRESOLVED = "REFUSAL_TERMINAL_TAIL_UNRESOLVED"
+REFUSAL_STREAM_NAMESPACE_MISMATCH = "REFUSAL_STREAM_NAMESPACE_MISMATCH"
+REFUSAL_TIMEBASE_MISMATCH = "REFUSAL_TIMEBASE_MISMATCH"
+REFUSAL_FORGED_SOURCE_MEASUREMENT = "REFUSAL_FORGED_SOURCE_MEASUREMENT_FORBIDDEN"
+REFUSAL_BINDING_ELIGIBILITY_ESCALATION = "REFUSAL_BINDING_ELIGIBILITY_ESCALATION_FORBIDDEN"
+REFUSAL_PTS_NON_MONOTONIC = "REFUSAL_PTS_TABLE_NON_MONOTONIC_OR_INVALID"
+REFUSAL_SYNTHETIC_TO_REAL_ESCALATION = "REFUSAL_SYNTHETIC_TO_REAL_ESCALATION_FORBIDDEN"
+
+_EXTRA_UNTRUSTED_AUTHORITY_KEYS: frozenset[str] = frozenset(
+    {
+        "human_approved",
+        "owner_approved",
+        "production_export_authorized",
+        "gate_promoted",
+        "real_human_approved",
+        "authoritative_source_measurement",
+    }
+)
 
 
-def _parse_time_base_str(tb_str: str) -> TimeBase:
-    if not isinstance(tb_str, str) or "/" not in tb_str:
-        raise VipLabError(f"Invalid rational time_base string: {tb_str!r}")
-    parts = tb_str.split("/")
-    if len(parts) != 2:
-        raise VipLabError(f"Invalid rational time_base string: {tb_str!r}")
-    try:
-        num = int(parts[0])
-        den = int(parts[1])
-    except ValueError as exc:
-        raise VipLabError(f"Non-integer time_base components: {tb_str!r}") from exc
-    if num <= 0 or den <= 0:
-        raise VipLabError(f"time_base components must be positive: {tb_str!r}")
-    return TimeBase(num, den)
-
-
-def assert_no_nominal_fps_derivation(payload: Mapping[str, Any]) -> None:
-    if not isinstance(payload, Mapping):
-        raise VipLabError("Nominal FPS check requires a mapping payload.")
-    forbidden_keys = {"nominal_fps", "fps_derivation", "seconds_times_fps", "frame_rate_float"}
-    present = sorted(k for k in forbidden_keys if k in payload)
-    if present:
-        raise VipLabError(
-            f"{REFUSAL_NOMINAL_FPS_FORBIDDEN}: forbidden nominal-FPS keys present: {present}"
+def ensure_non_empty_str(value: object, field_name: str) -> str:
+    """Validate that ``value`` is a non-empty, non-whitespace string."""
+    if not isinstance(value, str) or not value.strip() or "\x00" in value:
+        raise_mega15_error(
+            "MEGA15_INVALID_NON_EMPTY_STRING",
+            f"Field {field_name!r} must be a non-empty string",
+            field_path=field_name,
         )
-    derivation = str(payload.get("derivation", "")).lower()
-    if "nominal_fps" in derivation or "seconds * fps" in derivation or "seconds*fps" in derivation:
-        raise VipLabError(
-            f"{REFUSAL_NOMINAL_FPS_FORBIDDEN}: seconds * nominal_fps derivation is prohibited."
-        )
+    return value
 
 
-def assert_stream_namespace_separation(
+def raise_mega15_error(
+    code: str,
+    detail: str,
     *,
-    ffprobe_stream_index: int,
-    iso_bmff_trak_ordinal: int | None = None,
-    tkhd_track_id: int | None = None,
-    probe_stream_id_hex: str | None = None,
-    claim_equivalence_without_proof: bool = False,
+    field_path: str | None = None,
+    details: Mapping[str, Any] | None = None,
 ) -> None:
-    if isinstance(ffprobe_stream_index, bool) or not isinstance(ffprobe_stream_index, int) or ffprobe_stream_index < 0:
-        raise VipLabError(
-            f"{REFUSAL_STREAM_NAMESPACE_UNPROVEN}: ffprobe_stream_index must be a non-negative int."
+    """Raise a canonical two-argument VipLabError whose message begins with ``code``."""
+    msg = detail if detail.startswith(code) else f"{code}: {detail}"
+    raise VipLabError(code, msg, field_path=field_path, details=details)
+
+
+def make_synthetic_context() -> SyntheticContextMarker:
+    """Create a canonical SyntheticContextMarker instance."""
+    return SyntheticContextMarker.create()
+
+
+def validate_synthetic_context(ctx: Any) -> SyntheticContextMarker:
+    """Verify that ``ctx`` is an unescalated ``SyntheticContextMarker``."""
+    if not isinstance(ctx, SyntheticContextMarker):
+        raise_mega15_error(
+            REFUSAL_SYNTHETIC_TO_REAL_ESCALATION,
+            "synthetic_context must be a SyntheticContextMarker instance",
         )
-    if claim_equivalence_without_proof:
-        raise VipLabError(
-            f"{REFUSAL_STREAM_NAMESPACE_UNPROVEN}: cannot claim FFprobe stream index == ISO-BMFF trak ordinal without byte-bound P2 proof ({REASON_BOUND_EVIDENCE_UNAVAILABLE})."
+    if (
+        ctx.token != SYNTHETIC_CONTEXT_TOKEN
+        or ctx.synthetic_only is not True
+        or ctx.authentic_authority_granted is not False
+    ):
+        raise_mega15_error(
+            REFUSAL_SYNTHETIC_TO_REAL_ESCALATION,
+            f"Invalid or escalated SyntheticContextMarker: {ctx!r}",
         )
-    if tkhd_track_id is not None:
-        if isinstance(tkhd_track_id, bool) or not isinstance(tkhd_track_id, int):
-            raise VipLabError(
-                f"{REFUSAL_STREAM_NAMESPACE_UNPROVEN}: tkhd_track_id must be an integer when provided."
-            )
-        if tkhd_track_id <= 0 or tkhd_track_id >= 0xFFFFFFFF:
-            raise VipLabError(
-                f"{REFUSAL_STREAM_NAMESPACE_UNPROVEN}: unusable tkhd.track_ID={tkhd_track_id:#x}; 0 and 0xFFFFFFFF are refused per Gate-3 A-7."
-            )
-    if probe_stream_id_hex is not None:
-        if not isinstance(probe_stream_id_hex, str) or not probe_stream_id_hex.startswith("0x"):
-            raise VipLabError(
-                f"{REFUSAL_STREAM_NAMESPACE_UNPROVEN}: probe_stream_id_hex must be canonical 0x-prefixed hex."
-            )
-        try:
-            parsed_probe_id = int(probe_stream_id_hex, 16)
-        except ValueError as exc:
-            raise VipLabError(
-                f"{REFUSAL_STREAM_NAMESPACE_UNPROVEN}: invalid hex in probe_stream_id_hex={probe_stream_id_hex!r}"
-            ) from exc
-        if parsed_probe_id <= 0 or parsed_probe_id >= 0xFFFFFFFF:
-            raise VipLabError(
-                f"{REFUSAL_STREAM_NAMESPACE_UNPROVEN}: unusable probe stream id {probe_stream_id_hex!r}."
-            )
-        if tkhd_track_id is not None and parsed_probe_id != tkhd_track_id:
-            raise VipLabError(
-                f"{REFUSAL_STREAM_NAMESPACE_UNPROVEN}: positional track_ID mismatch ({REASON_POSITIONAL_MISMATCH}): probe={probe_stream_id_hex} vs tkhd={tkhd_track_id:#x}."
-            )
-    if iso_bmff_trak_ordinal is not None and iso_bmff_trak_ordinal != ffprobe_stream_index:
-        raise VipLabError(
-            f"{REFUSAL_STREAM_NAMESPACE_UNPROVEN}: ordinal displacement between ffprobe_stream_index={ffprobe_stream_index} and iso_bmff_trak_ordinal={iso_bmff_trak_ordinal} is unrepresentable in V1."
+    return ctx
+
+
+def serialize_synthetic_context(ctx: SyntheticContextMarker) -> dict[str, Any]:
+    """Serialize ``SyntheticContextMarker`` to a deterministic JSON dictionary."""
+    validate_synthetic_context(ctx)
+    return {
+        "token": ctx.token,
+        "synthetic_only": ctx.synthetic_only,
+        "authentic_authority_granted": ctx.authentic_authority_granted,
+    }
+
+
+def parse_synthetic_context_dict(payload: Mapping[str, Any]) -> SyntheticContextMarker:
+    """Validate an untrusted dictionary representation of ``SyntheticContextMarker``."""
+    if not isinstance(payload, Mapping):
+        raise_mega15_error(
+            REFUSAL_SYNTHETIC_TO_REAL_ESCALATION,
+            "synthetic_context payload must be a mapping",
         )
-
-
-@dataclass(frozen=True)
-class StreamNamespacePreflight:
-    preflight_id: str
-    source_revision_id: str
-    source_sha256: str
-    ffprobe_stream_index: int
-    iso_bmff_trak_ordinal: int | None
-    tkhd_track_id: int | None
-    probe_stream_id_hex: str | None
-    stream_count: int
-    namespace_equivalence_proven: bool
-    status: str
-    refusal_code: str
-    reason: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "preflight_id": self.preflight_id,
-            "source_revision_id": self.source_revision_id,
-            "source_sha256": self.source_sha256,
-            "ffprobe_stream_index": self.ffprobe_stream_index,
-            "iso_bmff_trak_ordinal": self.iso_bmff_trak_ordinal,
-            "tkhd_track_id": self.tkhd_track_id,
-            "probe_stream_id_hex": self.probe_stream_id_hex,
-            "stream_count": self.stream_count,
-            "namespace_equivalence_proven": self.namespace_equivalence_proven,
-            "status": self.status,
-            "refusal_code": self.refusal_code,
-            "reason": self.reason,
-        }
-
-    @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> StreamNamespacePreflight:
-        if not isinstance(payload, Mapping):
-            raise VipLabError("StreamNamespacePreflight payload must be a mapping.")
-        if payload.get("namespace_equivalence_proven") is not False:
-            raise VipLabError(
-                f"{REFUSAL_STREAM_NAMESPACE_UNPROVEN}: synthetic preflight cannot claim namespace_equivalence_proven=True."
-            )
-        return cls(
-            preflight_id=str(payload["preflight_id"]),
-            source_revision_id=str(payload["source_revision_id"]),
-            source_sha256=validate_hex_digest(str(payload["source_sha256"]), field_name="source_sha256"),
-            ffprobe_stream_index=int(payload["ffprobe_stream_index"]),
-            iso_bmff_trak_ordinal=(
-                int(payload["iso_bmff_trak_ordinal"])
-                if payload.get("iso_bmff_trak_ordinal") is not None
-                else None
-            ),
-            tkhd_track_id=(
-                int(payload["tkhd_track_id"])
-                if payload.get("tkhd_track_id") is not None
-                else None
-            ),
-            probe_stream_id_hex=(
-                str(payload["probe_stream_id_hex"])
-                if payload.get("probe_stream_id_hex") is not None
-                else None
-            ),
-            stream_count=int(payload["stream_count"]),
-            namespace_equivalence_proven=False,
-            status=str(payload["status"]),
-            refusal_code=str(payload["refusal_code"]),
-            reason=str(payload["reason"]),
+    forbidden_keys = (set(payload.keys()) & FORBIDDEN_EXTERNAL_AUTHORITY_KEYS) | (
+        set(payload.keys()) & _EXTRA_UNTRUSTED_AUTHORITY_KEYS
+    )
+    if forbidden_keys:
+        raise_mega15_error(
+            REFUSAL_SYNTHETIC_TO_REAL_ESCALATION,
+            f"Forbidden authority keys in synthetic_context: {sorted(forbidden_keys)}",
         )
+    if (
+        payload.get("token") != SYNTHETIC_CONTEXT_TOKEN
+        or payload.get("synthetic_only") is not True
+        or payload.get("authentic_authority_granted") is not False
+    ):
+        raise_mega15_error(
+            REFUSAL_SYNTHETIC_TO_REAL_ESCALATION,
+            "Untrusted synthetic_context failed synthetic-only verification",
+        )
+    return SyntheticContextMarker.create()
 
 
-def evaluate_stream_namespace_preflight(
+def refuse_nominal_fps_derivation(
     *,
-    source_revision_id: str,
-    source_sha256: str,
-    ffprobe_stream_index: int,
-    iso_bmff_trak_ordinal: int | None = None,
-    tkhd_track_id: int | None = None,
-    probe_stream_id_hex: str | None = None,
-    stream_count: int = 1,
-    claim_equivalence_without_proof: bool = False,
-) -> StreamNamespacePreflight:
-    validate_hex_digest(source_sha256, field_name="source_sha256")
-    if isinstance(stream_count, bool) or not isinstance(stream_count, int) or stream_count < 1:
-        raise VipLabError("stream_count must be a positive integer.")
-
-    assert_stream_namespace_separation(
-        ffprobe_stream_index=ffprobe_stream_index,
-        iso_bmff_trak_ordinal=iso_bmff_trak_ordinal,
-        tkhd_track_id=tkhd_track_id,
-        probe_stream_id_hex=probe_stream_id_hex,
-        claim_equivalence_without_proof=claim_equivalence_without_proof,
-    )
-
-    status = (
-        "REFUSED_MULTI_STREAM_NAMESPACE_UNPROVEN"
-        if stream_count > 1
-        else "DIAGNOSTIC_SINGLE_STREAM_SYNTHETIC_ONLY"
-    )
-    return StreamNamespacePreflight(
-        preflight_id=f"ns_preflight_{source_revision_id}_{ffprobe_stream_index}",
-        source_revision_id=source_revision_id,
-        source_sha256=source_sha256,
-        ffprobe_stream_index=ffprobe_stream_index,
-        iso_bmff_trak_ordinal=iso_bmff_trak_ordinal,
-        tkhd_track_id=tkhd_track_id,
-        probe_stream_id_hex=probe_stream_id_hex,
-        stream_count=stream_count,
-        namespace_equivalence_proven=False,
-        status=status,
-        refusal_code=REFUSAL_STREAM_NAMESPACE_UNPROVEN,
-        reason=REASON_BOUND_EVIDENCE_UNAVAILABLE,
-    )
-
-
-@dataclass(frozen=True)
-class TerminalTailPreflight:
-    requested_end_ticks: int
-    last_observed_pts_ticks: int
-    end_is_stream_tail: bool
-    extent_state: str
-    last_frame_extent: str
-    tail_binding_eligible: bool
-    it6_disposition_state: str
-    refusal_code: str | None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "requested_end_ticks": self.requested_end_ticks,
-            "last_observed_pts_ticks": self.last_observed_pts_ticks,
-            "end_is_stream_tail": self.end_is_stream_tail,
-            "extent_state": self.extent_state,
-            "last_frame_extent": self.last_frame_extent,
-            "tail_binding_eligible": self.tail_binding_eligible,
-            "it6_disposition_state": self.it6_disposition_state,
-            "refusal_code": self.refusal_code,
-        }
-
-    @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> TerminalTailPreflight:
-        if not isinstance(payload, Mapping):
-            raise VipLabError("TerminalTailPreflight payload must be a mapping.")
-        end_is_tail = bool(payload["end_is_stream_tail"])
-        tail_eligible = bool(payload["tail_binding_eligible"])
-        if tail_eligible:
-            raise VipLabError(
-                f"{REFUSAL_TERMINAL_TAIL_UNCERTAIN}: synthetic preflight cannot set tail_binding_eligible=True under IT-6 P3."
-            )
-        return cls(
-            requested_end_ticks=int(payload["requested_end_ticks"]),
-            last_observed_pts_ticks=int(payload["last_observed_pts_ticks"]),
-            end_is_stream_tail=end_is_tail,
-            extent_state=str(payload["extent_state"]),
-            last_frame_extent=str(payload["last_frame_extent"]),
-            tail_binding_eligible=False,
-            it6_disposition_state=str(payload["it6_disposition_state"]),
-            refusal_code=(
-                str(payload["refusal_code"])
-                if payload.get("refusal_code") is not None
-                else None
-            ),
+    seconds: float | int | None = None,
+    nominal_fps: float | int | None = None,
+    derivation_mode: str | None = None,
+) -> None:
+    """Fail closed whenever a caller attempts to derive frame/PTS boundaries via seconds * nominal_fps."""
+    if seconds is not None or nominal_fps is not None or derivation_mode is not None:
+        raise_mega15_error(
+            REFUSAL_NOMINAL_FPS_DERIVATION,
+            "Deriving VFR/CFR frame or PTS positions via seconds * nominal_fps is strictly forbidden; "
+            f"received seconds={seconds!r}, nominal_fps={nominal_fps!r}, derivation_mode={derivation_mode!r}.",
         )
 
 
-def evaluate_terminal_tail_preflight(
+def refuse_semantic_candidate_as_cut(
     *,
-    pts_table: PtsTable,
-    requested_end_ticks: int,
-    container_facts: Mapping[str, Any] | None = None,
-) -> TerminalTailPreflight:
-    end_snap = resolve_end(pts_table, requested_end_ticks)
-    last_pts = pts_table.ticks[-1]
-    if end_snap.snapped_ticks is not None:
-        return TerminalTailPreflight(
-            requested_end_ticks=requested_end_ticks,
-            last_observed_pts_ticks=last_pts,
-            end_is_stream_tail=False,
-            extent_state="OBSERVED_NEXT_TICK",
-            last_frame_extent="OBSERVED",
-            tail_binding_eligible=False,
-            it6_disposition_state="PENDING_OWNER_DISPOSITION_P3_IN_FORCE",
-            refusal_code=None,
+    evidence_class: str,
+    treat_as_exact_cut: bool = False,
+) -> None:
+    """Fail closed if a semantic candidate is used directly as an exact cut boundary."""
+    if treat_as_exact_cut or evidence_class != "MATCHED":
+        raise_mega15_error(
+            REFUSAL_CANDIDATE_AS_EXACT_CUT,
+            "Semantic retrieval candidate timestamps cannot be used as exact frame-accurate edit boundaries "
+            f"(evidence_class={evidence_class!r}, treat_as_exact_cut={treat_as_exact_cut!r}).",
         )
 
-    tail_info = tail_end(
-        pts_table,
-        container_facts=dict(container_facts) if container_facts is not None else None,
-    )
-    return TerminalTailPreflight(
-        requested_end_ticks=requested_end_ticks,
-        last_observed_pts_ticks=last_pts,
-        end_is_stream_tail=True,
-        extent_state=tail_info.extent_state,
-        last_frame_extent="UNCERTAIN",
-        tail_binding_eligible=False,
-        it6_disposition_state="PENDING_OWNER_DISPOSITION_P3_IN_FORCE",
-        refusal_code=REFUSAL_TERMINAL_TAIL_UNCERTAIN,
-    )
+
+def validate_video_stream_namespace(stream_id: str) -> int:
+    """Validate canonical `video:<non_negative_int>` stream identity and return stream index."""
+    ensure_non_empty_str(stream_id, "stream_id")
+    if not stream_id.startswith("video:"):
+        raise_mega15_error(
+            REFUSAL_STREAM_NAMESPACE_MISMATCH,
+            f"Stream namespace must be 'video:<index>', got {stream_id!r}",
+        )
+    suffix = stream_id[len("video:") :]
+    if not suffix.isdigit():
+        raise_mega15_error(
+            REFUSAL_STREAM_NAMESPACE_MISMATCH,
+            f"Video stream index must be non-negative decimal integer, got {stream_id!r}",
+        )
+    return int(suffix)
 
 
 @dataclass(frozen=True)
 class TemporalPreparationRecord:
-    preparation_id: str
-    refinement_request_id: str
+    """Synthetic Gate-3 temporal preflight record derived from MEGA-10 + Gate-3 temporal utilities."""
+
+    schema_version: str
+    kind: str
+    record_id: str
+    upstream_request_id: str
+    upstream_request_digest: str
     queue_item_id: str
-    candidate_id: str
-    query_id: str
-    query_text: str
     arm_id: str
-    source_id: str
-    source_revision_id: str
-    source_sha256: str
+    profile_id: str
+    query_id: str
+    revision_id: str
+    content_id: str
     source_path: str
+    source_sha256: str
     selected_stream_index: int
-    time_base: str
-    candidate_interval_ticks: tuple[int, int]
-    resolved_start_ticks: int
-    resolved_end_ticks: int
+    stream_id: str
+    timebase_num: int
+    timebase_den: int
+    pts_ticks: tuple[int, ...]
+    candidate_sample_pts: int
+    requested_start_pts: int
+    requested_end_pts: int
+    start_occurrence: int | None
+    end_occurrence: int | None
+    resolved_start_pts: int
+    resolved_end_pts: int
+    start_snap_policy: str
+    end_snap_policy: str
+    endpoint_semantics: str
+    is_vfr: bool
     vfr_classification: str
-    discontinuity_detected: bool
+    has_discontinuity: bool
+    discontinuity_subdivided: bool
     subdivided_segments: tuple[tuple[int, int], ...]
-    stream_namespace_preflight: StreamNamespacePreflight
-    terminal_tail_preflight: TerminalTailPreflight
-    gate3_structurally_eligible: bool
-    gate3_binding_eligible: bool
-    source_pts_evidence_state: str
+    gate3_refinement_request: dict[str, Any]
     candidate_evidence_class: str
-    exact_cut_eligible: bool
-    refusal_codes: tuple[str, ...]
+    source_pts_evidence_state: str
+    authoritative_source_measurement: bool
+    binding_eligible: bool
+    synthetic_context: SyntheticContextMarker
     record_digest: str
 
-    def _Body_without_digest(self) -> dict[str, Any]:
+    @property
+    def candidate_item_id(self) -> str:
+        """Compatibility alias for ``queue_item_id``."""
+        return self.queue_item_id
+
+    @property
+    def source_revision_id(self) -> str:
+        """Compatibility alias for ``revision_id``."""
+        return self.revision_id
+
+    @property
+    def source_timebase_num(self) -> int:
+        """Compatibility alias for ``timebase_num``."""
+        return self.timebase_num
+
+    @property
+    def source_timebase_den(self) -> int:
+        """Compatibility alias for ``timebase_den``."""
+        return self.timebase_den
+
+    def _digest_payload(self) -> dict[str, Any]:
         return {
-            "preparation_id": self.preparation_id,
-            "refinement_request_id": self.refinement_request_id,
+            "schema_version": self.schema_version,
+            "kind": self.kind,
+            "record_id": self.record_id,
+            "upstream_request_id": self.upstream_request_id,
+            "upstream_request_digest": self.upstream_request_digest,
             "queue_item_id": self.queue_item_id,
-            "candidate_id": self.candidate_id,
-            "query_id": self.query_id,
-            "query_text": self.query_text,
             "arm_id": self.arm_id,
-            "source_id": self.source_id,
-            "source_revision_id": self.source_revision_id,
-            "source_sha256": self.source_sha256,
+            "profile_id": self.profile_id,
+            "query_id": self.query_id,
+            "revision_id": self.revision_id,
+            "content_id": self.content_id,
             "source_path": self.source_path,
+            "source_sha256": self.source_sha256,
             "selected_stream_index": self.selected_stream_index,
-            "time_base": self.time_base,
-            "candidate_interval_ticks": list(self.candidate_interval_ticks),
-            "resolved_start_ticks": self.resolved_start_ticks,
-            "resolved_end_ticks": self.resolved_end_ticks,
+            "stream_id": self.stream_id,
+            "timebase_num": self.timebase_num,
+            "timebase_den": self.timebase_den,
+            "pts_ticks": list(self.pts_ticks),
+            "candidate_sample_pts": self.candidate_sample_pts,
+            "requested_start_pts": self.requested_start_pts,
+            "requested_end_pts": self.requested_end_pts,
+            "start_occurrence": self.start_occurrence,
+            "end_occurrence": self.end_occurrence,
+            "resolved_start_pts": self.resolved_start_pts,
+            "resolved_end_pts": self.resolved_end_pts,
+            "start_snap_policy": self.start_snap_policy,
+            "end_snap_policy": self.end_snap_policy,
+            "endpoint_semantics": self.endpoint_semantics,
+            "is_vfr": self.is_vfr,
             "vfr_classification": self.vfr_classification,
-            "discontinuity_detected": self.discontinuity_detected,
-            "subdivided_segments": [list(seg) for seg in self.subdivided_segments],
-            "stream_namespace_preflight": self.stream_namespace_preflight.to_dict(),
-            "terminal_tail_preflight": self.terminal_tail_preflight.to_dict(),
-            "gate3_structurally_eligible": self.gate3_structurally_eligible,
-            "gate3_binding_eligible": self.gate3_binding_eligible,
-            "source_pts_evidence_state": self.source_pts_evidence_state,
+            "has_discontinuity": self.has_discontinuity,
+            "discontinuity_subdivided": self.discontinuity_subdivided,
+            "subdivided_segments": [[s, e] for s, e in self.subdivided_segments],
+            "gate3_refinement_request": self.gate3_refinement_request,
             "candidate_evidence_class": self.candidate_evidence_class,
-            "exact_cut_eligible": self.exact_cut_eligible,
-            "refusal_codes": list(self.refusal_codes),
+            "source_pts_evidence_state": self.source_pts_evidence_state,
+            "authoritative_source_measurement": self.authoritative_source_measurement,
+            "binding_eligible": self.binding_eligible,
+            "synthetic_context": serialize_synthetic_context(self.synthetic_context),
         }
 
     def to_dict(self) -> dict[str, Any]:
-        body = self._Body_without_digest()
-        body["record_digest"] = self.record_digest
-        return body
+        payload = self._digest_payload()
+        payload["record_digest"] = self.record_digest
+        return payload
+
+    def validate(self) -> None:
+        if self.schema_version != TEMPORAL_PREFLIGHT_SCHEMA_VERSION:
+            raise_mega15_error(
+                "TEMPORAL_PREFLIGHT_SCHEMA_MISMATCH",
+                f"Unsupported schema_version: {self.schema_version!r}",
+            )
+        if self.kind != TEMPORAL_PREFLIGHT_KIND:
+            raise_mega15_error(
+                "TEMPORAL_PREFLIGHT_KIND_MISMATCH",
+                f"Unsupported kind: {self.kind!r}",
+            )
+        ensure_non_empty_str(self.record_id, "record_id")
+        ensure_non_empty_str(self.upstream_request_id, "upstream_request_id")
+        ensure_non_empty_str(self.upstream_request_digest, "upstream_request_digest")
+        ensure_non_empty_str(self.queue_item_id, "queue_item_id")
+        ensure_non_empty_str(self.arm_id, "arm_id")
+        ensure_non_empty_str(self.profile_id, "profile_id")
+        ensure_non_empty_str(self.query_id, "query_id")
+        ensure_non_empty_str(self.revision_id, "revision_id")
+        ensure_non_empty_str(self.content_id, "content_id")
+        ensure_non_empty_str(self.source_path, "source_path")
+        ensure_non_empty_str(self.source_sha256, "source_sha256")
+        idx = validate_video_stream_namespace(self.stream_id)
+        if idx != self.selected_stream_index:
+            raise_mega15_error(
+                REFUSAL_STREAM_NAMESPACE_MISMATCH,
+                f"stream_id index {idx} != selected_stream_index {self.selected_stream_index}",
+            )
+
+        validate_synthetic_context(self.synthetic_context)
+
+        if self.candidate_evidence_class != "MATCHED":
+            raise_mega15_error(
+                REFUSAL_CANDIDATE_AS_EXACT_CUT,
+                f"candidate_evidence_class must be 'MATCHED', got {self.candidate_evidence_class!r}",
+            )
+        if self.source_pts_evidence_state != "NOT_OBSERVED":
+            raise_mega15_error(
+                REFUSAL_FORGED_SOURCE_MEASUREMENT,
+                f"source_pts_evidence_state must remain 'NOT_OBSERVED', got {self.source_pts_evidence_state!r}",
+            )
+        if self.authoritative_source_measurement is not False:
+            raise_mega15_error(
+                REFUSAL_FORGED_SOURCE_MEASUREMENT,
+                "authoritative_source_measurement must remain False in synthetic preflight",
+            )
+        if self.binding_eligible is not False:
+            raise_mega15_error(
+                REFUSAL_BINDING_ELIGIBILITY_ESCALATION,
+                "binding_eligible must remain False in synthetic preflight",
+            )
+        if self.endpoint_semantics != "HALF_OPEN_START_INCLUSIVE_END_EXCLUSIVE":
+            raise_mega15_error(
+                "TEMPORAL_PREFLIGHT_INVALID_ENDPOINT_SEMANTICS",
+                f"Invalid endpoint_semantics: {self.endpoint_semantics!r}",
+            )
+        if self.resolved_end_pts <= self.resolved_start_pts:
+            raise_mega15_error(
+                "TEMPORAL_PREFLIGHT_INVALID_INTERVAL",
+                f"Resolved interval must be positive: [{self.resolved_start_pts}, {self.resolved_end_pts})",
+            )
+        if self.has_discontinuity and not self.discontinuity_subdivided:
+            raise_mega15_error(
+                REFUSAL_PTS_DISCONTINUITY_UNRESOLVED,
+                "TemporalPreparationRecord cannot persist an unresolved PTS discontinuity",
+            )
+        if not self.subdivided_segments:
+            raise_mega15_error(
+                "TEMPORAL_PREFLIGHT_EMPTY_SEGMENTS",
+                "subdivided_segments must contain at least one half-open segment",
+            )
+        for seg_start, seg_end in self.subdivided_segments:
+            if seg_end <= seg_start:
+                raise_mega15_error(
+                    "TEMPORAL_PREFLIGHT_INVALID_SEGMENT",
+                    f"Segment [{seg_start}, {seg_end}) must satisfy seg_end > seg_start",
+                )
+
+        expected_digest = canonical_sha256(self._digest_payload())
+        if self.record_digest != expected_digest:
+            raise_mega15_error(
+                "TEMPORAL_PREFLIGHT_DIGEST_MISMATCH",
+                f"record_digest mismatch: expected {expected_digest}, got {self.record_digest}",
+            )
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> TemporalPreparationRecord:
+    def from_dict(cls, payload: Mapping[str, Any]) -> "TemporalPreparationRecord":
         if not isinstance(payload, Mapping):
-            raise VipLabError("TemporalPreparationRecord payload must be a mapping.")
-        assert_no_nominal_fps_derivation(payload)
-        if payload.get("source_pts_evidence_state") != NOT_OBSERVED:
-            raise VipLabError(
-                f"{REFUSAL_FORGED_MEASURED_PTS}: source_pts_evidence_state must be {NOT_OBSERVED!r} in synthetic preparation, got {payload.get('source_pts_evidence_state')!r}."
+            raise_mega15_error(
+                "TEMPORAL_PREFLIGHT_INVALID_PAYLOAD",
+                "Payload must be a mapping",
             )
-        if payload.get("gate3_binding_eligible") is not False:
-            raise VipLabError(
-                f"{REFUSAL_FORGED_MEASURED_PTS}: gate3_binding_eligible must be False in synthetic preparation."
+        raw_ctx = payload.get("synthetic_context")
+        if not isinstance(raw_ctx, Mapping):
+            raise_mega15_error(
+                "TEMPORAL_PREFLIGHT_INVALID_SYNTHETIC_CONTEXT",
+                "synthetic_context must be a mapping",
             )
-        if payload.get("exact_cut_eligible") is not False:
-            raise VipLabError(
-                f"{REFUSAL_FORGED_MEASURED_PTS}: exact_cut_eligible must be False in synthetic preparation."
+        raw_segments = payload.get("subdivided_segments")
+        if not isinstance(raw_segments, Sequence) or isinstance(raw_segments, (str, bytes)):
+            raise_mega15_error(
+                "TEMPORAL_PREFLIGHT_INVALID_SEGMENTS",
+                "subdivided_segments must be a sequence",
             )
-        cand_interval = payload["candidate_interval_ticks"]
-        sub_segs = payload.get("subdivided_segments", [])
+        segments: list[tuple[int, int]] = []
+        for pair in raw_segments:
+            if (
+                not isinstance(pair, Sequence)
+                or isinstance(pair, (str, bytes))
+                or len(pair) != 2
+            ):
+                raise_mega15_error(
+                    "TEMPORAL_PREFLIGHT_INVALID_SEGMENT_PAIR",
+                    "Each segment must be a [start, end] pair",
+                )
+            segments.append((int(pair[0]), int(pair[1])))
+
+        raw_ticks = payload.get("pts_ticks")
+        if not isinstance(raw_ticks, Sequence) or isinstance(raw_ticks, (str, bytes)):
+            raise_mega15_error(
+                "TEMPORAL_PREFLIGHT_INVALID_PTS_TICKS",
+                "pts_ticks must be a sequence of ints",
+            )
+
+        gate3_req = payload.get("gate3_refinement_request")
+        if not isinstance(gate3_req, Mapping):
+            raise_mega15_error(
+                "TEMPORAL_PREFLIGHT_INVALID_GATE3_REQUEST",
+                "gate3_refinement_request must be a mapping",
+            )
+
         record = cls(
-            preparation_id=str(payload["preparation_id"]),
-            refinement_request_id=str(payload["refinement_request_id"]),
-            queue_item_id=str(payload["queue_item_id"]),
-            candidate_id=str(payload["candidate_id"]),
-            query_id=str(payload["query_id"]),
-            query_text=str(payload["query_text"]),
-            arm_id=str(payload["arm_id"]),
-            source_id=str(payload["source_id"]),
-            source_revision_id=str(payload["source_revision_id"]),
-            source_sha256=validate_hex_digest(str(payload["source_sha256"]), field_name="source_sha256"),
-            source_path=str(payload["source_path"]),
-            selected_stream_index=int(payload["selected_stream_index"]),
-            time_base=str(payload["time_base"]),
-            candidate_interval_ticks=(int(cand_interval[0]), int(cand_interval[1])),
-            resolved_start_ticks=int(payload["resolved_start_ticks"]),
-            resolved_end_ticks=int(payload["resolved_end_ticks"]),
-            vfr_classification=str(payload["vfr_classification"]),
-            discontinuity_detected=bool(payload["discontinuity_detected"]),
-            subdivided_segments=tuple((int(s[0]), int(s[1])) for s in sub_segs),
-            stream_namespace_preflight=StreamNamespacePreflight.from_dict(
-                payload["stream_namespace_preflight"]
+            schema_version=str(payload.get("schema_version", "")),
+            kind=str(payload.get("kind", "")),
+            record_id=str(payload.get("record_id", "")),
+            upstream_request_id=str(payload.get("upstream_request_id", "")),
+            upstream_request_digest=str(payload.get("upstream_request_digest", "")),
+            queue_item_id=str(
+                payload.get("queue_item_id", payload.get("candidate_item_id", ""))
             ),
-            terminal_tail_preflight=TerminalTailPreflight.from_dict(
-                payload["terminal_tail_preflight"]
+            arm_id=str(payload.get("arm_id", "")),
+            profile_id=str(payload.get("profile_id", "")),
+            query_id=str(payload.get("query_id", "")),
+            revision_id=str(
+                payload.get("revision_id", payload.get("source_revision_id", ""))
             ),
-            gate3_structurally_eligible=bool(payload["gate3_structurally_eligible"]),
-            gate3_binding_eligible=False,
-            source_pts_evidence_state=NOT_OBSERVED,
-            candidate_evidence_class=str(payload["candidate_evidence_class"]),
-            exact_cut_eligible=False,
-            refusal_codes=tuple(str(c) for c in payload.get("refusal_codes", ())),
-            record_digest=validate_hex_digest(str(payload["record_digest"]), field_name="record_digest"),
+            content_id=str(payload.get("content_id", "")),
+            source_path=str(payload.get("source_path", "")),
+            source_sha256=str(payload.get("source_sha256", "")),
+            selected_stream_index=int(payload.get("selected_stream_index", 0)),
+            stream_id=str(payload.get("stream_id", "")),
+            timebase_num=int(
+                payload.get("timebase_num", payload.get("source_timebase_num", 0))
+            ),
+            timebase_den=int(
+                payload.get("timebase_den", payload.get("source_timebase_den", 0))
+            ),
+            pts_ticks=tuple(int(t) for t in raw_ticks),
+            candidate_sample_pts=int(payload.get("candidate_sample_pts", 0)),
+            requested_start_pts=int(payload.get("requested_start_pts", 0)),
+            requested_end_pts=int(payload.get("requested_end_pts", 0)),
+            start_occurrence=(
+                None
+                if payload.get("start_occurrence") is None
+                else int(payload["start_occurrence"])
+            ),
+            end_occurrence=(
+                None
+                if payload.get("end_occurrence") is None
+                else int(payload["end_occurrence"])
+            ),
+            resolved_start_pts=int(payload.get("resolved_start_pts", 0)),
+            resolved_end_pts=int(payload.get("resolved_end_pts", 0)),
+            start_snap_policy=str(payload.get("start_snap_policy", "")),
+            end_snap_policy=str(payload.get("end_snap_policy", "")),
+            endpoint_semantics=str(payload.get("endpoint_semantics", "")),
+            is_vfr=bool(payload.get("is_vfr", False)),
+            vfr_classification=str(payload.get("vfr_classification", "")),
+            has_discontinuity=bool(payload.get("has_discontinuity", False)),
+            discontinuity_subdivided=bool(payload.get("discontinuity_subdivided", False)),
+            subdivided_segments=tuple(segments),
+            gate3_refinement_request=dict(gate3_req),
+            candidate_evidence_class=str(payload.get("candidate_evidence_class", "")),
+            source_pts_evidence_state=str(payload.get("source_pts_evidence_state", "")),
+            authoritative_source_measurement=bool(
+                payload.get("authoritative_source_measurement", True)
+            ),
+            binding_eligible=bool(payload.get("binding_eligible", True)),
+            synthetic_context=parse_synthetic_context_dict(raw_ctx),
+            record_digest=str(payload.get("record_digest", "")),
         )
-        verify_temporal_preparation_record(record)
+        record.validate()
         return record
 
 
@@ -444,187 +517,307 @@ def build_temporal_preparation_record(
     *,
     refinement_request: TemporalRefinementRequest,
     pts_diagnostic: PtsFixtureDiagnostic,
-    stream_count: int = 1,
-    tkhd_track_id: int | None = None,
-    probe_stream_id_hex: str | None = None,
-    occurrence_index: int | None = None,
+    start_occurrence: int | None = None,
+    end_occurrence: int | None = None,
     allow_discontinuity_subdivision: bool = False,
+    allow_terminal_tail_fallback: bool = False,
+    declared_rate_num: int | None = None,
+    declared_rate_den: int | None = None,
+    seconds: float | int | None = None,
+    nominal_fps: float | int | None = None,
+    treat_candidate_as_exact_cut: bool = False,
+    stream_id: str | None = None,
 ) -> TemporalPreparationRecord:
-    verify_temporal_refinement_request(refinement_request)
+    """Build a verified synthetic Gate-3 temporal preflight record from MEGA-10 inputs."""
+    refuse_nominal_fps_derivation(seconds=seconds, nominal_fps=nominal_fps)
 
-    if pts_diagnostic.request_id != refinement_request.request_id:
-        raise VipLabError(
-            f"pts_diagnostic.request_id ({pts_diagnostic.request_id!r}) != refinement_request.request_id ({refinement_request.request_id!r})"
+    if not isinstance(refinement_request, TemporalRefinementRequest):
+        raise_mega15_error(
+            "TEMPORAL_PREFLIGHT_INVALID_REQUEST_TYPE",
+            "refinement_request must be a TemporalRefinementRequest instance",
         )
-    if pts_diagnostic.source_revision_id != refinement_request.source_revision_id:
-        raise VipLabError("source_revision_id mismatch between request and diagnostic.")
-    if pts_diagnostic.selected_stream_index != refinement_request.selected_stream_index:
-        raise VipLabError("selected_stream_index mismatch between request and diagnostic.")
-    if pts_diagnostic.time_base != refinement_request.expected_timebase:
-        raise VipLabError("time_base mismatch between request and diagnostic.")
-
-    tb = _parse_time_base_str(refinement_request.expected_timebase)
-    table = PtsTable(tb, pts_diagnostic.pts_ticks)
-
-    req_start = refinement_request.requested_start_pts
-    req_end = refinement_request.requested_end_pts
-
-    start_snap = resolve_start(table, req_start)
-    if start_snap.snapped_ticks is None:
-        raise VipLabError(
-            f"{REFUSAL_SOURCE_PTS_NOT_OBSERVED}: start tick {req_start} could not be snapped in PtsTable."
+    if not isinstance(pts_diagnostic, PtsFixtureDiagnostic):
+        raise_mega15_error(
+            "TEMPORAL_PREFLIGHT_INVALID_DIAGNOSTIC_TYPE",
+            "pts_diagnostic must be a PtsFixtureDiagnostic instance",
         )
-    resolved_start = start_snap.snapped_ticks
 
-    # Check duplicate PTS ambiguity on the resolved start tick
-    if table.is_ambiguous(resolved_start):
-        if occurrence_index is None:
-            raise VipLabError(
-                f"{REFUSAL_AMBIGUOUS_DUPLICATE_PTS}: duplicate PTS tick {resolved_start} is ambiguous without occurrence_index."
-            )
-        _ = table.ordinal_of(resolved_start, occurrence=occurrence_index)
-
-    end_snap = resolve_end(table, req_end)
-    tail_preflight = evaluate_terminal_tail_preflight(
-        pts_table=table,
-        requested_end_ticks=req_end,
-        container_facts=None,
+    # Enforce MEGA-15 authority & evidence refusal guards before generic schema verification
+    if refinement_request.synthetic_only is not True:
+        raise_mega15_error(
+            REFUSAL_SYNTHETIC_TO_REAL_ESCALATION,
+            "TemporalRefinementRequest.synthetic_only must be True",
+        )
+    refuse_semantic_candidate_as_cut(
+        evidence_class=refinement_request.candidate_evidence_class,
+        treat_as_exact_cut=treat_candidate_as_exact_cut,
     )
-    resolved_end = end_snap.snapped_ticks if end_snap.snapped_ticks is not None else req_end
+    if (
+        refinement_request.source_pts_evidence_state != "NOT_OBSERVED"
+        or refinement_request.measurement_needed is not True
+    ):
+        raise_mega15_error(
+            REFUSAL_FORGED_SOURCE_MEASUREMENT,
+            "TemporalRefinementRequest cannot claim measured source PTS evidence in offline preflight",
+        )
+    if refinement_request.binding_eligible is not False:
+        raise_mega15_error(
+            REFUSAL_BINDING_ELIGIBILITY_ESCALATION,
+            "TemporalRefinementRequest cannot be binding_eligible in offline preflight",
+        )
+    if (
+        pts_diagnostic.diagnostic_only is not True
+        or pts_diagnostic.authoritative_source_measurement is not False
+    ):
+        raise_mega15_error(
+            REFUSAL_FORGED_SOURCE_MEASUREMENT,
+            "PtsFixtureDiagnostic must remain diagnostic_only=True and authoritative_source_measurement=False",
+        )
+
+    # Validate stream identity namespace
+    if (
+        not isinstance(refinement_request.selected_stream_index, int)
+        or isinstance(refinement_request.selected_stream_index, bool)
+        or refinement_request.selected_stream_index < 0
+    ):
+        raise_mega15_error(
+            REFUSAL_STREAM_NAMESPACE_MISMATCH,
+            f"selected_stream_index must be a non-negative integer, got {refinement_request.selected_stream_index!r}",
+        )
+    effective_stream_id = (
+        stream_id
+        if stream_id is not None
+        else getattr(
+            refinement_request,
+            "stream_id",
+            f"video:{refinement_request.selected_stream_index}",
+        )
+    )
+    req_stream_idx = validate_video_stream_namespace(str(effective_stream_id))
+    if req_stream_idx != refinement_request.selected_stream_index:
+        raise_mega15_error(
+            REFUSAL_STREAM_NAMESPACE_MISMATCH,
+            f"Stream namespace index {req_stream_idx} != selected_stream_index {refinement_request.selected_stream_index}",
+        )
+    diag_stream_id = getattr(pts_diagnostic, "stream_id", None)
+    if diag_stream_id is not None:
+        diag_idx = validate_video_stream_namespace(str(diag_stream_id))
+        if diag_idx != req_stream_idx:
+            raise_mega15_error(
+                REFUSAL_STREAM_NAMESPACE_MISMATCH,
+                f"Diagnostic stream_id {diag_stream_id!r} != request stream_id {effective_stream_id!r}",
+            )
+
+    # Validate timebase consistency before generic schema check so timebase mismatches get specific code
+    if (
+        refinement_request.timebase_num != pts_diagnostic.timebase_num
+        or refinement_request.timebase_den != pts_diagnostic.timebase_den
+    ):
+        raise_mega15_error(
+            REFUSAL_TIMEBASE_MISMATCH,
+            f"Timebase mismatch between request ({refinement_request.timebase_num}/{refinement_request.timebase_den}) "
+            f"and diagnostic ({pts_diagnostic.timebase_num}/{pts_diagnostic.timebase_den})",
+        )
+
+    # Verify upstream MEGA-10 request payload & digest
+    verify_temporal_refinement_request(refinement_request.to_dict())
+
+    try:
+        tb = TimeBase(
+            num=int(refinement_request.timebase_num),
+            den=int(refinement_request.timebase_den),
+        )
+    except Exception as exc:
+        raise_mega15_error(
+            REFUSAL_TIMEBASE_MISMATCH,
+            f"Invalid rational timebase: {exc}",
+        )
+
+    pts_ticks = tuple(int(t) for t in pts_diagnostic.pts_ticks)
+    try:
+        table = PtsTable(time_base=tb, ticks=pts_ticks)
+    except ValueError as exc:
+        raise_mega15_error(
+            REFUSAL_PTS_NON_MONOTONIC,
+            f"Invalid PtsTable: {exc}",
+        )
+
+    req_start = int(refinement_request.requested_start_pts)
+    req_end = int(refinement_request.requested_end_pts)
+
+    start_snap: SnapResult = resolve_start(table, req_start)
+    if start_snap.resolved_ticks is None:
+        raise_mega15_error(
+            REFUSAL_TERMINAL_TAIL_UNRESOLVED,
+            f"Start tick {req_start} could not be resolved on PtsTable (policy={start_snap.policy})",
+        )
+
+    try:
+        start_ord = table.ordinal_of(int(start_snap.resolved_ticks), occurrence=start_occurrence)
+    except ValueError as exc:
+        raise_mega15_error(
+            REFUSAL_DUPLICATE_PTS_AMBIGUOUS,
+            f"Start PTS resolution failed: {exc}",
+        )
+    if start_ord is None:
+        raise_mega15_error(
+            REFUSAL_DUPLICATE_PTS_AMBIGUOUS,
+            f"Start PTS occurrence {start_occurrence!r} out of range for tick {start_snap.resolved_ticks}",
+        )
+
+    end_snap: SnapResult = resolve_end(table, req_end)
+    if end_snap.resolved_ticks is None:
+        if not allow_terminal_tail_fallback:
+            raise_mega15_error(
+                REFUSAL_TERMINAL_TAIL_UNRESOLVED,
+                f"End tick {req_end} exceeds final PTS tick; explicit tail_end policy required",
+            )
+        last_delta = (pts_ticks[-1] - pts_ticks[-2]) if len(pts_ticks) >= 2 and pts_ticks[-1] > pts_ticks[-2] else 1
+        te = tail_end(table, last_delta_ticks=last_delta, rate_regime="uniform")
+        resolved_end = int(te.end_ticks) if te.end_ticks is not None else int(pts_ticks[-1] + last_delta)
+        end_policy = "EXPLICIT_TAIL_END_FALLBACK"
+    else:
+        try:
+            end_ord = table.ordinal_of(int(end_snap.resolved_ticks), occurrence=end_occurrence)
+        except ValueError as exc:
+            raise_mega15_error(
+                REFUSAL_DUPLICATE_PTS_AMBIGUOUS,
+                f"End PTS resolution failed: {exc}",
+            )
+        if end_ord is None:
+            raise_mega15_error(
+                REFUSAL_DUPLICATE_PTS_AMBIGUOUS,
+                f"End PTS occurrence {end_occurrence!r} out of range for tick {end_snap.resolved_ticks}",
+            )
+        resolved_end = int(end_snap.resolved_ticks)
+        end_policy = str(end_snap.policy)
+
+    resolved_start = int(start_snap.resolved_ticks)
+    start_policy = str(start_snap.policy)
+
     if resolved_end <= resolved_start:
-        raise VipLabError(
-            f"Resolved interval [{resolved_start}, {resolved_end}) is empty or inverted."
+        raise_mega15_error(
+            "TEMPORAL_PREFLIGHT_EMPTY_RESOLVED_WINDOW",
+            f"Resolved half-open window [{resolved_start}, {resolved_end}) is empty or inverted",
         )
 
-    # Check VFR and discontinuity via gate3.temporal
-    vfr_label, _, _, _ = classify_vfr(table)
-    disc_list = detect_discontinuity(table, resolved_start, resolved_end)
-    discontinuity_detected = len(disc_list) > 0
-    if discontinuity_detected and not allow_discontinuity_subdivision:
-        raise VipLabError(
-            f"{REFUSAL_PTS_DISCONTINUITY}: PTS discontinuity detected in [{resolved_start}, {resolved_end}): {disc_list}"
-        )
-    subdivided = tuple(subdivide_on_discontinuity(table, resolved_start, resolved_end))
+    declared_rate = (
+        Rational(int(declared_rate_num), int(declared_rate_den))
+        if declared_rate_num is not None and declared_rate_den is not None
+        else None
+    )
+    is_vfr_flag, _period_rat, _basis, _deviation = classify_vfr(table, declared_rate=declared_rate)
+    is_vfr = str(is_vfr_flag) == "true"
+    vfr_classification = "VFR" if is_vfr else "CFR"
 
-    # Validate structural RefinementRequest contract from gate3.refinement_request
-    gate3_req = RefinementRequest(
-        request_id=refinement_request.request_id,
-        candidate_assertion_ref=refinement_request.candidate_id,
-        source_revision_id=refinement_request.source_revision_id,
+    gaps = detect_discontinuity(table, resolved_start, resolved_end)
+    has_discontinuity = len(gaps) > 0
+    if has_discontinuity:
+        if not allow_discontinuity_subdivision:
+            raise_mega15_error(
+                REFUSAL_PTS_DISCONTINUITY_UNRESOLVED,
+                f"Unresolved PTS discontinuity detected in interval [{resolved_start}, {resolved_end}) "
+                f"for request_id={refinement_request.request_id!r}",
+            )
+        parts_raw, _sub_gaps = subdivide_on_discontinuity(
+            table, resolved_start, resolved_end
+        )
+        subdivided_segments = tuple((int(seg_s), int(seg_e)) for seg_s, seg_e in parts_raw)
+        discontinuity_subdivided = True
+    else:
+        subdivided_segments = ((resolved_start, resolved_end),)
+        discontinuity_subdivided = False
+
+    # Construct canonical Gate-3 RefinementRequest contract (offline synthetic preflight only)
+    gate3_req_obj = RefinementRequest(
+        request_id=f"g3req_{refinement_request.request_id}",
+        candidate_assertion_ref=refinement_request.queue_item_id,
+        source_revision_id=refinement_request.revision_id,
         source_locator=refinement_request.source_path,
-        expected_source_sha256=refinement_request.expected_source_sha256,
+        expected_source_sha256=refinement_request.source_sha256,
         selected_stream_index=refinement_request.selected_stream_index,
-        requested_start_pts=req_start,
-        requested_end_pts=req_end,
-        producer_attempt_id=refinement_request.producer_attempt_id,
-        idempotency_key=refinement_request.idempotency_key,
+        requested_start_pts=resolved_start,
+        requested_end_pts=resolved_end,
+        producer_attempt_id=f"attempt_{refinement_request.request_id}",
+        idempotency_key=f"idem_{refinement_request.request_digest[:16]}",
         expected_timebase=(tb.num, tb.den),
     )
-    structurally_eligible = bool(gate3_req.request_id) and (resolved_start < resolved_end)
-
-    # Evaluate authoritative gate3.refinement.is_binding_eligible on synthetic preflight dict
-    synthetic_refinement_probe = {
-        "refinement_id": f"syn_ref_{refinement_request.request_id}",
-        "source_revision_id": refinement_request.source_revision_id,
-        "source_content_digest": refinement_request.expected_source_sha256,
-        "stream_index": refinement_request.selected_stream_index,
-        "time_base": [tb.num, tb.den],
-        "time_domain": "source_pts",
-        "start_ticks": resolved_start,
-        "end_ticks": resolved_end,
-        "evidence_state": NOT_OBSERVED,
-        "blocked": REFUSAL_SOURCE_PTS_NOT_OBSERVED,
+    gate3_req_dict = {
+        "request_id": gate3_req_obj.request_id,
+        "candidate_assertion_ref": gate3_req_obj.candidate_assertion_ref,
+        "source_revision_id": gate3_req_obj.source_revision_id,
+        "source_locator": gate3_req_obj.source_locator,
+        "expected_source_sha256": gate3_req_obj.expected_source_sha256,
+        "selected_stream_index": gate3_req_obj.selected_stream_index,
+        "requested_start_pts": gate3_req_obj.requested_start_pts,
+        "requested_end_pts": gate3_req_obj.requested_end_pts,
+        "producer_attempt_id": gate3_req_obj.producer_attempt_id,
+        "idempotency_key": gate3_req_obj.idempotency_key,
+        "expected_timebase": (
+            list(gate3_req_obj.expected_timebase)
+            if gate3_req_obj.expected_timebase is not None
+            else [tb.num, tb.den]
+        ),
     }
-    binding_eligible = bool(is_binding_eligible(synthetic_refinement_probe))
-    if binding_eligible:
-        raise VipLabError("Synthetic preflight record unexpectedly reported gate3_binding_eligible=True.")
 
-    ns_preflight = evaluate_stream_namespace_preflight(
-        source_revision_id=refinement_request.source_revision_id,
-        source_sha256=refinement_request.expected_source_sha256,
-        ffprobe_stream_index=refinement_request.selected_stream_index,
-        iso_bmff_trak_ordinal=refinement_request.selected_stream_index,
-        tkhd_track_id=tkhd_track_id,
-        probe_stream_id_hex=probe_stream_id_hex,
-        stream_count=stream_count,
-    )
+    syn_ctx = make_synthetic_context()
+    record_id = f"tprep_{refinement_request.request_id}"
 
-    refusal_codes: list[str] = [
-        REFUSAL_SOURCE_PTS_NOT_OBSERVED,
-        ns_preflight.refusal_code,
-    ]
-    if tail_preflight.refusal_code is not None:
-        refusal_codes.append(tail_preflight.refusal_code)
-    if discontinuity_detected:
-        refusal_codes.append(REFUSAL_PTS_DISCONTINUITY)
-
-    temp = TemporalPreparationRecord(
-        preparation_id=f"tprep_{refinement_request.request_id}",
-        refinement_request_id=refinement_request.request_id,
+    provisional = TemporalPreparationRecord(
+        schema_version=TEMPORAL_PREFLIGHT_SCHEMA_VERSION,
+        kind=TEMPORAL_PREFLIGHT_KIND,
+        record_id=record_id,
+        upstream_request_id=refinement_request.request_id,
+        upstream_request_digest=refinement_request.request_digest,
         queue_item_id=refinement_request.queue_item_id,
-        candidate_id=refinement_request.candidate_id,
-        query_id=refinement_request.query_id,
-        query_text=refinement_request.query_text,
         arm_id=refinement_request.arm_id,
-        source_id=refinement_request.source_id,
-        source_revision_id=refinement_request.source_revision_id,
-        source_sha256=refinement_request.expected_source_sha256,
+        profile_id=refinement_request.profile_id,
+        query_id=refinement_request.query_id,
+        revision_id=refinement_request.revision_id,
+        content_id=refinement_request.content_id,
         source_path=refinement_request.source_path,
+        source_sha256=refinement_request.source_sha256,
         selected_stream_index=refinement_request.selected_stream_index,
-        time_base=refinement_request.expected_timebase,
-        candidate_interval_ticks=(req_start, req_end),
-        resolved_start_ticks=resolved_start,
-        resolved_end_ticks=resolved_end,
-        vfr_classification=vfr_label,
-        discontinuity_detected=discontinuity_detected,
-        subdivided_segments=subdivided,
-        stream_namespace_preflight=ns_preflight,
-        terminal_tail_preflight=tail_preflight,
-        gate3_structurally_eligible=structurally_eligible,
-        gate3_binding_eligible=False,
-        source_pts_evidence_state=NOT_OBSERVED,
+        stream_id=str(effective_stream_id),
+        timebase_num=tb.num,
+        timebase_den=tb.den,
+        pts_ticks=pts_ticks,
+        candidate_sample_pts=int(refinement_request.candidate_sample_pts),
+        requested_start_pts=req_start,
+        requested_end_pts=req_end,
+        start_occurrence=start_occurrence,
+        end_occurrence=end_occurrence,
+        resolved_start_pts=resolved_start,
+        resolved_end_pts=resolved_end,
+        start_snap_policy=start_policy,
+        end_snap_policy=end_policy,
+        endpoint_semantics="HALF_OPEN_START_INCLUSIVE_END_EXCLUSIVE",
+        is_vfr=is_vfr,
+        vfr_classification=vfr_classification,
+        has_discontinuity=has_discontinuity,
+        discontinuity_subdivided=discontinuity_subdivided,
+        subdivided_segments=subdivided_segments,
+        gate3_refinement_request=gate3_req_dict,
         candidate_evidence_class="MATCHED",
-        exact_cut_eligible=False,
-        refusal_codes=tuple(refusal_codes),
-        record_digest="0" * 64,
+        source_pts_evidence_state="NOT_OBSERVED",
+        authoritative_source_measurement=False,
+        binding_eligible=False,
+        synthetic_context=syn_ctx,
+        record_digest="",
     )
-    digest = canonical_sha256(temp._Body_without_digest())
-    record = TemporalPreparationRecord(
-        **{**temp.__dict__, "record_digest": digest}
+    digest = canonical_sha256(provisional._digest_payload())
+    final_record = TemporalPreparationRecord(
+        **{**provisional.__dict__, "record_digest": digest}
     )
-    verify_temporal_preparation_record(record)
-    return record
+    final_record.validate()
+    return final_record
 
 
-def verify_temporal_preparation_record(record: TemporalPreparationRecord) -> None:
-    if not isinstance(record, TemporalPreparationRecord):
-        raise VipLabError("Expected TemporalPreparationRecord instance.")
-    validate_hex_digest(record.source_sha256, field_name="source_sha256")
-    validate_hex_digest(record.record_digest, field_name="record_digest")
-    if record.source_pts_evidence_state != NOT_OBSERVED:
-        raise VipLabError(
-            f"{REFUSAL_FORGED_MEASURED_PTS}: source_pts_evidence_state must be {NOT_OBSERVED!r}."
-        )
-    if record.gate3_binding_eligible is not False:
-        raise VipLabError(
-            f"{REFUSAL_FORGED_MEASURED_PTS}: gate3_binding_eligible must be False."
-        )
-    if record.exact_cut_eligible is not False:
-        raise VipLabError(
-            f"{REFUSAL_FORGED_MEASURED_PTS}: exact_cut_eligible must be False."
-        )
-    if is_binding_eligible(record.to_dict()) is not False:
-        raise VipLabError(
-            f"{REFUSAL_FORGED_MEASURED_PTS}: gate3.refinement.is_binding_eligible must be False."
-        )
-    if record.candidate_evidence_class != "MATCHED":
-        raise VipLabError("candidate_evidence_class must be 'MATCHED'.")
-    if record.resolved_end_ticks <= record.resolved_start_ticks:
-        raise VipLabError("resolved_end_ticks must be > resolved_start_ticks.")
-    if REFUSAL_SOURCE_PTS_NOT_OBSERVED not in record.refusal_codes:
-        raise VipLabError("TemporalPreparationRecord must include REFUSAL_SOURCE_PTS_NOT_OBSERVED.")
-    expected_digest = canonical_sha256(record._Body_without_digest())
-    if record.record_digest != expected_digest:
-        raise VipLabError(
-            f"TemporalPreparationRecord digest mismatch: expected {expected_digest}, got {record.record_digest}"
-        )
+def verify_temporal_preparation_record(
+    record: TemporalPreparationRecord | Mapping[str, Any],
+) -> TemporalPreparationRecord:
+    """Verify and return a `TemporalPreparationRecord`."""
+    if isinstance(record, TemporalPreparationRecord):
+        record.validate()
+        return record
+    return TemporalPreparationRecord.from_dict(record)

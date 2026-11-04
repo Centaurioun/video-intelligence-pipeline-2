@@ -1,137 +1,282 @@
+"""MEGA-16.4 — Closed Offline CLI & End-to-End Verification Entrypoint.
+
+Supports two closed offline subcommands:
+1. `run-offline` — executes the deterministic synthetic MEGA-08..14 -> MEGA-15 -> MEGA-16
+   pipeline and prints or writes the canonical JSON `Mega1516OfflineReport`.
+2. `verify-report` — reads and cryptographically verifies an existing `Mega1516OfflineReport`
+   JSON file.
+
+Strictly refuses:
+- Forbidden execution, network, model-download, real-archive, FFmpeg, or export flags
+- URL arguments (`http://`, `https://`, `s3://`, `gs://`, `file://`)
+- Symlink targets, existing-file overwrites (no-clobber), traversal (`..`), or media paths
+"""
+
 from __future__ import annotations
 
 import argparse
+import json
+import os
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+import sys
+from typing import Sequence
 
-from vip_lab.common import (
-    FORBIDDEN_EXTERNAL_AUTHORITY_KEYS,
-    NOT_OBSERVED,
-    VipLabError,
-    canonical_json_dumps,
-    load_bounded_json_file,
-)
-from vip_lab.mega16.qc_requirements import validate_qc_claim_or_refuse
+from vip_lab.common import VipLabError, canonical_json_bytes
+from vip_lab.mega15.temporal_preflight import raise_mega15_error
 from vip_lab.mega16.release_refusal import (
-    Mega1516OfflineBundle,
     run_mega15_16_offline_pipeline,
-    verify_mega15_16_offline_bundle,
+    verify_mega15_16_offline_report,
 )
 
-FORBIDDEN_CLI_FLAGS = frozenset(
-    {
-        "--real",
-        "--render",
-        "--export",
-        "--provider",
-        "--download",
-        "--upload",
-        "--archive",
-        "--model-weights",
-        "--production",
-        "--ffmpeg",
-        "--ffprobe",
-    }
+REFUSAL_CLI_FORBIDDEN_FLAG = "REFUSAL_CLI_FORBIDDEN_AUTHORITY_OR_EXECUTION_FLAG"
+REFUSAL_CLI_URL_FORBIDDEN = "REFUSAL_CLI_REMOTE_URL_FORBIDDEN"
+REFUSAL_CLI_OUTPUT_PATH_UNSAFE = "REFUSAL_CLI_OUTPUT_PATH_UNSAFE"
+REFUSAL_CLI_INPUT_PATH_UNSAFE = "REFUSAL_CLI_INPUT_PATH_UNSAFE"
+
+MAX_CLI_REPORT_BYTES = 16 * 1024 * 1024
+
+FORBIDDEN_CLI_FLAGS: tuple[str, ...] = (
+    "--execute-ffmpeg",
+    "--ffmpeg",
+    "--ffprobe",
+    "--real-archive",
+    "--archive-root",
+    "--download-models",
+    "--load-weights",
+    "--enable-network",
+    "--cloud-provider",
+    "--approve-human",
+    "--mint-edit-plan",
+    "--compile-handoff",
+    "--authorize-production-export",
+    "--promote-gate",
+    "--owner-override",
 )
 
-FORBIDDEN_URL_PREFIXES = (
+URL_PREFIXES: tuple[str, ...] = (
     "http://",
     "https://",
     "s3://",
     "gs://",
-    "gdrive://",
     "file://",
+    "ftp://",
+    "ssh://",
+)
+
+FORBIDDEN_MEDIA_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".mp4",
+        ".mov",
+        ".mkv",
+        ".avi",
+        ".webm",
+        ".wav",
+        ".flac",
+        ".mp3",
+        ".aac",
+        ".m4a",
+        ".mxf",
+        ".ts",
+    }
 )
 
 
-def _check_forbidden_tokens(argv: Sequence[str]) -> None:
+def _scan_raw_argv_for_forbidden_tokens(argv: Sequence[str]) -> None:
     for token in argv:
-        head = token.split("=", 1)[0]
-        if head in FORBIDDEN_CLI_FLAGS:
-            raise VipLabError(f"Forbidden real/render/export/network CLI flag rejected: {head}")
-        lowered = token.lower()
-        for prefix in FORBIDDEN_URL_PREFIXES:
-            if lowered.startswith(prefix) or f"={prefix}" in lowered:
-                raise VipLabError(f"External or file URL argument is prohibited in synthetic CLI: {token}")
+        flag_name = token.split("=", 1)[0].strip()
+        if flag_name in FORBIDDEN_CLI_FLAGS:
+            raise_mega15_error(
+                REFUSAL_CLI_FORBIDDEN_FLAG,
+                f"Forbidden CLI flag {flag_name!r} is not permitted in offline synthetic preparation.",
+            )
+        lower_tok = token.strip().lower()
+        for prefix in URL_PREFIXES:
+            if lower_tok.startswith(prefix) or (
+                "=" in lower_tok and lower_tok.split("=", 1)[1].startswith(prefix)
+            ):
+                raise_mega15_error(
+                    REFUSAL_CLI_URL_FORBIDDEN,
+                    f"Remote or URI locator {token!r} is forbidden in offline CLI.",
+                )
 
 
-def _validate_untrusted_input_mapping(payload: Mapping[str, Any]) -> None:
-    forbidden_present = sorted(
-        k for k in FORBIDDEN_EXTERNAL_AUTHORITY_KEYS if bool(payload.get(k))
-    )
-    if forbidden_present:
-        raise VipLabError(f"Untrusted input contains forbidden authority keys: {forbidden_present}")
-    if payload.get("source_pts_evidence_state") not in (None, NOT_OBSERVED):
-        raise VipLabError("Untrusted input claims measured source_pts_evidence_state.")
-    if payload.get("real_human_decision_state") not in (None, NOT_OBSERVED):
-        raise VipLabError("Untrusted input claims real_human_decision_state.")
-    validate_qc_claim_or_refuse(payload)
+def _validate_safe_output_path(raw_path: str) -> Path:
+    if not isinstance(raw_path, str) or not raw_path.strip() or "\x00" in raw_path:
+        raise_mega15_error(
+            REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
+            f"Invalid output path: {raw_path!r}",
+        )
+    p = Path(raw_path)
+    if ".." in p.parts:
+        raise_mega15_error(
+            REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
+            f"Parent directory traversal ('..') is forbidden in output path: {raw_path!r}",
+        )
+    if p.suffix.lower() in FORBIDDEN_MEDIA_EXTENSIONS:
+        raise_mega15_error(
+            REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
+            f"Media file extension {p.suffix!r} is forbidden for offline JSON report output.",
+        )
+    if p.is_symlink() or p.exists():
+        raise_mega15_error(
+            REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
+            f"Output path {raw_path!r} already exists or is a symlink; refusing to overwrite.",
+        )
+    parent = p.parent if str(p.parent) != "" else Path(".")
+    if parent.is_symlink():
+        raise_mega15_error(
+            REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
+            f"Output parent directory {str(parent)!r} cannot be a symlink.",
+        )
+    return p
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args_list = list(argv) if argv is not None else []
+def _atomic_write_new_file(path: Path, data: bytes) -> None:
+    parent = path.parent if str(path.parent) != "" else Path(".")
+    parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
-        _check_forbidden_tokens(args_list)
-    except VipLabError:
-        return 2
+        fd = os.open(str(path), flags, 0o600)
+    except OSError as exc:
+        raise_mega15_error(
+            REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
+            f"Refused to open output path {str(path)!r} exclusively without following symlinks: {exc}",
+        )
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)
 
+
+def _safe_read_report_file(raw_path: str) -> dict:
+    if not isinstance(raw_path, str) or not raw_path.strip() or "\x00" in raw_path:
+        raise_mega15_error(
+            REFUSAL_CLI_INPUT_PATH_UNSAFE,
+            f"Invalid input path: {raw_path!r}",
+        )
+    p = Path(raw_path)
+    if ".." in p.parts:
+        raise_mega15_error(
+            REFUSAL_CLI_INPUT_PATH_UNSAFE,
+            f"Parent directory traversal ('..') is forbidden in input path: {raw_path!r}",
+        )
+    if p.is_symlink() or not p.is_file():
+        raise_mega15_error(
+            REFUSAL_CLI_INPUT_PATH_UNSAFE,
+            f"Input report path {raw_path!r} must be a regular non-symlink file.",
+        )
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(str(p), flags)
+    except OSError as exc:
+        raise_mega15_error(
+            REFUSAL_CLI_INPUT_PATH_UNSAFE,
+            f"Failed to open input report path {raw_path!r}: {exc}",
+        )
+    try:
+        raw_bytes = os.read(fd, MAX_CLI_REPORT_BYTES + 1)
+    finally:
+        os.close(fd)
+
+    if len(raw_bytes) > MAX_CLI_REPORT_BYTES:
+        raise_mega15_error(
+            REFUSAL_CLI_INPUT_PATH_UNSAFE,
+            f"Input report exceeds maximum allowed size ({MAX_CLI_REPORT_BYTES} bytes).",
+        )
+    try:
+        parsed = json.loads(raw_bytes.decode("utf-8"))
+    except Exception as exc:
+        raise_mega15_error(
+            REFUSAL_CLI_INPUT_PATH_UNSAFE,
+            f"Input report is not valid UTF-8 JSON: {exc}",
+        )
+    if not isinstance(parsed, dict):
+        raise_mega15_error(
+            REFUSAL_CLI_INPUT_PATH_UNSAFE,
+            "Input report JSON root must be an object.",
+        )
+    return parsed
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="vip-lab-mega16",
-        description="MEGA-15/16 synthetic offline Gate-3 preparation and export-refusal runner",
-        add_help=True,
+        description="MEGA-15/16 Offline Gate-3 Preparation, QC & Release-Refusal Verifier CLI",
     )
-    parser.add_argument(
-        "--mode",
-        choices=("three_arm", "single_arm"),
-        default="three_arm",
-        help="Synthetic scenario mode",
+    sub = parser.add_subparsers(dest="subcommand", required=True)
+
+    run_p = sub.add_parser(
+        "run-offline",
+        help="Run the deterministic synthetic MEGA-15/16 offline pipeline.",
     )
-    parser.add_argument(
+    run_p.add_argument(
+        "--seed",
+        type=int,
+        default=20261102,
+        help="Deterministic synthetic seed (default: 20261102).",
+    )
+    run_p.add_argument(
         "--output",
         type=str,
         default=None,
-        help="Optional path to write canonical JSON bundle report",
-    )
-    parser.add_argument(
-        "--verify",
-        type=str,
-        default=None,
-        help="Optional path to verify an existing Mega1516OfflineBundle JSON file",
-    )
-    parser.add_argument(
-        "--check-input",
-        type=str,
-        default=None,
-        help="Optional path to validate an untrusted input JSON against authority/measurement refusal rules",
+        help="Optional new non-existing JSON file path to write the canonical report.",
     )
 
+    ver_p = sub.add_parser(
+        "verify-report",
+        help="Verify an existing Mega1516OfflineReport JSON file.",
+    )
+    ver_p.add_argument(
+        "--input",
+        type=str,
+        required=True,
+        help="Path to the Mega1516OfflineReport JSON file.",
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Execute the MEGA-16 CLI and return exit code (0 on success, 2 on refusal)."""
+    args_list = list(sys.argv[1:]) if argv is None else list(argv)
     try:
-        parsed = parser.parse_args(args_list)
-        if parsed.check_input is not None:
-            raw_input = load_bounded_json_file(Path(parsed.check_input))
-            if not isinstance(raw_input, Mapping):
-                raise VipLabError("Input JSON must be an object.")
-            _validate_untrusted_input_mapping(raw_input)
+        _scan_raw_argv_for_forbidden_tokens(args_list)
+        parser = build_parser()
+        ns = parser.parse_args(args_list)
+
+        if ns.subcommand == "run-offline":
+            out_path: Path | None = None
+            if ns.output is not None:
+                out_path = _validate_safe_output_path(ns.output)
+            report = run_mega15_16_offline_pipeline(seed=int(ns.seed))
+            serialized = canonical_json_bytes(report.to_dict()).decode("utf-8")
+            if out_path is not None:
+                _atomic_write_new_file(out_path, (serialized + "\n").encode("utf-8"))
+            else:
+                sys.stdout.write(serialized + "\n")
             return 0
 
-        if parsed.verify is not None:
-            raw_bundle = load_bounded_json_file(Path(parsed.verify))
-            if not isinstance(raw_bundle, Mapping):
-                raise VipLabError("Bundle JSON must be an object.")
-            bundle = Mega1516OfflineBundle.from_dict(raw_bundle)
-            verify_mega15_16_offline_bundle(bundle)
+        if ns.subcommand == "verify-report":
+            payload = _safe_read_report_file(ns.input)
+            verified = verify_mega15_16_offline_report(payload)
+            summary = {
+                "verified": True,
+                "report_id": verified.report_id,
+                "report_digest": verified.report_digest,
+                "export_status": verified.release_refusal_certificate.export_status,
+                "production_export_authorized": verified.release_refusal_certificate.production_export_authorized,
+            }
+            sys.stdout.write(
+                canonical_json_bytes(summary).decode("utf-8") + "\n"
+            )
             return 0
 
-        bundle = run_mega15_16_offline_pipeline(scenario_mode=parsed.mode)
-        verify_mega15_16_offline_bundle(bundle)
-        if parsed.output is not None:
-            out_path = Path(parsed.output)
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(canonical_json_dumps(bundle.to_dict()), encoding="utf-8")
-        return 0
-    except (VipLabError, SystemExit, Exception):
         return 2
+    except VipLabError as exc:
+        sys.stderr.write(f"REFUSED: {exc.code}: {exc.message}\n")
+        return 2
+    except SystemExit as exc:
+        return int(exc.code) if isinstance(exc.code, int) else 2
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     raise SystemExit(main())

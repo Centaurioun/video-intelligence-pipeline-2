@@ -1,12 +1,41 @@
+"""Unit and adversarial regression tests for MEGA-16 (`vip_lab.mega16`).
+
+Covers against ACTUAL repository contracts:
+- MEGA-16.1: `RenderPreflightSpecification`, `_REQUIRED_FIELDS` alignment with
+  `vip_fvs.real_preview_receipt`, FFmpeg/media output/render execution refusals,
+  and preview-as-production escalation refusal.
+- MEGA-16.2: `QcRequirementsBundle`, `MEASURED` / `VISUALLY_OBSERVED` / `AUDIO_OBSERVED`
+  evidence class separation, synthetic QC pass refusal, and QC blocker removal refusal.
+- MEGA-16.3: `ReleaseRefusalCertificate`, all 6 `CANONICAL_RELEASE_BLOCKER_CODES`,
+  untrusted authority key stripping, owner forgery refusal, production export refusal,
+  and Gate promotion refusal.
+- MEGA-16.4: Closed offline CLI (`run-offline`, `verify-report`), default `sys.argv`
+  handling when `argv=None`, forbidden flag refusal, URL refusal, atomic no-clobber
+  output safety, symlink refusal, media extension refusal, and tampered JSON refusal.
+"""
+
 from __future__ import annotations
 
+from dataclasses import replace
+import json
 from pathlib import Path
-
+import sys
+from typing import Any
 import pytest
 
-from gate3.qc import bare_pass_is_insufficient
-from vip_fvs.real_preview_receipt import FIXTURE_NOT_OBSERVED_REQUIRED
-from vip_lab.common import NOT_OBSERVED, VipLabError, canonical_json_dumps
+from vip_fvs.real_preview_receipt import (
+    _FIELDS as REAL_PREVIEW_RECEIPT_REQUIRED_FIELDS,
+    SCOPE as PREVIEW_NON_PRODUCTION_MARKER,
+)
+from vip_lab.common import ReadinessPacket, VipLabError
+from vip_lab.mega10 import (
+    build_temporal_refinement_request,
+    evaluate_pts_fixture_diagnostic,
+)
+from vip_lab.mega11 import (
+    advance_proposal_revision,
+    build_editorial_proposal,
+)
 from vip_lab.mega13 import (
     CANONICAL_RELEASE_BLOCKER_CODES,
     audit_cross_stage_lineage,
@@ -14,260 +43,345 @@ from vip_lab.mega13 import (
     evaluate_qc_readiness,
 )
 from vip_lab.mega15 import (
-    build_gate3_preparation_packet,
+    audit_mega15_lineage,
+    build_editorial_handoff_envelope,
+    build_gate3_offline_preparation_packet,
     build_temporal_preparation_record,
-    verify_cross_stage_gate3_lineage,
 )
 from vip_lab.mega16 import (
-    ExportReadinessPacket,
-    InertDryRunRenderIntent,
-    MEGA15_16_PROGRAM_VERSION,
-    QCDimensionRequirement,
-    QCRequirementManifest,
-    REFUSAL_BARE_QC_PASS_INSUFFICIENT,
-    REFUSAL_FORGED_SENSORY_OR_MEASURED_QC,
-    REFUSAL_PRODUCTION_EXPORT_NOT_AUTHORIZED,
+    FORBIDDEN_CLI_FLAGS,
+    REFUSAL_BLOCKER_SET_INCOMPLETE,
+    REFUSAL_CLI_FORBIDDEN_FLAG,
+    REFUSAL_CLI_INPUT_PATH_UNSAFE,
+    REFUSAL_CLI_OUTPUT_PATH_UNSAFE,
+    REFUSAL_CLI_URL_FORBIDDEN,
+    REFUSAL_FFMPEG_INVOCATION_FORBIDDEN,
+    REFUSAL_GATE_PROMOTION_FORBIDDEN,
+    REFUSAL_OWNER_AUTHORITY_FORGERY,
+    REFUSAL_PREVIEW_AS_PRODUCTION_FORBIDDEN,
+    REFUSAL_PRODUCTION_EXPORT_FORBIDDEN,
+    REFUSAL_QC_BLOCKER_REMOVAL,
+    REFUSAL_QC_EVIDENCE_CLASS_CONFUSION,
     REFUSAL_RENDER_EXECUTION_FORBIDDEN,
-    RenderPreflightReport,
-    build_export_readiness_packet,
-    build_qc_requirement_manifest,
-    build_render_preflight_report,
-    validate_qc_claim_or_refuse,
-    verify_export_readiness_packet,
-    verify_qc_requirement_manifest,
-    verify_render_preflight_report,
+    REFUSAL_RENDER_OUTPUT_PATH_FORBIDDEN,
+    REFUSAL_SYNTHETIC_AUDIO_QC_PASS,
+    REFUSAL_SYNTHETIC_TECHNICAL_QC_PASS,
+    REFUSAL_SYNTHETIC_VISUAL_QC_PASS,
+    build_mega15_16_offline_report,
+    build_qc_requirements_bundle,
+    build_release_refusal_certificate,
+    build_render_preflight_specification,
+    mega16_cli_main,
+    refuse_production_export_or_gate_promotion,
+    refuse_render_or_ffmpeg_execution,
+    refuse_synthetic_qc_pass_or_class_confusion,
+    verify_mega15_16_offline_report,
+    verify_qc_requirements_bundle,
+    verify_release_refusal_certificate,
+    verify_render_preflight_specification,
 )
-from vip_lab.mega16.cli import main as mega16_cli_main
-from tests.vip_lab.test_mega15 import _build_fixture_queue_and_chains
+from tests.vip_lab.test_mega15 import _make_three_item_queue_with_duplicates
 
 
-def _build_mega15_inputs():
-    queue, requests, diagnostics, proposal_chains = _build_fixture_queue_and_chains()
-    temporal_records = [
-        build_temporal_preparation_record(refinement_request=r, pts_diagnostic=d)
-        for r, d in zip(requests, diagnostics, strict=True)
-    ]
-    prep_packet = build_gate3_preparation_packet(
-        packet_id="g3_prep_m16_001",
-        queue=queue,
-        temporal_records=temporal_records,
-        proposal_chains=proposal_chains,
+def _build_mega15_fixture() -> tuple[Any, ...]:
+    queue = _make_three_item_queue_with_duplicates()
+    t_reqs = []
+    t_recs = []
+    p_chains = []
+    h_envs = []
+
+    for item in queue.items:
+        pts_ticks = (0, 1000, 2000, 3000, 4000)
+        req = build_temporal_refinement_request(
+            item,
+            upstream_queue_digest=queue.queue_digest,
+            selected_stream_index=0,
+            requested_start_pts=1000,
+            requested_end_pts=3000,
+            pts_ticks=pts_ticks,
+        )
+        diag = evaluate_pts_fixture_diagnostic(
+            timebase_num=item.source_timebase_num,
+            timebase_den=item.source_timebase_den,
+            pts_ticks=pts_ticks,
+            requested_start_pts=1000,
+            requested_end_pts=3000,
+        )
+        t_rec = build_temporal_preparation_record(refinement_request=req, pts_diagnostic=diag)
+        v1 = build_editorial_proposal(
+            queue_item=item,
+            temporal_request=req,
+            proposed_action="REVIEW_CANDIDATE",
+            rationale_note=f"v1 for {item.queue_item_id}",
+        )
+        v2 = advance_proposal_revision(
+            prior_proposal=v1,
+            proposed_action="REQUEST_MEASUREMENT",
+            rationale_note=f"v2 for {item.queue_item_id}",
+        )
+        env = build_editorial_handoff_envelope(
+            candidate_item=item,
+            temporal_record=t_rec,
+            proposal_revisions=(v1, v2),
+        )
+        t_reqs.append(req)
+        t_recs.append(t_rec)
+        p_chains.append((v1, v2))
+        h_envs.append(env)
+
+    prep_packet = build_gate3_offline_preparation_packet(
+        candidate_queue=queue,
+        temporal_records=t_recs,
+        handoff_envelopes=h_envs,
     )
-    lineage_cert = verify_cross_stage_gate3_lineage(
-        certificate_id="g3_cert_m16_001",
+    m13_lineage = audit_cross_stage_lineage(
+        candidate_queue=queue,
+        temporal_request=t_reqs[0],
+        editorial_proposal=p_chains[0][-1],
+        proposal_revision_chain=p_chains[0],
+    )
+    m15_lineage = audit_mega15_lineage(
         queue=queue,
-        refinement_requests=requests,
-        pts_diagnostics=diagnostics,
-        proposal_chains=proposal_chains,
+        temporal_requests=t_reqs,
+        proposal_chains=p_chains,
         preparation_packet=prep_packet,
+        upstream_lineage_receipt=m13_lineage,
     )
-    m13_receipt = audit_cross_stage_lineage(
-        audit_id="m13_audit_m16_001",
-        queue=queue,
-        refinement_requests=requests,
-        pts_diagnostics=diagnostics,
-        proposal_chains=proposal_chains,
+    m13_qc_readiness = evaluate_qc_readiness(
+        {
+            "candidate_queue": queue.to_dict(),
+            "temporal_request": t_reqs[0].to_dict(),
+            "editorial_proposal": p_chains[0][-1].to_dict(),
+            "proposal_revision_chain": [p.to_dict() for p in p_chains[0]],
+        }
     )
-    qc_checklist = evaluate_qc_readiness(
-        checklist_id="m13_qc_m16_001",
-        lineage_receipt=m13_receipt,
+    m13_blocker_summary = build_release_blocker_summary(
+        lineage_receipt=m13_lineage,
+        qc_packet=m13_qc_readiness,
     )
-    blocker_summary = build_release_blocker_summary(
-        summary_id="m13_blockers_m16_001",
-        lineage_receipt=m13_receipt,
-        qc_checklist=qc_checklist,
-    )
-    return prep_packet, lineage_cert, blocker_summary
+    return prep_packet, m15_lineage, m13_qc_readiness, m13_blocker_summary
 
 
-def test_mega16_render_preflight_is_inert_and_refuses_execution() -> None:
-    prep_packet, lineage_cert, _ = _build_mega15_inputs()
-
-    report = build_render_preflight_report(
-        preflight_id="render_preflight_001",
+def test_render_preflight_specification_and_refusals() -> None:
+    prep_packet, m15_lineage, _, _ = _build_mega15_fixture()
+    spec = build_render_preflight_specification(
         preparation_packet=prep_packet,
-        lineage_certificate=lineage_cert,
+        lineage_receipt=m15_lineage,
     )
-    verify_render_preflight_report(report)
+    assert spec.render_execution_state == "PREFLIGHT_ONLY_NOT_EXECUTED"
+    assert spec.preview_eligible is False
+    assert spec.production_export_authorized is False
+    assert spec.ffmpeg_invocation_permitted is False
+    assert spec.media_write_permitted is False
+    assert spec.expected_non_production_marker == PREVIEW_NON_PRODUCTION_MARKER
+    assert set(spec.gate3_render_receipt_required_fields) == set(
+        REAL_PREVIEW_RECEIPT_REQUIRED_FIELDS
+    )
+    assert all(w.media_output_path is None for w in spec.windows)
+    assert verify_render_preflight_specification(spec.to_dict()) == spec
 
-    assert report.preview_policy_authorized is False
-    assert report.render_executed is False
-    assert report.production_export_authorized is False
-    assert report.export_status == "REFUSED_NOT_AUTHORIZED"
-    assert len(report.dry_run_intents) == 3
-
-    for intent in report.dry_run_intents:
-        assert isinstance(intent, InertDryRunRenderIntent)
-        assert intent.execution_mode == "INERT_DECLARATIVE_DRY_RUN_ONLY"
-        assert intent.ffmpeg_invocation_permitted is False
-        assert intent.media_file_creation_permitted is False
-        assert intent.subprocess_execution_permitted is False
-        assert intent.render_executed is False
-
-    reloaded = RenderPreflightReport.from_dict(report.to_dict())
-    assert reloaded.report_digest == report.report_digest
-
-    # Attempting to request actual render/FFmpeg/preview execution via overrides fails closed
     with pytest.raises(VipLabError, match=REFUSAL_RENDER_EXECUTION_FORBIDDEN):
-        build_render_preflight_report(
-            preflight_id="render_preflight_bad",
-            preparation_packet=prep_packet,
-            lineage_certificate=lineage_cert,
-            untrusted_overrides={"render_executed": True},
-        )
-
-    with pytest.raises(VipLabError, match=REFUSAL_RENDER_EXECUTION_FORBIDDEN):
-        build_render_preflight_report(
-            preflight_id="render_preflight_bad2",
-            preparation_packet=prep_packet,
-            lineage_certificate=lineage_cert,
-            untrusted_overrides={"ffmpeg_invocation_permitted": True},
-        )
+        refuse_render_or_ffmpeg_execution(execute_render=True)
+    with pytest.raises(VipLabError, match=REFUSAL_FFMPEG_INVOCATION_FORBIDDEN):
+        refuse_render_or_ffmpeg_execution(ffmpeg_argv=["ffmpeg", "-i", "in.mp4", "out.mp4"])
+    with pytest.raises(VipLabError, match=REFUSAL_RENDER_OUTPUT_PATH_FORBIDDEN):
+        refuse_render_or_ffmpeg_execution(media_output_path="/tmp/out.mp4")
+    with pytest.raises(VipLabError, match=REFUSAL_PREVIEW_AS_PRODUCTION_FORBIDDEN):
+        refuse_render_or_ffmpeg_execution(treat_preview_as_production=True)
 
 
-def test_mega16_qc_requirement_manifest_and_bare_pass_rejection() -> None:
-    prep_packet, _, _ = _build_mega15_inputs()
-
-    # Confirm authoritative gate3.qc.bare_pass_is_insufficient behavior
-    assert bare_pass_is_insufficient({"edit_qc_status": "PASS"}) is True
-
-    manifest = build_qc_requirement_manifest(
-        manifest_id="qc_manifest_001",
+def test_qc_requirements_bundle_and_evidence_class_refusals() -> None:
+    prep_packet, m15_lineage, m13_qc_readiness, _ = _build_mega15_fixture()
+    render_spec = build_render_preflight_specification(
         preparation_packet=prep_packet,
+        lineage_receipt=m15_lineage,
     )
-    verify_qc_requirement_manifest(manifest)
-
-    assert manifest.technical_qc_observed == NOT_OBSERVED
-    assert manifest.visual_editorial_qc_observed == NOT_OBSERVED
-    assert manifest.audio_editorial_qc_observed == NOT_OBSERVED
-    assert manifest.bare_pass_rejected is True
-    assert manifest.fixture_not_observed_required == tuple(FIXTURE_NOT_OBSERVED_REQUIRED)
-    assert manifest.overall_qc_status == "BLOCKED_NOT_OBSERVED"
-    assert len(manifest.dimensions) == 3
-
-    for dim in manifest.dimensions:
-        assert isinstance(dim, QCDimensionRequirement)
-        assert dim.current_observation_state == NOT_OBSERVED
-        assert dim.satisfied is False
-
-    # Bare QC PASS claim is refused
-    with pytest.raises(VipLabError, match=REFUSAL_BARE_QC_PASS_INSUFFICIENT):
-        validate_qc_claim_or_refuse({"edit_qc_status": "PASS"})
-
-    # Forged sensory or measured QC claims are refused in synthetic offline preparation
-    with pytest.raises(VipLabError, match=REFUSAL_FORGED_SENSORY_OR_MEASURED_QC):
-        validate_qc_claim_or_refuse(
-            {
-                "edit_qc_status": "PASS",
-                "qc_scope": "editorial_visual",
-                "supporting_evidence_refs": ["ref_1"],
-                "visual_editorial_qc_observed": "VISUALLY_OBSERVED",
-            }
-        )
-
-    with pytest.raises(VipLabError, match=REFUSAL_FORGED_SENSORY_OR_MEASURED_QC):
-        build_qc_requirement_manifest(
-            manifest_id="qc_manifest_bad",
-            preparation_packet=prep_packet,
-            untrusted_qc_claim={"audio_editorial_qc_observed": "AUDIO_OBSERVED"},
-        )
-
-
-def test_mega16_export_readiness_packet_and_untrusted_authority_stripping() -> None:
-    prep_packet, lineage_cert, blocker_summary = _build_mega15_inputs()
-    render_report = build_render_preflight_report(
-        preflight_id="render_preflight_001",
-        preparation_packet=prep_packet,
-        lineage_certificate=lineage_cert,
+    qc_bundle = build_qc_requirements_bundle(
+        render_specification=render_spec,
+        qc_readiness_packet=m13_qc_readiness,
     )
-    qc_manifest = build_qc_requirement_manifest(
-        manifest_id="qc_manifest_001",
+    assert qc_bundle.technical_qc_required_evidence_class == "MEASURED"
+    assert qc_bundle.visual_editorial_qc_required_evidence_class == "VISUALLY_OBSERVED"
+    assert qc_bundle.audio_editorial_qc_required_evidence_class == "AUDIO_OBSERVED"
+    assert qc_bundle.technical_qc_state == "NOT_OBSERVED"
+    assert qc_bundle.visual_editorial_qc_state == "NOT_OBSERVED"
+    assert qc_bundle.audio_editorial_qc_state == "NOT_OBSERVED"
+    assert qc_bundle.overall_qc_gate_status == "BLOCKED_QC_NOT_OBSERVED"
+    assert verify_qc_requirements_bundle(qc_bundle.to_dict()) == qc_bundle
+
+    with pytest.raises(VipLabError, match=REFUSAL_SYNTHETIC_TECHNICAL_QC_PASS):
+        refuse_synthetic_qc_pass_or_class_confusion(claim_technical_qc_pass=True)
+    with pytest.raises(VipLabError, match=REFUSAL_SYNTHETIC_VISUAL_QC_PASS):
+        refuse_synthetic_qc_pass_or_class_confusion(claim_visual_qc_pass=True)
+    with pytest.raises(VipLabError, match=REFUSAL_SYNTHETIC_AUDIO_QC_PASS):
+        refuse_synthetic_qc_pass_or_class_confusion(claim_audio_qc_pass=True)
+    with pytest.raises(VipLabError, match=REFUSAL_QC_EVIDENCE_CLASS_CONFUSION):
+        refuse_synthetic_qc_pass_or_class_confusion(technical_evidence_class="MATCHED")
+    with pytest.raises(VipLabError, match=REFUSAL_QC_EVIDENCE_CLASS_CONFUSION):
+        refuse_synthetic_qc_pass_or_class_confusion(
+            visual_evidence_class="EDITORIAL_INFERENCE"
+        )
+    with pytest.raises(VipLabError, match=REFUSAL_QC_EVIDENCE_CLASS_CONFUSION):
+        refuse_synthetic_qc_pass_or_class_confusion(
+            audio_evidence_class="VISUALLY_OBSERVED"
+        )
+
+    # Removing QC blocker from ReadinessPacket must be refused
+    bad_ready = ReadinessPacket.create(
+        stage_id=m13_qc_readiness.stage_id,
+        stage_status=m13_qc_readiness.stage_status,
+        evidence_state=m13_qc_readiness.evidence_state,
+        blocker_codes=["REAL_SOURCE_MEDIA_ACCESS_NOT_OBSERVED"],
+        consumed_digests=m13_qc_readiness.consumed_digests,
+        details=m13_qc_readiness.details,
+    )
+    with pytest.raises(VipLabError, match=REFUSAL_QC_BLOCKER_REMOVAL):
+        build_qc_requirements_bundle(
+            render_specification=render_spec,
+            qc_readiness_packet=bad_ready,
+        )
+
+
+def test_release_refusal_certificate_and_untrusted_authority_sanitization() -> None:
+    prep_packet, m15_lineage, m13_qc_readiness, m13_blocker_summary = _build_mega15_fixture()
+    render_spec = build_render_preflight_specification(
         preparation_packet=prep_packet,
+        lineage_receipt=m15_lineage,
+    )
+    qc_bundle = build_qc_requirements_bundle(
+        render_specification=render_spec,
+        qc_readiness_packet=m13_qc_readiness,
     )
 
     untrusted_payload = {
-        "note": "caller input",
+        "note": "benign note",
         "human_approved": True,
         "owner_approved": True,
         "production_export_authorized": True,
         "gate_promoted": True,
     }
-    readiness = build_export_readiness_packet(
-        packet_id="export_readiness_001",
+    cert = build_release_refusal_certificate(
         preparation_packet=prep_packet,
-        lineage_certificate=lineage_cert,
-        render_preflight=render_report,
-        qc_manifest=qc_manifest,
-        release_blocker_summary=blocker_summary,
-        untrusted_input=untrusted_payload,
+        mega15_lineage_receipt=m15_lineage,
+        render_specification=render_spec,
+        qc_bundle=qc_bundle,
+        upstream_blocker_summary=m13_blocker_summary,
+        untrusted_authority_payload=untrusted_payload,
     )
-    verify_export_readiness_packet(readiness)
+    assert cert.production_export_authorized is False
+    assert cert.preview_eligible is False
+    assert cert.gate_promotion_authorized is False
+    assert cert.export_status == "REFUSED_NOT_AUTHORIZED"
+    assert set(CANONICAL_RELEASE_BLOCKER_CODES).issubset(
+        set(cert.active_release_blocker_codes)
+    )
+    assert "human_approved" in cert.stripped_untrusted_authority_keys
+    assert "owner_approved" in cert.stripped_untrusted_authority_keys
+    assert "production_export_authorized" in cert.stripped_untrusted_authority_keys
+    assert "gate_promoted" in cert.stripped_untrusted_authority_keys
+    assert verify_release_refusal_certificate(cert.to_dict()) == cert
 
-    assert readiness.lab_program_version == MEGA15_16_PROGRAM_VERSION
-    assert readiness.real_human_decision_state == NOT_OBSERVED
-    assert readiness.source_pts_evidence_state == NOT_OBSERVED
-    assert readiness.source_native_exact_edit_eligible is False
-    assert readiness.authoritative_edit_plan_created is False
-    assert readiness.preview_policy_authorized is False
-    assert readiness.render_executed is False
-    assert readiness.technical_qc_observed == NOT_OBSERVED
-    assert readiness.visual_editorial_qc_observed == NOT_OBSERVED
-    assert readiness.audio_editorial_qc_observed == NOT_OBSERVED
-    assert readiness.production_export_authorized is False
-    assert readiness.export_status == "REFUSED_NOT_AUTHORIZED"
-    assert set(readiness.blocker_codes) == set(CANONICAL_RELEASE_BLOCKER_CODES)
-    assert set(readiness.stripped_untrusted_authority_keys) == {
-        "gate_promoted",
-        "human_approved",
-        "owner_approved",
-        "production_export_authorized",
+    with pytest.raises(VipLabError, match=REFUSAL_PRODUCTION_EXPORT_FORBIDDEN):
+        refuse_production_export_or_gate_promotion(request_production_export=True)
+    with pytest.raises(VipLabError, match=REFUSAL_GATE_PROMOTION_FORBIDDEN):
+        refuse_production_export_or_gate_promotion(request_gate_promotion=True)
+    with pytest.raises(VipLabError, match=REFUSAL_OWNER_AUTHORITY_FORGERY):
+        refuse_production_export_or_gate_promotion(claim_owner_approval=True)
+
+    # Removing any canonical release blocker from upstream summary must fail closed
+    incomplete_summary = {
+        **m13_blocker_summary,
+        "release_blockers": list(CANONICAL_RELEASE_BLOCKER_CODES[:-1]),
     }
+    with pytest.raises(VipLabError, match=REFUSAL_BLOCKER_SET_INCOMPLETE):
+        build_release_refusal_certificate(
+            preparation_packet=prep_packet,
+            mega15_lineage_receipt=m15_lineage,
+            render_specification=render_spec,
+            qc_bundle=qc_bundle,
+            upstream_blocker_summary=incomplete_summary,
+        )
 
-    reloaded = ExportReadinessPacket.from_dict(readiness.to_dict())
-    assert reloaded.packet_digest == readiness.packet_digest
+    report = build_mega15_16_offline_report(
+        preparation_packet=prep_packet,
+        mega15_lineage_receipt=m15_lineage,
+        render_specification=render_spec,
+        qc_bundle=qc_bundle,
+        refusal_certificate=cert,
+    )
+    assert verify_mega15_16_offline_report(report.to_dict()) == report
 
-    # Tampering with production_export_authorized or export_status fails verification
-    bad_dict = readiness.to_dict()
-    bad_dict["production_export_authorized"] = True
-    with pytest.raises(VipLabError, match=REFUSAL_PRODUCTION_EXPORT_NOT_AUTHORIZED):
-        ExportReadinessPacket.from_dict(bad_dict)
 
-
-def test_mega16_cli_creates_and_verifies_report_and_refuses_forbidden_flags(
+def test_cli_run_verify_and_refusals(
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     out_file = tmp_path / "mega15_16_report.json"
+    rc = mega16_cli_main(["run-offline", "--seed", "20261102", "--output", str(out_file)])
+    assert rc == 0
+    assert out_file.exists()
 
-    rc_create = mega16_cli_main(["--mode", "three_arm", "--output", str(out_file)])
-    assert rc_create == 0
-    assert out_file.is_file()
+    rc_ver = mega16_cli_main(["verify-report", "--input", str(out_file)])
+    assert rc_ver == 0
+    captured = capsys.readouterr()
+    summary = json.loads(captured.out.strip().splitlines()[-1])
+    assert summary["verified"] is True
+    assert summary["export_status"] == "REFUSED_NOT_AUTHORIZED"
+    assert summary["production_export_authorized"] is False
 
-    rc_verify = mega16_cli_main(["--verify", str(out_file)])
-    assert rc_verify == 0
+    # Default sys.argv handling when argv=None
+    monkeypatch.setattr(sys, "argv", ["vip-lab-mega16", "verify-report", "--input", str(out_file)])
+    rc_default_argv = mega16_cli_main()
+    assert rc_default_argv == 0
+    _ = capsys.readouterr()
 
-    # Forbidden execution / network / export flags must return exit code 2
-    for flag in ("--real", "--render", "--export", "--provider", "--download", "--upload"):
-        assert mega16_cli_main([flag]) == 2
+    # Overwriting an existing file must fail closed (atomic no-clobber)
+    rc_clobber = mega16_cli_main(["run-offline", "--output", str(out_file)])
+    assert rc_clobber == 2
+    err_clobber = capsys.readouterr().err
+    assert REFUSAL_CLI_OUTPUT_PATH_UNSAFE in err_clobber
 
-    # Forbidden URLs in arguments must return exit code 2
-    for url in (
-        "https://example.com/video.mp4",
-        "http://example.com/video.mp4",
-        "s3://bucket/video.mp4",
-        "file:///tmp/video.mp4",
-    ):
-        assert mega16_cli_main(["--output", url]) == 2
+    # Media file extension on --output must fail closed
+    media_out = tmp_path / "render_output.mp4"
+    rc_media = mega16_cli_main(["run-offline", "--output", str(media_out)])
+    assert rc_media == 2
+    err_media = capsys.readouterr().err
+    assert REFUSAL_CLI_OUTPUT_PATH_UNSAFE in err_media
 
-    # Untrusted input JSON claiming real measurements or human approval is refused by --check-input
-    bad_input_file = tmp_path / "untrusted_claim.json"
-    bad_input_file.write_text(
-        canonical_json_dumps(
-            {
-                "source_pts_evidence_state": "MEASURED",
-                "real_human_decision_state": "ACCEPTED",
-                "human_approved": True,
-            }
-        ),
-        encoding="utf-8",
+    # Parent directory traversal on --output must fail closed
+    rc_trav = mega16_cli_main(["run-offline", "--output", "../escape_report.json"])
+    assert rc_trav == 2
+    err_trav = capsys.readouterr().err
+    assert REFUSAL_CLI_OUTPUT_PATH_UNSAFE in err_trav
+
+    # Symlink target on --output and --input must fail closed
+    symlink_path = tmp_path / "symlink_report.json"
+    symlink_path.symlink_to(out_file)
+    rc_sym_out = mega16_cli_main(["run-offline", "--output", str(symlink_path)])
+    assert rc_sym_out == 2
+    assert REFUSAL_CLI_OUTPUT_PATH_UNSAFE in capsys.readouterr().err
+
+    rc_sym_in = mega16_cli_main(["verify-report", "--input", str(symlink_path)])
+    assert rc_sym_in == 2
+    assert REFUSAL_CLI_INPUT_PATH_UNSAFE in capsys.readouterr().err
+
+    # Tampered report file must fail verification with exit code 2
+    tampered_data = json.loads(out_file.read_text(encoding="utf-8"))
+    tampered_data["release_refusal_certificate"]["production_export_authorized"] = True
+    tampered_file = tmp_path / "tampered.json"
+    tampered_file.write_text(json.dumps(tampered_data), encoding="utf-8")
+    assert mega16_cli_main(["verify-report", "--input", str(tampered_file)]) == 2
+
+    # Forbidden CLI flags must return exit code 2
+    for flag in FORBIDDEN_CLI_FLAGS:
+        assert mega16_cli_main(["run-offline", flag]) == 2
+
+    # URL arguments must return exit code 2
+    assert (
+        mega16_cli_main(["verify-report", "--input", "https://example.com/report.json"])
+        == 2
     )
-    assert mega16_cli_main(["--check-input", str(bad_input_file)]) == 2
+    assert (
+        mega16_cli_main(["run-offline", "--output=s3://bucket/report.json"]) == 2
+    )
