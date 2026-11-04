@@ -56,11 +56,11 @@ Bu annotation gerçek nedeni “billing/spending-limit job-start block” olarak
 | Gate-2 receipt/report | `pytest -q tests/gate2` | 33 node'dan 24 Gate-2 node'unu kapsar | İlgili 24 node runner başlamadığı için denenmedi. |
 | Synthetic smoke | Sabit node listesidir; Gate-0 JSON/D1, Gate-1 compatibility, Gate-2 fault, Gate-3/FVS ve CLI seam testleri içerir | 33 node'lardan hiçbiri açık seçim listesinde yok | Bu smoke PR #258'in yeni bounded-admission testini de seçmiyor. |
 
-Dolayısıyla bu kontrollerin çalışması halinde dahi PR #258'in yeni `tests/vip_fvs/unit/test_bounded_admission.py` dosyası mevcut dört komuttan hiçbirinde doğrudan çalışmaz. PR açıklamasındaki 22 focused test sonucu geliştirici tarafından verilmiş yerel kanıttır, hosted CI değildir. PR #259 dokümantasyon-only olduğu için ürün davranışı testi eklemiyor. Billing çözülüp job'lar yürütülse bile, PR #258 için ayrıca açık focused test seçimi gerekliliği vardır; bu belge workflow değiştirmez.
+Canonical PR #258'in mevcut diff'i üç dosya ekliyor: `src/vip_fvs/_bounded_admission_fs.py`, `src/vip_fvs/bounded_admission.py` ve `tests/vip_fvs/unit/test_bounded_admission.py`. GitHub contents API bu test dosyasını canonical main üzerinde 404, PR #258 head `5a60cd8e0abc021767b05c87ca50202822c049d0` üzerinde blob `5ecbbd33d9d136984424cdcb787669b83be4db84` olarak doğruladı. Bu nedenle smoke workflow'a koşulsuz test adımı main'de tek başına eklenirse #258 dışındaki main/PR job'ları bozulabilir. Güvenli sıra Task 3'te tanımlanır: PR #258'in aynı aday head'inde kaynak/test ve workflow değişikliği birlikte bulunur; eksik test hiçbir koşulda skip edilmez ve workflow değişikliği ayrı commit/PR olarak main'e indirilmez. PR #259 dokümantasyon-only olduğu için ürün davranışı testi eklemiyor.
 
 ### 3.3 Güncel Billing/Actions çalıştırma kapısı
 
-2026-11-05'te GitHub kişisel hesap **Budgets and alerts** ekranı salt-okunur incelendi. Account-scoped **Actions** bütçesi `Usage blocked` durumundaydı. Bu, 2026-10-29 check annotation'ındaki “payment failure veya spending limit” genel mesajına ek olarak harcama/Actions kısıtının hâlen etkin olduğunu doğrular. Bütçe veya ödeme ayarı değiştirilmedi; ödeme yöntemi, fatura geçmişi veya tutarlar incelenmedi. Mevcut hosted CI yeniden çalıştırma kapısı **KAPALI** olarak sınıflandırılır; account owner/admin blokajı giderip GitHub UI'da Actions kullanımı artık blocked değil olarak doğrulamalıdır. Bu doğrulama olmadan Actions dispatch/rerun önerilmez veya tetiklenmez.
+2026-11-05'te GitHub kişisel hesap Centaurioun için **Budgets and alerts** ekranı salt-okunur yenilendi; hesap düzeyindeki **Actions** satırı `Usage blocked` gösterdi. Repo filtresi seçili değildi. Owner açıklamasına göre bu durum ücretli aşım harcamasını engeller, dahil edilmiş Actions allowance'ının bittiğini göstermez; owner şu an yaklaşık 3.000 dakika allowance kaldığını bildiriyor. Bu miktar Codex tarafından ayrıca ölçülmedi. LAB PR #5'in exact head `f69334705919f10b10c4b78ecc235c6f160d3b6b` üzerindeki otomatik hosted run `41928274424` 2026-11-04 22:47 UTC'de Python 3.11 ve 3.14 için `SUCCESS` tamamlandı. Farklı zaman/repo kanıtları korunur; LAB CI başarısı canonical repo allowance'ını kanıtlamaz. Billing ayarı değiştirilmedi; ödeme yöntemi/geçmişi incelenmedi. **Her gelecekteki hosted execution veya rerun öncesinde hedef repository/job ile ilişkili GitHub hesabının kalan dahil edilmiş dakikaları yenilenip doğrulanmalıdır.** Yeterli included allowance varsa `Usage blocked` tek başına durdurma nedeni değildir; allowance yetersiz kalacak ve ücretli aşım gerekecekse run başlatılmaz.
 
 ## 4. İki-lane tasarımı
 
@@ -150,6 +150,50 @@ The `G2-EXEC`, `G2-EVIDENCE`, `G2-RECON`, `G2-M001`, and `G2-M003` tree IDs bind
 
 The preceding LAB run was Python 3.14.9 with `--import-mode=importlib`; it recorded **2,043 passed, 26 failed, 7 errors** across the broad selection and a targeted Gate-2 rerun of **17 failed, 2 passed**. Those failures were initial dependency blockers in LAB. This document does **not** claim all 33 tests will pass when executed in canonical context. A future C-lane run must preserve each test's actual final result, additional failures, skip/deselection count and SHA-bound environment.
 
+### 5.3 Bağımsız beklenen node kimliği oracle'ı
+
+Aşağıdaki exact node ID listesi 5.2 dependency manifestinden ayrı, immutable expected-set referansı olarak dondurulmuştur. Canonical runtime bu LAB belgesini okumaz veya ağdan almaz. Ayrı onaylı canonical uygulamada liste tests/contracts/canonical_history_expected_nodeids.json içine kopyalanır; test kodu bu oracle ile manifestin tam set eşitliğini karşılaştırır ve literal checksum'u ayrıca sabitler.
+
+Provenance: LAB PR #5 tasarım belgesi commit f69334705919f10b10c4b78ecc235c6f160d3b6b, blob eb5972bd1fa8098a82b8ca78720b47d51d9ab907. Bu provenance yalnız review/portability içindir, runtime fetch girdisi değildir.
+
+Canonical bytes: UTF-8 JSON serialization of sorted(node_ids), compact separators, ensure_ascii=false, followed by LF. Count: 33. SHA-256: 8248fbf704f0ebba5e877a26106ab9e8b77a9b7a92fd5695a7f4e2820002b016
+
+    [
+      "tests/gate0/unit/test_evidence_projection.py::test_capture_frozen_fixture_and_guarantee_limits",
+      "tests/gate0/unit/test_evidence_seal.py::test_task15_has_no_successor_behavior_delta",
+      "tests/gate0/unit/test_evidence_seal.py::test_tasks12_13_14_16_s9_inventory_is_exact",
+      "tests/gate0/unit/test_h3_a04_governing_core_v101.py::test_a04_old_frozen_core_remains_byte_identical",
+      "tests/gate0/unit/test_h3_a04_governing_core_v101.py::test_a04_option_b_core_integrity_and_exact_one_shot_semantics",
+      "tests/gate0/unit/test_h3_adopted_core_atlas_index.py::test_owner_adopted_cores_are_exactly_bound_in_atlas_and_prompt_index",
+      "tests/gate0/unit/test_h3_c05_governing_core_v102.py::test_c05_adopted_core_is_digest_bound_and_consistent_with_producers",
+      "tests/gate0/unit/test_h3_c05_governing_core_v102.py::test_c05_old_frozen_core_remains_byte_identical",
+      "tests/gate0/unit/test_h3_c05_governing_core_v102.py::test_c05_read_only_contract_and_restricted_authority",
+      "tests/gate2/integration/test_report_receipt_reconciliation.py::test_check_rejects_mutated_carrier_copy",
+      "tests/gate2/integration/test_report_receipt_reconciliation.py::test_check_rejects_reverted_report_value",
+      "tests/gate2/integration/test_report_receipt_reconciliation.py::test_evidence_manifest_still_verifies",
+      "tests/gate2/integration/test_report_receipt_reconciliation.py::test_new_report_related_test_count_matches_report",
+      "tests/gate2/integration/test_report_receipt_reconciliation.py::test_receipts_are_the_committed_ones",
+      "tests/gate2/integration/test_report_receipt_reconciliation.py::test_reconciliation_record_is_complete",
+      "tests/gate2/integration/test_report_receipt_reconciliation.py::test_report_tables_match_carriers",
+      "tests/gate2/integration/test_report_receipt_reconciliation.py::test_report_values_match_receipts_and_carriers",
+      "tests/gate2/integration/test_scale_restart_decision.py::test_only_carried_metrics_are_measured_and_unavailable_metrics_are_explicit",
+      "tests/gate2/integration/test_scale_restart_decision.py::test_rebuilt_metrics_003_binds_git_objects_frozen_preregistration_and_exact_carriers",
+      "tests/gate2/integration/test_scale_restart_decision.py::test_receipt_binds_exact_dependencies_and_synthetic_scope",
+      "tests/gate2/integration/test_scale_restart_decision.py::test_workload_bounds_and_freeze_are_recorded_before_measurements",
+      "tests/gate2/integration/test_synthetic_run_evidence_bundle.py::test_both_runs_self_verified_at_execution_time",
+      "tests/gate2/integration/test_synthetic_run_evidence_bundle.py::test_disposition_justifies_no_additional_mechanism",
+      "tests/gate2/integration/test_synthetic_run_evidence_bundle.py::test_durable_journals_are_complete_and_ordered",
+      "tests/gate2/integration/test_synthetic_run_evidence_bundle.py::test_every_preregistered_metric_has_a_matching_committed_carrier",
+      "tests/gate2/integration/test_synthetic_run_evidence_bundle.py::test_fault_injection_evidence_was_derived_from_executed_observations",
+      "tests/gate2/integration/test_synthetic_run_evidence_bundle.py::test_identity_is_reproducible_across_independent_invocations",
+      "tests/gate2/integration/test_synthetic_run_evidence_bundle.py::test_real_scale_evidence_remains_not_observed",
+      "tests/gate2/integration/test_synthetic_run_execution.py::test_bounded_run_measures_every_preregistered_metric",
+      "tests/gate2/integration/test_synthetic_run_execution.py::test_cli_run_executes_and_reports_disposition",
+      "tests/gate2/integration/test_synthetic_run_execution.py::test_integrity_verification_detects_tampered_artifacts",
+      "tests/gate2/integration/test_synthetic_run_execution.py::test_interruption_resumes_from_journal_without_duplicate_writes",
+      "tests/gate2/integration/test_synthetic_run_execution.py::test_repeated_runs_reproduce_identity_but_not_wall_clock"
+    ]
+
 ## 6. Alternatives and decision matrix
 
 | Option | Test and artifact ownership | Evidence quality | Maintenance/risk | Decision |
@@ -164,25 +208,26 @@ Option A is approved as the design direction. Any later implementation of select
 ## 7. Six-cycle refinement record
 
 1. **Cycle 1 — Live provenance:** verified LAB PR #4 comment/state, LAB base/head, canonical main, both canonical PR refs and exact file lists. Stale base delta is exactly two product-context docs.
-2. **Cycle 2 — CI failure root cause:** checked active workflow YAML, Actions enabled state, 16 job metadata/annotations and inaccessible/empty log artifacts. Root cause class is GitHub billing/spending-limit job-start refusal; tests were not executed. Current account UI independently shows the Actions budget `Usage blocked`. No billing settings were changed; payment method/history was not inspected.
-3. **Cycle 3 — Applicability and ownership:** compared PR file lists to workflow test selectors; determined #258's focused test is unselected and #259 is documentation-only. Confirmed the 33 historical test-source blobs match between canonical and LAB and mapped required path/tree/blob/object identities above.
+2. **Cycle 2 — CI failure root cause and allowance interpretation:** checked active workflow YAML, Actions enabled state, 16 historical job annotations and inaccessible/empty log artifacts. Those canonical jobs reported a billing/spending-limit start refusal; that message does not prove included minutes were exhausted. The 2026-11-05 account-level UI showed Actions `Usage blocked`; owner clarified this is an overage-spending guard and reported about 3,000 included minutes remain. LAB PR #5 run `41928274424` succeeded on 2026-11-04. Preserve these distinct evidence types, refresh remaining allowance for the relevant account/repo before each future hosted run, and do not incur overage.
+3. **Cycle 3 — Applicability and ownership:** compared PR file lists to workflow selectors; verified the bounded-admission test is absent from canonical main (404) and exists at PR #258 head as blob `5ecbbd33d9d136984424cdcb787669b83be4db84`; #259 is documentation-only. Confirmed the 33 historical test-source blobs and pinned dependencies above.
 4. **Cycle 4 — Separation proposal:** assigned canonical-history tests/artifacts to canonical lane and LAB synthetic tests to LAB lane; both statuses remain independently required. No mirroring chosen.
 5. **Cycle 5 — Alternatives and anti-goals:** evaluated two-lane, artifact mirror, selector-only split and combined-suite options. The owner approved A; mirror, exclusion, xfail and test weakening were rejected.
-6. **Cycle 6 — Independent verification:** owner approved Option A and the design direction on 2026-11-05; independent document review is complete. Before publishing the draft, re-check exact refs, 33-row completeness, no source/test/workflow changes, separate status wording, and current GitHub base/head. The follow-up execution plan remains subject to owner review before implementation.
+6. **Cycle 6 — Independent verification:** owner approved Option A and the design direction on 2026-11-05; PR #5 review findings were addressed with a same-candidate Task 3 topology and separate exact-set oracle. Revised plan receives a fresh independent review and exact-head verification; implementation remains subject to owner approval.
 
 ## 8. Acceptance contract for the eventual design and follow-up plan
 
-- The test manifest contains exactly 33 unique pytest node IDs, all explicitly unresolved until actually run in canonical context.
+- The test manifest contains exactly 33 unique pytest node IDs, all explicitly unresolved until actually run in canonical context; its set exactly equals independent oracle §5.3 and the later canonical-side pinned copy.
 - Every row resolves to canonical test-source blob, required canonical artifact tree/blob or Git object identity, and the canonical Python 3.11/3.14 full-history execution context.
 - LAB and canonical result ledgers have distinct repo, commit, workflow/job, interpreter and count fields; missing/blocked/not-run cannot be coerced to PASS.
 - No fixture mirroring, test-selection change, workflow edit, source edit or expectation change occurs without a later separately approved implementation scope.
-- PR #258 must have its new bounded-admission test explicitly exercised before anyone claims its implementation was hosted-test-verified.
+- PR #258 must carry bounded-admission source/test and workflow selection together on one reviewed candidate; exact-head hosted execution is required before claiming hosted-test verification.
 - No real media, model, provider, render, production export, Gate promotion or merge is part of this work.
 
 ## Evidence references
 
 - [LAB PR #4 and latest owner review comment](https://github.com/Centaurioun/video-intelligence-pipeline-2/pull/4#issuecomment-6643257050)
 - [Canonical PR #258](https://github.com/Centaurioun/video-intelligence-pipeline/pull/258)
+- [LAB PR #5 independent review comment](https://github.com/Centaurioun/video-intelligence-pipeline-2/pull/5#issuecomment-6644221451)
 - [Canonical PR #259](https://github.com/Centaurioun/video-intelligence-pipeline/pull/259)
 - Actions runs: #258 [40820177498](https://github.com/Centaurioun/video-intelligence-pipeline/actions/runs/40820177498), [40820177514](https://github.com/Centaurioun/video-intelligence-pipeline/actions/runs/40820177514), [40820177609](https://github.com/Centaurioun/video-intelligence-pipeline/actions/runs/40820177609), [40820177628](https://github.com/Centaurioun/video-intelligence-pipeline/actions/runs/40820177628); #259 [40821952898](https://github.com/Centaurioun/video-intelligence-pipeline/actions/runs/40821952898), [40821953002](https://github.com/Centaurioun/video-intelligence-pipeline/actions/runs/40821953002), [40821953085](https://github.com/Centaurioun/video-intelligence-pipeline/actions/runs/40821953085), [40821953053](https://github.com/Centaurioun/video-intelligence-pipeline/actions/runs/40821953053).
 - Prior node/error inventory: [POST_MEGA17_INTEGRATED_REGRESSION_REPORT.md at PR #4 head `ce11bc50707cf517937c42dfd96e3f325fc1d62f`](https://github.com/Centaurioun/video-intelligence-pipeline-2/blob/ce11bc50707cf517937c42dfd96e3f325fc1d62f/docs/ai-studio-tasks/POST_MEGA17_INTEGRATED_REGRESSION_REPORT.md). This source is still in draft PR #4 and is not part of the `1fd14c0b…` base tree.
