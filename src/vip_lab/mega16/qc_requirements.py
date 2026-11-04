@@ -337,21 +337,25 @@ def build_qc_requirements_bundle(
             "qc_readiness_packet must remain synthetic_only=True and execution_authorized=False",
         )
 
-    details = qc_readiness_packet.details if isinstance(qc_readiness_packet.details, Mapping) else {}
+    summary = (
+        qc_readiness_packet.summary
+        if isinstance(qc_readiness_packet.summary, Mapping)
+        else {}
+    )
     tech_ev = getattr(
         qc_readiness_packet,
         "technical_qc_state",
-        details.get("technical_qc_evidence", "NOT_OBSERVED"),
+        summary.get("technical_qc_evidence", "NOT_OBSERVED"),
     )
     vis_ev = getattr(
         qc_readiness_packet,
         "visual_editorial_qc_state",
-        details.get("editorial_qc_evidence", "NOT_OBSERVED"),
+        summary.get("editorial_qc_evidence", "NOT_OBSERVED"),
     )
     aud_ev = getattr(
         qc_readiness_packet,
         "audio_editorial_qc_state",
-        details.get("editorial_qc_evidence", "NOT_OBSERVED"),
+        summary.get("editorial_qc_evidence", "NOT_OBSERVED"),
     )
 
     if tech_ev != "NOT_OBSERVED":
@@ -369,21 +373,25 @@ def build_qc_requirements_bundle(
             REFUSAL_SYNTHETIC_AUDIO_QC_PASS,
             "Upstream ReadinessPacket audio editorial QC evidence must be NOT_OBSERVED",
         )
+
+    status_val = getattr(qc_readiness_packet.status, "value", str(qc_readiness_packet.status))
     if (
         qc_readiness_packet.evidence_state != "NOT_OBSERVED"
-        or qc_readiness_packet.stage_status != "NOT_READY_FOR_QC"
-        or details.get("preview_eligible", False) is not False
-        or details.get("production_export_authorized", False) is not False
+        or status_val != "READY_SYNTHETIC"
+        or summary.get("qc_state", "NOT_OBSERVED") != "NOT_OBSERVED"
+        or summary.get("preview_eligible", False) is not False
+        or summary.get("production_export_authorized", False) is not False
+        or summary.get("export_status", "REFUSED_NOT_AUTHORIZED") != "REFUSED_NOT_AUTHORIZED"
     ):
         raise_mega15_error(
             REFUSAL_QC_BLOCKER_REMOVAL,
-            "Upstream ReadinessPacket must remain NOT_READY_FOR_QC with NOT_OBSERVED evidence",
+            "Upstream ReadinessPacket must remain READY_SYNTHETIC with NOT_OBSERVED QC evidence and REFUSED_NOT_AUTHORIZED export status",
         )
 
-    if CANONICAL_QC_BLOCKER_CODE not in set(qc_readiness_packet.blocker_codes):
+    if qc_readiness_packet.blockers:
         raise_mega15_error(
             REFUSAL_QC_BLOCKER_REMOVAL,
-            f"Upstream ReadinessPacket missing required QC blocker {CANONICAL_QC_BLOCKER_CODE!r}",
+            f"Upstream ReadinessPacket recorded active readiness failures: {qc_readiness_packet.blockers!r}",
         )
 
     packet_id = str(

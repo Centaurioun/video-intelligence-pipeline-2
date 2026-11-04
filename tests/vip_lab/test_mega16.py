@@ -226,14 +226,10 @@ def test_qc_requirements_bundle_and_evidence_class_refusals() -> None:
             audio_evidence_class="VISUALLY_OBSERVED"
         )
 
-    # Removing QC blocker from ReadinessPacket must be refused
-    bad_ready = ReadinessPacket.create(
-        stage_id=m13_qc_readiness.stage_id,
-        stage_status=m13_qc_readiness.stage_status,
-        evidence_state=m13_qc_readiness.evidence_state,
-        blocker_codes=["REAL_SOURCE_MEDIA_ACCESS_NOT_OBSERVED"],
-        consumed_digests=m13_qc_readiness.consumed_digests,
-        details=m13_qc_readiness.details,
+    # Removing QC refusal / escalating preview_eligible on ReadinessPacket must be refused
+    bad_ready = replace(
+        m13_qc_readiness,
+        summary={**dict(m13_qc_readiness.summary), "preview_eligible": True},
     )
     with pytest.raises(VipLabError, match=REFUSAL_QC_BLOCKER_REMOVAL):
         build_qc_requirements_bundle(

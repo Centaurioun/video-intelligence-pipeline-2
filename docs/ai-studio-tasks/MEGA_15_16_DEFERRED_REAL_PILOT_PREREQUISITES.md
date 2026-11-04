@@ -9,7 +9,7 @@
 
 | Roadmap Step | Scope | Status after `MEGA-15 + MEGA-16` | Execution Venue |
 | --- | --- | --- | --- |
-| **Step 1** | Complete all remaining offline synthetic Gate-3 preparation, editorial handoff, lineage, render/export/QC preflight, and release-refusal lab modules (`MEGA-15 + MEGA-16`). | `IMPLEMENTED_UNVERIFIED` in AI Studio (ready for hosted GitHub Actions CI on `Centaurioun/video-intelligence-pipeline-2` across Python 3.11 and 3.14). | Google AI Studio (`LOCAL WORKSPACE CHANGES ONLY`) -> `Centaurioun/video-intelligence-pipeline-2` (`main`) |
+| **Step 1** | Complete and repair all offline synthetic Gate-3 preparation, editorial handoff, lineage, render/export/QC preflight, and release-refusal lab modules (`MEGA-15 + MEGA-16`). | `REPAIRED_LOCALLY_VERIFIED` (`compileall` PASS + `59/59` in-process `test_mega08..16` PASS; ready for hosted GitHub Actions CI on `Centaurioun/video-intelligence-pipeline-2` across Python 3.11 and 3.14). | Google AI Studio (`LOCAL WORKSPACE CHANGES ONLY`) -> `Centaurioun/video-intelligence-pipeline-2` (`main`) |
 | **Step 2** | Selectively review and integrate proven `vip_lab` waves into the canonical repository (`Centaurioun/video-intelligence-pipeline`) via isolated branch/PR workflow. | `DEFERRED` / `BLOCKED_ON_OWNER_AND_CANONICAL_REVIEW` | Local Git/Codex controller with full Git history, PR workflow, and canonical branch reconciliation |
 | **Step 3** | Execute authorized local real-media pilot and Gate-0 D-2 / D-3 diagnostic retrieval experiment on the designated macOS M4 Max host. | `DEFERRED` / `BLOCKED_ON_D2_INPUTS_AND_D3_AUTHORIZATION` | Owner-designated local macOS M4 Max host (`authorized_local` mode after D-2 & D-3) |
 | **Step 4** | Execute Gate-1 authentic representation benchmark (`SigLIP V1 Base`, `SigLIP2 V2 Base`, `SigLIP2 V2 SO400M`), Gate-2 real-archive workload measurement, and Gate-3 real-source temporal refinement, human editorial decision, preview, export, and QC. | `DEFERRED` / `BLOCKED_ON_UPSTREAM_GATES_AND_OWNER_DECISIONS` | Owner-designated local host after Gate-0 acceptance and Gate-1/2/3 specific authorizations |
@@ -20,8 +20,9 @@
 
 Before any code from `Centaurioun/video-intelligence-pipeline-2` (`src/vip_lab/mega03..16`, `tests/vip_lab/**`) is proposed for integration into `Centaurioun/video-intelligence-pipeline`:
 
-1. **Hosted Dual-Python CI Green on LAB `main`:**
-   - GitHub Actions workflow `.github/workflows/vip-ai-studio-synthetic-ci.yml` must pass all `MEGA-03..16` and B08 synthetic suites on both **Python 3.11** and **Python 3.14**, with zero regressions and intact `src/gate0/media/` modules.
+1. **Hosted Dual-Python CI Green on LAB `main` & `src/gate0/media/*` Preservation:**
+   - GitHub Actions workflow `.github/workflows/vip-ai-studio-synthetic-ci.yml` must pass all `MEGA-03..16` and B08 synthetic suites on both **Python 3.11** and **Python 3.14**, with zero regressions.
+   - Because `.gitignore` line 26 contains an unanchored `media/` rule, any non-Git ZIP export from AI Studio to GitHub must explicitly verify that all 6 tracked `src/gate0/media/{__init__,decode,probe,proc,source_guard,tool_identity}.py` files remain present at their exact `e5974d9730d0ef85af5dc6fa16445e93b8c9941d` Git blob SHAs (`git checkout e5974d9730d0ef85af5dc6fa16445e93b8c9941d -- src/gate0/media` or `git add -f src/gate0/media/*.py`).
 2. **Canonical `main` Head & Open PR Reconciliation:**
    - Fetch live `origin/main` on `Centaurioun/video-intelligence-pipeline` (do not assume the historical ZIP baseline `592952daf475b1bbae2eebdee64d992c1a744f08` is current).
    - Reconcile against known post-snapshot canonical work, specifically:
@@ -31,7 +32,7 @@ Before any code from `Centaurioun/video-intelligence-pipeline-2` (`src/vip_lab/m
      - Gate-3 A-7 S5 owner adoptions (`docs/decisions/2026-10-28-a7-s5-shared-admission-owner-adoption.md`, `docs/decisions/2026-10-29-a7-s5-scoped-synthetic-tdd-plan-owner-adoption.md`)
 3. **Isolated Branch & PR Governance:**
    - Never push AI Studio ZIP snapshots directly to canonical `main`.
-   - Land curated, exclusiva-path diffs in isolated branches/PRs with independent code review and full canonical verifier (`scripts/verify-workspace.sh`) + full-suite CI verification.
+   - Land curated, exclusive-path diffs in isolated branches/PRs with independent code review and full canonical verifier (`scripts/verify-workspace.sh`) + full-suite CI verification.
 
 ---
 

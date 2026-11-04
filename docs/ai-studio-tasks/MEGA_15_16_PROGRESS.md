@@ -1,111 +1,82 @@
-# MEGA-15 + MEGA-16 Progress & Six-Cycle Engineering Ledger (`LAB-MEGA-15-16-v1.0.0`)
+# MEGA-15 + MEGA-16 Progress, Post-CI Repair & Six-Cycle Engineering Ledger (`LAB-MEGA-15-16-v1.0.0`)
 
-- **Program Version:** `LAB-MEGA-15-16-v1.0.0`
+- **Program Version:** `LAB-MEGA-15-16-v1.0.0` (Post-CI Critical Repair & Hosted CI Recovery)
 - **Governing Specification:** `docs/ai-studio-tasks/MEGA_15_16_GATE3_OFFLINE_PREPARATION_PROGRAM.md`
-- **Target Repository:** `Centaurioun/video-intelligence-pipeline-2` (`LAB` repository only)
+- **Target Repository:** `Centaurioun/video-intelligence-pipeline-2` (`LAB` repository, branch `main`)
 - **Original Canonical Baseline (READ ONLY):** `Centaurioun/video-intelligence-pipeline` `main@592952daf475b1bbae2eebdee64d992c1a744f08`
-- **Verified Starting LAB `main` (Prompt Reference):** `f0d06caa7ce1fd04c36d3edb1eb4df7e805f5eb7` (building on `MEGA-08..14` baseline `9bdd810bf14c93ed1f77243325beaa6b37b3e97d`, hosted synthetic CI run `41850619259` with `350 PASS` on Python 3.11 and 3.14)
-- **AI Studio Workspace Git Metadata:** `NOT_OBSERVED` (imported ZIP snapshot without `.git`)
-- **AI Studio Local Test Execution Status:** `NOT_EXECUTED_BY_DESIGN` (`pytest` not run in AI Studio; verification deferred to hosted GitHub Actions on Python 3.11 and 3.14)
+- **Last Known Successful LAB Baseline:** `e5974d9730d0ef85af5dc6fa16445e93b8c9941d` (building on `MEGA-08..14` reference `9bdd810bf14c93ed1f77243325beaa6b37b3e97d`)
+- **Diagnosed Failing LAB Commit:** `2d7605c3169e78503fe3908ad251e79171b1e142` (GitHub Actions Run ID `41856186752` failed on Python 3.11 and Python 3.14)
+- **AI Studio Workspace Git Metadata:** `workspace_git_sha=NOT_OBSERVED` (ZIP-imported workspace without `.git`)
+- **Local Verification Status:**
+  - `python3 -m compileall -q src experiments tests` -> `PASS`
+  - Exact Git blob SHA check for 6 `src/gate0/media/*.py` files -> `PASS` (all 6 match `e5974d9730d0ef85af5dc6fa16445e93b8c9941d` byte-for-byte)
+  - In-process `unittest`/module verification (`PYTHONPATH=src python3` executing all test functions in `tests/vip_lab/test_mega08..16`) -> `PASS` (`59/59` test functions across 10 modules)
+  - Hosted GitHub Actions CI (`Python 3.11` & `Python 3.14`) -> `PENDING_NEXT_GITHUB_PUSH`
 
 ---
 
-## 1. Six-Cycle Iterative Design, Inventory, and Gap Ledger
+## 1. Root Cause Analysis of Failed GitHub Actions Run `41856186752` (`2d7605c3169e78503fe3908ad251e79171b1e142`)
 
-### Cycle 1 — Verified API and Source Inventory
+### Finding A — Six `src/gate0/media/*` Files Deleted During GitHub Export
+- **Root Cause:** `.gitignore` line 26 contains an unanchored `media/` rule (`# Never commit real media, weights, caches, vector stores, or secrets` -> `media/`). In the AI Studio ZIP workspace, `src/gate0/media/{__init__,decode,probe,proc,source_guard,tool_identity}.py` remain intact on disk, but any GitHub export/staging mechanism that evaluates `.gitignore` without a `.git` index treats `src/gate0/media/` as ignored and omits those 6 files from the exported commit tree.
+- **Workspace Verification:** All 6 files exist on disk in `src/gate0/media/` and match their exact required Git blob SHAs from `e5974d9730d0ef85af5dc6fa16445e93b8c9941d`:
+  - `src/gate0/media/__init__.py`: `b1198560f5c8582b8be8725fed9412597ca08e96`
+  - `src/gate0/media/decode.py`: `a3c7efad5fdc0c24e7f592512ef176e10e95f128`
+  - `src/gate0/media/probe.py`: `d95b15505550f54263463e6bcbb9681f00620f17`
+  - `src/gate0/media/proc.py`: `244706e9c198ab25afad5894a977cc1a31b39755`
+  - `src/gate0/media/source_guard.py`: `9b0a7a64e7b163c94ad5ed62ba16bfedda99c398`
+  - `src/gate0/media/tool_identity.py`: `056447631d477f57776c4db5e75cb8bad25b8ebd`
+- **GitHub Publication Safeguard:** When publishing to `Centaurioun/video-intelligence-pipeline-2`, the publisher must explicitly restore or force-stage `src/gate0/media/*.py` (`git checkout e5974d9730d0ef85af5dc6fa16445e93b8c9941d -- src/gate0/media` or `git add -f src/gate0/media/*.py`) and verify `git ls-tree HEAD src/gate0/media` before pushing.
 
-Before writing any `MEGA-15` or `MEGA-16` code, existing implementations across `src/gate3/`, `src/vip_fvs/`, `src/vip_lab/`, and `src/gate0/media/` were inspected and classified:
-
-| Component / Capability | Classification | Source Path & Public Symbols | Notes & Reuse Boundary |
-| --- | --- | --- | --- |
-| Gate-0 media dependency substrate (6 modules) | `ALREADY_IMPLEMENTED` / `PRESERVE_READ_ONLY` | `src/gate0/media/{__init__,decode,probe,proc,source_guard,tool_identity}.py` | Verified intact on disk; never modified, deleted, or invoked against real media in AI Studio. |
-| Exact rational timebase & PTS table operations | `REUSE` | `src/gate3/rational.py` (`TimeBase`, `Rational`), `src/gate3/pts.py` (`PtsTable`, `SnapResult`, `resolve_start`, `resolve_end`) | Used directly by `vip_lab.mega15.temporal_preflight` for half-open `[start, end)` PTS membership, snap resolution, and duplicate-tick ambiguity detection. |
-| VFR, discontinuity, and stream-tail classification | `REUSE` | `src/gate3/temporal.py` (`TailEnd`, `classify_vfr`, `detect_discontinuity`, `subdivide_on_discontinuity`, `tail_end`) | Reused directly; `seconds * nominal_fps` derivation is strictly forbidden. |
-| Refinement request & binding-eligibility predicates | `REUSE` | `src/gate3/refinement_request.py` (`RefinementRequest`), `src/gate3/refinement.py` (`is_structurally_eligible`, `is_binding_eligible`) | `is_binding_eligible(record)` is called directly to prove that synthetic/unmeasured records remain `False`. |
-| Stream identity evaluation & refusal reasons | `REUSE` | `src/gate3/stream_identity.py` (`evaluate_stream_identity`, `REASON_BOUND_EVIDENCE_UNAVAILABLE`, `REASON_POSITIONAL_MISMATCH`, `REASON_SELECTED_NOT_VIDEO`, `REASON_SELECTION_AMBIGUOUS`) | Reused to enforce A-7 namespace separation (`ffprobe` global `selected_stream_index` vs ISO-BMFF `trak` ordinal vs `tkhd.track_ID`). |
-| Editorial principal & edit-plan eligibility models | `REUSE` | `src/gate3/editorial.py` (`EditorialDecision`, `ModelToolPrincipalError`), `src/gate3/plan.py` (`EditPlanRevision`) | Reused to reject model/tool principals (`ModelToolPrincipalError`) and keep `export_eligible == False` without real human authority. |
-| Bare QC `PASS` insufficiency predicate | `REUSE` | `src/gate3/qc.py` (`bare_pass_is_insufficient`) | Reused in `vip_lab.mega16.qc_requirements` to reject any bare `PASS` lacking `qc_scope` and `supporting_evidence_refs`. |
-| FVS receipt `NOT_OBSERVED` baseline vocabulary | `REUSE` | `src/vip_fvs/real_preview_receipt.py` (`FIXTURE_NOT_OBSERVED_REQUIRED`) | Reused in `vip_lab.mega16` to preserve mandatory `NOT_OBSERVED` categories (`human editorial authority`, `visual editorial suitability`, `audio observation`, `production render capability`, `provider/cloud inference`). |
-| Upstream LAB waves (`MEGA-09`, `MEGA-10`, `MEGA-11`, `MEGA-13`, `MEGA-14`) | `REUSE` | `src/vip_lab/common.py`, `src/vip_lab/mega09/`, `src/vip_lab/mega10/`, `src/vip_lab/mega11/`, `src/vip_lab/mega13/`, `src/vip_lab/mega14/` | Reused for candidate queues, temporal refinement requests, PTS diagnostics, non-authoritative editorial proposal chains (`v1 -> v2 -> v3`), lineage audits, and release blocker codes. |
-| Gate-3 pre-review temporal preparation, handoff envelope, and lineage certificate | `MISSING_LAB_CODE_ALLOWED` | `src/vip_lab/mega15/{__init__,temporal_preflight,editorial_handoff,lineage}.py` | Implemented in `MEGA-15` using generated-only synthetic artifacts and fail-closed refusal boundaries. |
-| Declarative render preflight, QC requirement manifest, release refusal packet, and CLI | `MISSING_LAB_CODE_ALLOWED` | `src/vip_lab/mega16/{__init__,render_preflight,qc_requirements,release_refusal,cli}.py` | Implemented in `MEGA-16` as inert, zero-subprocess, fail-closed readiness and refusal structures. |
-| Real media probing, A-7 positive binding on real containers, IT-6 real tail admission, real human editorial decision, real FFmpeg preview/export, authentic model inference | `BLOCKED_BY_AUTHORITY` / `NOT_OBSERVED` | Deferred to Roadmap Steps 2, 3, and 4 (`docs/ai-studio-tasks/MEGA_15_16_DEFERRED_REAL_PILOT_PREREQUISITES.md`) | Explicitly refused in `MEGA-15..16`; all corresponding state fields remain `NOT_OBSERVED` or `False`. |
-
-#### Rejected Architectural Alternatives (Cycle 1)
-1. **Duplicate PTS engine (`REJECTED`):** Re-implementing rational PTS snapping or VFR classification inside `vip_lab` would fork `gate3.pts` and `gate3.temporal`. `mega15.temporal_preflight` delegates directly to `PtsTable`, `resolve_start`, `resolve_end`, `classify_vfr`, `detect_discontinuity`, `subdivide_on_discontinuity`, and `tail_end`.
-2. **Nominal FPS frame conversion (`REJECTED`):** Deriving frame or cut positions via `seconds * nominal_fps` violates project-wide temporal invariants and VFR safety.
-3. **Fake stream-ID equivalence (`REJECTED`):** Treating `selected_stream_index` (FFprobe global index), ISO-BMFF `trak` ordinal, and `tkhd.track_ID` as interchangeable without byte-bound `P2` positional proof violates Gate-3 A-7.
-4. **Second human decision engine or minting `HumanDecisionArtifact` in lab code (`REJECTED`):** `vip_fvs.human_decision` and `gate3.editorial` already govern human decision schemas; synthetic lab preparation has no human reviewer and must keep `real_human_decision_state = "NOT_OBSERVED"`.
-5. **Second edit-plan builder (`REJECTED`):** `gate3.plan.EditPlanRevision` and `vip_fvs.real_plan` already exist; `MEGA-15` emits only a pre-review `EditorialHandoffEnvelope` with `authoritative_edit_plan_created = False`.
-6. **Second FFmpeg renderer or invoking `render_synthetic` / `LocalPreviewAdapter` in `MEGA-16` (`REJECTED`):** `MEGA-16` validates only inert dry-run render intent structures (`ffmpeg_invocation_permitted = False`, `render_executed = False`) without spawning subprocesses or creating media files.
-7. **Second QC truth engine (`REJECTED`):** `MEGA-16` delegates bare-`PASS` rejection to `gate3.qc.bare_pass_is_insufficient` and keeps technical, visual editorial, and audio editorial observations at `NOT_OBSERVED`.
-
----
-
-### Cycle 2 — Temporal and Stream Identity Adversarial Checks
-
-- **Rational half-open `[start, end)` PTS intervals:** `build_temporal_preparation_record` constructs `PtsTable(TimeBase(num, den), ticks)` and resolves interval endpoints via `resolve_start` and `resolve_end`.
-- **Ambiguous duplicate PTS ticks:** When `PtsTable.is_ambiguous(tick)` is `True` (e.g. non-monotonic/duplicate presentation ticks) and no disambiguating `occurrence_index` is supplied, `build_temporal_preparation_record` fails closed with `REFUSAL_AMBIGUOUS_DUPLICATE_PTS`.
-- **PTS discontinuities:** When `detect_discontinuity(table, start_ticks, end_ticks)` reports a gap/backward jump and `allow_discontinuity_subdivision=False`, preflight fails closed with `REFUSAL_PTS_DISCONTINUITY`; when subdivision is explicitly requested for diagnostic inspection, `subdivide_on_discontinuity` segments are recorded while keeping `exact_cut_eligible = False`.
-- **Stream-tail (`IT-6`) uncertainty:** `evaluate_terminal_tail_preflight` inspects terminal endpoints via `resolve_end` and `tail_end`. Under interim `P3` policy (`PENDING_OWNER_DISPOSITION_P3_IN_FORCE`), any terminal stream-tail interval records `REFUSAL_TERMINAL_TAIL_UNCERTAIN` and `tail_binding_eligible = False`.
-- **Stream-namespace (`A-7`) separation:** `evaluate_stream_namespace_preflight` and `assert_stream_namespace_separation` refuse any claim that FFprobe `selected_stream_index` equals ISO-BMFF `trak` ordinal or `tkhd.track_ID` without byte-bound `P2` proof, and reject unusable `tkhd.track_ID` values (`0` or `0xFFFFFFFF`) or mismatched `probe_stream_id_hex`.
-- **Authoritative binding eligibility:** `gate3.refinement.is_binding_eligible` is evaluated against the synthetic preflight record and asserted to be `False`, while `source_pts_evidence_state` is pinned to `NOT_OBSERVED`.
-
----
-
-### Cycle 3 — Editorial Principal and Revision / Lineage Integrity
-
-- **Principal enforcement:** `refuse_non_human_or_unobserved_principal` delegates to `gate3.editorial.EditorialDecision` so `"model"`, `"tool"`, `"ai"`, or `"assistant"` principals raise `ModelToolPrincipalError` (wrapped/reported as `REFUSAL_MODEL_OR_TOOL_PRINCIPAL_FORBIDDEN`), while any claim of real human approval in synthetic lab mode raises `VipLabError(REFUSAL_HUMAN_DECISION_NOT_OBSERVED)`.
-- **Closed proposal revision chain (`v1 -> v2 -> v3`):** `build_editorial_handoff_envelope` and `verify_cross_stage_gate3_lineage` validate `proposal_chain` via `verify_proposal_revision_chain`, ensuring strictly sequential revisions (`1, 2, ...`), intact `parent_proposal_digest` links, identical immutable source/candidate pins (`candidate_id`, `queue_item_id`, `refinement_request_id`, `source_id`, `source_revision_id`, `source_sha256`, `source_path`, `selected_stream_index`, `time_base`), and exact match between the handoff envelope's `active_proposal_digest` and the chain tip.
-- **No authoritative artifact minting:** `refuse_authoritative_handoff_minting` rejects any payload attempting to mint a `HumanDecisionArtifact`, a `ReviewBundle` claiming real `MEASURED` PTS, or an authoritative `EditPlanRevision`.
+### Findings B–F — Upstream Contract, Import, Signature, and Lineage Repairs
+1. **`gate3.rational` & `gate3.pts` (`src/vip_lab/mega15/temporal_preflight.py`):**
+   - `TimeBase` and `Rational` are imported from `gate3.rational` (not `Timebase` from `gate3.pts`).
+   - `PtsTable(time_base=tb, ticks=pts_ticks)` is constructed with its exact keyword signature.
+   - Duplicate PTS disambiguation uses `table.ordinal_of(tick, occurrence=occurrence)` rather than passing an unsupported `occurrence=` keyword to `resolve_start` / `resolve_end`.
+2. **`gate3.temporal` (`src/vip_lab/mega15/temporal_preflight.py`):**
+   - `resolve_start(table, req_start)` and `resolve_end(table, req_end)` are called with 2 positional arguments and unpacked via `.requested_ticks`, `.resolved_ticks`, and `.policy`.
+   - `classify_vfr(table, declared_rate=declared_rate)` is unpacked as a 4-tuple `(is_vfr_flag_str, period_rational, basis_str, deviation)`.
+   - `subdivide_on_discontinuity(table, start_ticks, end_ticks)` is unpacked as `(parts_tuple, gaps_list)`.
+   - `tail_end(table, last_delta_ticks=..., rate_regime="uniform")` is called with required keyword arguments and unpacked via `TailEnd.end_ticks` and `TailEnd.basis`.
+3. **`gate3.refinement_request` (`src/vip_lab/mega15/temporal_preflight.py`):**
+   - `RefinementRequest` is constructed with its exact fields: `(request_id, candidate_assertion_ref, source_revision_id, source_locator, expected_source_sha256, selected_stream_index, requested_start_pts, requested_end_pts, producer_attempt_id, idempotency_key, expected_timebase=(num, den))`.
+4. **`gate3.editorial` & `gate3.plan` (`src/vip_lab/mega15/editorial_handoff.py`):**
+   - `EditorialDecision` raises `ModelToolPrincipalError` (a subclass of `TypeError`) for non-human principals (`"MODEL"`, `"TOOL"`) and requires `principal_kind in ("human", "SYNTHETIC_HUMAN")` with `principal_id`, `review_bundle_id`, `action`, `created_at_utc`, and `rationale`. `validate_principal_boundary` catches `(ModelToolPrincipalError, TypeError, ValueError)` and wraps into `VipLabError("ERR_MEGA15_INVALID_PRINCIPAL", ...)`.
+   - `EditPlanRevision` is constructed with its exact signature `(plan_id, plan_revision, placements, pinned_refinements, pinned_decisions)` to verify `plan_probe.export_eligible is False`.
+5. **`vip_fvs.real_preview_receipt`, `gate3.qc`, & `vip_lab.mega13` (`src/vip_lab/mega16/*.py`):**
+   - `src/vip_fvs/real_preview_receipt.py` exports `_FIELDS`, `SCHEMA`, and `SCOPE` (aliased in `render_preflight.py` as `REAL_PREVIEW_RECEIPT_REQUIRED_FIELDS`, `RECEIPT_SCHEMA_VERSION`, `PREVIEW_NON_PRODUCTION_MARKER`).
+   - `src/gate3/qc.py` exports `QCReport` and `bare_pass_is_insufficient` (used in `qc_requirements.py` instead of non-existent `TechnicalQcReport` / `EditorialQcReport`).
+   - `src/vip_lab/mega13` exports `CANONICAL_RELEASE_BLOCKER_CODES` and `build_release_blocker_summary` (which returns a `dict[str, Any]` containing `"release_blockers"`, `"summary_digest"`, `"export_status"`, `"production_export_authorized"`, and `"preview_eligible"`).
+6. **`vip_lab.common` (`VipLabError`, `SyntheticContextMarker`, `ReadinessPacket`):**
+   - Every `VipLabError(code, message)` call supplies both required positional arguments `(code, message)`.
+   - `SyntheticContextMarker.create()` is used consistently.
+   - `ReadinessPacket` is constructed with `(packet_id, stage_id, status=ReadinessStatus.BLOCKED, summary=..., blockers=..., evidence_state="NOT_OBSERVED", synthetic_only=True, execution_authorized=False)` and accessed via `.summary`, `.status.value`, `.blockers`, `.synthetic_only`, and `.execution_authorized`.
+7. **Truthful Duplicate Preservation (`src/vip_lab/mega15/lineage.py`):**
+   - Removed the false-positive `or len(queue.items) >= 1` condition. `duplicate_occurrence_paths_preserved` is `True` if and only if the upstream candidate queue actually contains at least one content digest with `>= 2` distinct `source_locator` paths AND all distinct paths are preserved 1-to-1 downstream (`False` when no duplicate occurrences exist). Similarly, `duplicate_query_texts_preserved` is `True` if and only if at least one normalized `query_text` appears across `>= 2` distinct `query_id`s upstream AND all distinct `query_id`s are preserved downstream (`False` when all query texts are unique).
+8. **Safe Dry-Run CLI (`src/vip_lab/mega16/cli.py`):**
+   - Fixed `main(argv=None)` so `sys.argv[1:]` is parsed when `argv is None` instead of iterating over `sys.argv[0]`.
+   - Enforced parent-traversal refusal (`..`), media extension refusal (`.mp4`, `.mov`, `.mkv`, `.avi`, `.webm`, `.wav`, `.mp3`, `.aac`, `.flac`, `.m4a`, `.mxf`, `.ts`), symlink refusal, existing-file refusal, and atomic `os.open(..., os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)` write.
 
 ---
 
-### Cycle 4 — Render / Export / QC Refusal and Privacy
+## 2. Six-Cycle Repair Summary
 
-- **Inert dry-run render intent only:** `InertDryRunRenderIntent` and `RenderPreflightReport` are pure declarative dataclasses (`execution_mode = "INERT_DECLARATIVE_DRY_RUN_ONLY"`, `ffmpeg_invocation_permitted = False`, `media_file_creation_permitted = False`, `subprocess_execution_permitted = False`, `render_executed = False`). Neither `render_synthetic` nor `LocalPreviewAdapter` nor `subprocess` is called.
-- **Independent readiness and refusal vocabulary:** `ExportReadinessPacket` records all required independent status fields:
-  - `real_human_decision_state = "NOT_OBSERVED"`
-  - `source_pts_evidence_state = "NOT_OBSERVED"`
-  - `source_native_exact_edit_eligible = False`
-  - `authoritative_edit_plan_created = False`
-  - `preview_policy_authorized = False`
-  - `render_executed = False`
-  - `technical_qc_observed = "NOT_OBSERVED"`
-  - `visual_editorial_qc_observed = "NOT_OBSERVED"`
-  - `audio_editorial_qc_observed = "NOT_OBSERVED"`
-  - `production_export_authorized = False`
-  - `export_status = "REFUSED_NOT_AUTHORIZED"`
-- **QC requirement manifest:** `QCRequirementManifest` integrates `gate3.qc.bare_pass_is_insufficient` (`bare_pass_rejected = True`) and `vip_fvs.real_preview_receipt.FIXTURE_NOT_OBSERVED_REQUIRED`, and refuses any spoofed QC `PASS` or forged sensory observation (`VISUALLY_OBSERVED`, `AUDIO_OBSERVED`).
-- **Untrusted authority sanitization:** `sanitize_untrusted_authority_claims` strips `FORBIDDEN_EXTERNAL_AUTHORITY_KEYS` and records stripped keys in `stripped_untrusted_authority_keys`.
+| Cycle | Focus | Outcome |
+| --- | --- | --- |
+| **Cycle 1** | Root-cause inventory & 6-file `src/gate0/media/*` SHA verification | Confirmed all 6 `src/gate0/media/*` files match exact Git blob SHAs from `e5974d9730d0ef85af5dc6fa16445e93b8c9941d`; identified `.gitignore` `media/` export trap and cataloged all upstream signature mismatches. |
+| **Cycle 2** | `MEGA-15` temporal, PTS, VFR, discontinuity, stream-tail (`IT-6`), and stream-identity (`A-7`) repair | Aligned `temporal_preflight.py` with `gate3.rational`, `gate3.pts`, `gate3.temporal`, `gate3.refinement_request`, `gate3.refinement`, and `gate3.stream_identity`. |
+| **Cycle 3** | `MEGA-15` editorial principal, revision chain (`v1 -> v2 -> v3`), and lineage repair | Aligned `editorial_handoff.py` and `lineage.py` with `gate3.editorial`, `gate3.plan`, `vip_lab.mega09..13`; fixed duplicate-occurrence and duplicate-query-text boolean reporting to be strictly truthful. |
+| **Cycle 4** | `MEGA-16` declarative render preflight, QC requirement manifest, release refusal & CLI repair | Aligned `render_preflight.py`, `qc_requirements.py`, `release_refusal.py`, and `cli.py` with `vip_fvs.real_preview_receipt`, `gate3.qc`, `vip_lab.mega13`, and `vip_lab.common`. |
+| **Cycle 5** | End-to-end `MEGA-09 -> 10 -> 11 -> 13 -> 14 -> 15 -> 16` integration & test repair | Updated `tests/vip_lab/test_mega15.py`, `tests/vip_lab/test_mega16.py`, and `tests/vip_lab/test_mega15_16_end_to_end.py` to test real repository contracts, including positive and negative duplicate-preservation cases and CLI safety refusals. |
+| **Cycle 6** | Compilation, regression suite (`test_mega08..16`), and contract boundary audit | `python3 -m compileall -q src experiments tests` passed; all 59 test functions across `test_mega08..16` passed in-process; zero read-only files modified. |
 
 ---
 
-### Cycle 5 — Cross-Wave Functional Integration (`MEGA-09 -> 10 -> 11 -> 13 -> 15 -> 16`)
+## 3. Deliverable Matrix
 
-- `run_mega15_16_offline_pipeline` and `Mega1516OfflineBundle` connect:
-  1. `MEGA-09` `CandidateReviewQueue` (preserving duplicate `source_sha256` across distinct `source_path` occurrences and duplicate `query_text` across distinct `query_id`s),
-  2. `MEGA-10` `TemporalRefinementRequest` + `PtsFixtureDiagnostic`,
-  3. `MEGA-11` `EditorialProposal` revision chains (`v1 -> v2 -> v3`),
-  4. `MEGA-13` `LineageAuditReceipt`, `QCReadinessChecklist`, and `ReleaseBlockerSummary`,
-  5. `MEGA-15` `Gate3PreparationPacket` and `Gate3LineageCertificate`,
-  6. `MEGA-16` `RenderPreflightReport`, `QCRequirementManifest`, and `ExportReadinessPacket`.
-- Supports both `three_arm` (`siglip_v1_base`, `siglip2_v2_base`, `siglip2_v2_so400m`) and `single_arm` (`siglip_v1_base`) synthetic scenarios with deterministic canonical JSON serialization and SHA-256 digest verification.
-
----
-
-### Cycle 6 — Source Code Static Review, Negative Tests, and Acceptance Readiness
-
-- Authored unit, negative/adversarial, and end-to-end tests in `tests/vip_lab/test_mega15.py`, `tests/vip_lab/test_mega16.py`, and `tests/vip_lab/test_mega15_16_end_to_end.py` prior to implementing the corresponding `src/vip_lab/mega15/` and `src/vip_lab/mega16/` modules.
-- Confirmed zero modifications to canonical `src/gate0..3/`, `src/vip_fvs/`, `src/vip_lab/mega03..14/`, `.github/`, or existing tests/docs.
-- Confirmed all 6 `src/gate0/media/` dependency files remain intact on disk.
-
----
-
-## 2. Deliverable Implementation Matrix
-
-| Wave / Deliverable | Files Created | Test Suite | AI Studio Status | Hosted CI Status (Python 3.11 & 3.14) |
+| Wave / Deliverable | Files Repaired / Verified | Test Suite | Local Verification | Hosted CI Status (Python 3.11 & 3.14) |
 | --- | --- | --- | --- | --- |
-| **MEGA-15:** Gate-3 Source-Native Temporal Preparation, Editorial Handoff & Lineage Validation | `src/vip_lab/mega15/__init__.py`<br>`src/vip_lab/mega15/temporal_preflight.py`<br>`src/vip_lab/mega15/editorial_handoff.py`<br>`src/vip_lab/mega15/lineage.py` | `tests/vip_lab/test_mega15.py` | `IMPLEMENTED_UNVERIFIED` (`NOT_EXECUTED_BY_DESIGN`) | `PENDING_HOSTED_CI` |
-| **MEGA-16:** Render/Export/QC Preflight Infrastructure, Release Refusal & CLI | `src/vip_lab/mega16/__init__.py`<br>`src/vip_lab/mega16/render_preflight.py`<br>`src/vip_lab/mega16/qc_requirements.py`<br>`src/vip_lab/mega16/release_refusal.py`<br>`src/vip_lab/mega16/cli.py` | `tests/vip_lab/test_mega16.py`<br>`tests/vip_lab/test_mega15_16_end_to_end.py` | `IMPLEMENTED_UNVERIFIED` (`NOT_EXECUTED_BY_DESIGN`) | `PENDING_HOSTED_CI` |
-| **Documentation & Deferred Roadmap Mapping** | `docs/ai-studio-tasks/MEGA_15_16_PROGRESS.md`<br>`docs/ai-studio-tasks/MEGA_15_16_DEFERRED_REAL_PILOT_PREREQUISITES.md` | Verified via cross-wave tests | `COMPLETE` | `PENDING_HOSTED_CI` |
+| **Gate-0 Media Substrate (6 files)** | `src/gate0/media/{__init__,decode,probe,proc,source_guard,tool_identity}.py` | `tests/gate0/` (in CI) + SHA verification | `VERIFIED_EXACT_BLOB_SHAS` (`6/6`) | `PENDING_NEXT_GITHUB_PUSH` |
+| **MEGA-15:** Gate-3 Source-Native Temporal Preparation, Editorial Handoff & Lineage Validation | `src/vip_lab/mega15/__init__.py`<br>`src/vip_lab/mega15/temporal_preflight.py`<br>`src/vip_lab/mega15/editorial_handoff.py`<br>`src/vip_lab/mega15/lineage.py` | `tests/vip_lab/test_mega15.py` (`12/12 PASS`) | `PASS` (`compileall` + in-process test execution) | `PENDING_NEXT_GITHUB_PUSH` |
+| **MEGA-16:** Render/Export/QC Preflight Infrastructure, Release Refusal & CLI | `src/vip_lab/mega16/__init__.py`<br>`src/vip_lab/mega16/render_preflight.py`<br>`src/vip_lab/mega16/qc_requirements.py`<br>`src/vip_lab/mega16/release_refusal.py`<br>`src/vip_lab/mega16/cli.py` | `tests/vip_lab/test_mega16.py` (`4/4 PASS`)<br>`tests/vip_lab/test_mega15_16_end_to_end.py` (`2/2 PASS`) | `PASS` (`compileall` + in-process test execution) | `PENDING_NEXT_GITHUB_PUSH` |
+| **Upstream Regressions (`MEGA-08..14`)** | Preserved untouched (`src/vip_lab/mega08..14/**`) | `tests/vip_lab/test_mega08..14` (`41/41 PASS`) | `PASS` (`59/59` total across `test_mega08..16`) | `PENDING_NEXT_GITHUB_PUSH` |
