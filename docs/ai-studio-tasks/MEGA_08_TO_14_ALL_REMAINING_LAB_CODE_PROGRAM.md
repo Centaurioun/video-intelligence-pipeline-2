@@ -255,3 +255,219 @@ Requirements:
 8. Whole-proposal refusal on wrong candidate/manifest/generation/temporal digest. Produce a canonical digest for each revision.
 
 Tests: proposal revision transitions, preserved prior alternatives, stale parent, candidate swap, fake human approval, unauthorized edit-plan promotion, exact same inputs -> same digest, no protected I/O.
+
+
+## 11. MEGA-12 — GENERATED-ONLY RECOVERY AND REPLAY CONSISTENCY
+
+Goal: test coherent behavior after simulated interruptions without introducing a second production queue, persistence system or real source workload.
+
+New files:
+- src/vip_lab/mega12/__init__.py
+- src/vip_lab/mega12/replay_graph.py
+- src/vip_lab/mega12/fault_scenarios.py
+- src/vip_lab/mega12/consistency_review.py
+- tests/vip_lab/test_mega12.py
+
+Requirements:
+1. Accept explicit bounded synthetic stage events, identities and upstream packet digests; keep immutable stage-input and stage-output hashes.
+2. Reuse gate2.workload, gate2.recovery, gate2.faults and vip_lab.mega06 where exact existing APIs can do the job. Do not reimplement RecoveryHarness or its journal.
+3. Generated fixture events can model prepared -> running -> interrupted -> resumable or terminal rejection; never use actual index/media roots.
+4. Commit a generated-only stage once; repeat replay must not duplicate accepted results. Crash after side effect but before committed record must follow actual existing idempotency contract.
+5. Reject truncated JSONL/synthetic receipt, wrong generation, wrong semantic-space ID, corrupted digest, duplicate commitment, missing ancestor and invalid event ordering.
+6. Use only ACTUAL FaultClass values and respect HARNESSED vs NOT_YET_HARNESSED; unsupported faults are NOT_EXECUTED, not simulated as accepted behavior.
+7. Record synthetic counters separately from real workload/host/model observations, which remain NOT_OBSERVED. Do not justify ANN, cache, persistent broker, daemon, queue or greater concurrency.
+8. Resource bounds: small generated-only jobs/events, count/size caps, no unbounded replay or hidden network calls.
+9. Do not open original source files, model assets or protected archives, and never overwrite existing index generations.
+
+Tests: interrupted/repeated deterministic replay, idempotence, metadata tamper, sequence truncation, wrong upstream, unsupported fault, no work outside tmp_path, no spurious production-scale claim.
+
+## 12. MEGA-13 — QC EVIDENCE COMPLETENESS AND EXPORT REFUSAL
+
+Goal: determine what actual technical/editorial observations would be needed, without asserting they happened.
+
+New files:
+- src/vip_lab/mega13/__init__.py
+- src/vip_lab/mega13/qc_readiness.py
+- src/vip_lab/mega13/lineage_audit.py
+- src/vip_lab/mega13/release_blockers.py
+- tests/vip_lab/test_mega13.py
+
+Requirements:
+1. Consume validated candidate queue, temporal request, editorial proposal and generated-only replay receipt. Bind exact source occurrence, model space, revision, stream/timebase and upstream report digests.
+2. Distinguish measured technical output identity, real video/audio editorial observation, human edit approval, preview-only QC and production-export eligibility. None is externally observed in this LAB.
+3. Set qc_state=NOT_OBSERVED, preview_eligible=false, production_export_authorized=false and export_status=REFUSED_NOT_AUTHORIZED.
+4. Reject plain QC PASS, attacker-controlled visual/audio observation labels and self-signed reviewer fields. Do not invent technical output/frame hash or human signed acceptance.
+5. Reuse gate3.qc.bare_pass_is_insufficient(record) only with the verified actual record shape. Never call may_consume_for_binding_origin without valid source-bound attestation and fresh authority.
+6. Fail closed on wrong candidate, stream, revision, ReviewBundle linkage, edit-plan origin or source snapshot authority. Do not silently repair or auto-approve.
+7. Report per-missing-evidence prerequisites and refusal reasons, with precise ownership and honest NOT_OBSERVED states.
+8. Make the QC readiness result deterministic and digest-bound. No render, preview subprocess, FFmpeg, media decoder or provider calls.
+9. Report what is missing rather than manufacturing measurable results.
+
+Tests: fake PASS, fake human QC, mismatched lineage, invalid report digest, MEASURED escalation attempt, absent audio/visual observations, no source/model subprocesses.
+
+## 13. MEGA-14 — REAL END-TO-END SYNTHETIC INTEGRATION, CLI AND REPORT
+
+Goal: one demonstrable integrated, fully generated-only flow. The source-index/query path must really be called through existing production-facing LAB seams rather than returning canned test objects.
+
+New files:
+- src/vip_lab/mega14/__init__.py
+- src/vip_lab/mega14/scenario.py
+- src/vip_lab/mega14/orchestrator.py
+- src/vip_lab/mega14/report.py
+- src/vip_lab/mega14/cli.py
+- tests/vip_lab/test_mega14.py
+- tests/vip_lab/test_mega08_14_end_to_end.py
+
+Design a closed versioned generated-only scenario input with stable ID/seed, small query catalog, one explicit multi-source manifest, one or three existing fake model profiles, separate existing-generation index identities, top_k, and optional numerical PTS fixture. Do not create actual MP4, source probe, model asset, reviewer judgment or renderer.
+
+Required true integration chain:
+
+scenario validation
+-> vip_fvs QueryCatalog and source-bound generated-only manifest
+-> existing batch_retrieval / three_arm_batch read-only retrieval over injected fake or tmp_path precommitted synthetic index
+-> strict verified batch report with query/arm/generation/source attribution
+-> MEGA-09 review queue
+-> MEGA-10 temporal request/diagnostic
+-> MEGA-11 unapproved proposal
+-> MEGA-12 generated-only replay identity
+-> MEGA-13 QC/export refusal
+-> canonical report + verifier.
+
+Rules:
+1. Use actual run_batch_retrieval, run_three_arm_batch and verify_batch_report interfaces. Do not implement a second search algorithm.
+2. Reuse or instantiate source-independent fake engines with verified existing constructor semantics. A generated SQLite/vectors.f32 fixture under tmp_path is allowed when source code already supports it. The query stage must not run index_source.
+3. Single-arm V1 Base 768D, V2 Base 768D and SO400M 1152D; three-arm separate generations. Reject 768D cross-model generation reuse.
+4. Preserve two byte-identical occurrences from different exact synthetic paths; preserve repeated query text under separate query IDs.
+5. Preserve nonzero integer PTS and rational timebase exactly. No automatic edit interval, no MEASURED evidence and no nominal-FPS frame calculation.
+6. Provide a canonical report showing which source, model, query, candidate and proposal identities were present, which real evidence is missing, and why export remains not authorized.
+7. Full report verifier must detect tampered field/digest, forged human authority, unknown status, duplicate JSON key, nonfinite score and forbidden extra fields.
+8. Expose a separate CLI: PYTHONPATH=src:experiments python -m vip_lab.mega14.cli --help; provide run-synthetic-scenario and verify-report only if actual output contract supports safe execution.
+9. Explicit real/--render/--export/--provider/--download attempts must refuse before side effects, with nonzero CLI exit and one non-success JSON object.
+10. If a required producer wave is absent or BLOCKED, return a structured failure; never print an incomplete successful E2E result.
+11. Repeat identical scenario with identical fake indexes -> byte-identical report; change bound source revision/catalog/model-space -> distinct output identity or fail closed.
+12. No real media/model network, no daemon, no server, no production edit planning, no actual preview/export.
+
+Tests: all real seams with generated fixtures; 1/2/64 bounded queries, duplicate texts, two occurrences, exact PTS/timebase, versioned proposals, fault/refusal propagation, one-arm failure, no source opens, no model/FFmpeg calls, stable report, CLI status and old 307-suite non-regression.
+
+## 14. Implementation packet map and dependency-safe scheduling
+
+Each wave is a reviewable packet, not seven unrelated giant rewrites:
+
+| Packet | Code owner | Test owner | Depends on |
+|---|---|---|---|
+| P08 | mega08/ capability and source-contract map | test_mega08.py | baseline |
+| P09 | mega09/ review queue | test_mega09.py | existing MEGA-02 |
+| P10 | mega10/ source-native temporal request | test_mega10.py | P09 |
+| P11 | mega11/ versioned editorial proposal | test_mega11.py | P09 + P10 |
+| P12 | mega12/ generated recovery | test_mega12.py | baseline; independent |
+| P13 | mega13/ QC evidence completeness | test_mega13.py | P10 + P11 + P12 |
+| P14 | mega14/ orchestrator/CLI/report | test_mega14.py + test_mega08_14_end_to_end.py | compatible completed producers |
+
+Workflow: inspect existing source call signatures -> author targeted tests BEFORE code -> implement only missing LAB contract -> static name/signature review -> optionally AST compile -> update progress ledger -> next wave.
+
+P08 and P12 are independently buildable. P09->P10->P11 is a dependency chain. P13 and P14 follow their actual producer interfaces. If an earlier wave is blocked, continue independent P12 and negative tests, but do not pretend the blocked wave was delivered.
+
+No two writers own the same file. The user can ask for continuation by pointing to the progress ledger. Do not fabricate subagents or worktrees inside the ZIP.
+
+## 15. Conditional remaining-code stretch queue
+
+After P08–P14, inspect remaining opportunities; write additional code only when a specific, source-backed gap has a legitimate use within the existing allowed paths. Prefer extending one of the new test files over creating a new unused subsystem.
+
+**S1 — Gate-0 preflight:** if an actual gap remains in generated-only editorial query/metadata conformance, extend P08 or P14. Respect 24 editor-positive, 8 absent, 8 development, two distinct reviewers and true human labels still NOT_OBSERVED. Never create fake genuine labels or run D-3.
+
+**S2 — Gate-1 safety:** add only missing model-free V1/V2/SO400M cross-space refusal regression to new tests. No model download, no invented tokenizer/pooling, no real benchmark/winner.
+
+**S3 — Gate-2 replay:** if existing mega06 misses a real synthetic integrity edge, cover it in P12 through actual RecoveryHarness. No new production index architecture, queue/cache/ANN, or scale claim.
+
+**S4 — Gate-3 timing/stream-tail:** document A-7 positive mapping, IT-6 terminal duration and audio/dual-authority policy as BLOCKED_BY_CANONICAL_DECISION. Only negative synthetic tests are permitted. No new source parsing or production render.
+
+**S5 — H3 WBS/Atlas gap classification:** generate an ADVISORY mapping of LAB code and source-backed tests to H3-A03–A07, B04/B05, C05, D02/D05, G01–G03 and open WBS parents. No editing canonical Atlas, checkboxes, branch records, PRs or Gate status.
+
+**Stop** if extra work would be duplicate boilerplate, require permission for real archive/model/provider/media, or silently widen a frozen contract. The Owner requested all code-capable work, not artificial implementation of human and operational prerequisites.
+
+## 16. CI execution and direct-to-main safeguards
+
+Google AI Studio must write Python code and pytest test source ONLY. Do not run pytest, unittest, CLI, installations, downloads, network, real models, real/protected media or FFmpeg; do not push GitHub from the AI Studio agent; do not edit the workflow. Syntax-only ast.parse/compile permitted, label it STATIC_ONLY.
+
+The Owner's LAB GitHub integration may direct files to main. Publication is a separately controlled human action. Preserve .github/ and all preexisting paths, particularly src/gate0/media/. NEVER mirror a reduced ZIP to remote with delete semantics. If the integration cannot upload changed files only, STOP and ask the Owner to use a safe selective upload before any push.
+
+The LAB controller will configure conditional MEGA-08–14 CI with Python 3.11/3.14. Every submitted wave must run its new test file and any missing expected sibling file must fail completeness. A not-submitted wave may be SKIPPED but cannot be counted as completed. A partially submitted wave should FAIL rather than be hidden by an empty placeholder.
+
+CI SUCCESS on previous 307 tests alone is NOT a success of P08–P14. Actual progress requires exact submitted SHA, test step names, selected counts and failures. The local Codex auditing worktree must not write or merge into LAB main. It may fetch and inspect immutable main commits as they appear and report findings in its own branch.
+
+Approval layers:
+1. AUTHORING_DELIVERED — source and tests present, unexecuted.
+2. HOSTED_SYNTHETIC_VERIFIED — named new tests actually ran and passed on both Python versions at exact commit.
+3. INDEPENDENTLY_REVIEWED — Codex checked exact diff against source contracts and threat boundaries.
+4. CANONICAL_ACCEPTED — requires separate explicit Owner adoption/grant plus Gate-specific evidence. NOT authorized in this task.
+
+Do not collapse the four layers.
+
+## 17. Progress ledger and safe continuation contract
+
+Create and maintain docs/ai-studio-tasks/MEGA_08_14_PROGRESS.md before writing the first Python file. Update after every complete or blocked wave.
+
+Fields:
+- spec_version = LAB-MEGA-08-14-v1.0.0
+- workspace_git_sha = NOT_OBSERVED if ZIP
+- baseline_revision = 22f1ffa... declared reference, not locally verified without Git
+- per-wave status: NOT_STARTED / IMPLEMENTED_UNVERIFIED / PARTIAL_BLOCKED / BLOCKED_SCOPE / NOT_NEEDED
+- exact files read and source symbols validated
+- actual new paths, positive/refusal/side-effect test cases
+- source-schema/constructor assumption corrections
+- source/media/model/network invariants retained
+- AI_STUDIO_PYTEST = NOT_EXECUTED_BY_DESIGN
+- optional AST result = actual checked scope, not pytest PASS
+- hosted_ci = NOT_OBSERVED until a GitHub run is independently fetched
+- next_safe_packet and explicit unresolved blockers.
+
+If AI Studio reaches context/response limits, save completed coherent code and an exact checkpoint, do not redo previous waves. It may stop with PARTIAL_BLOCKED; the Owner can invoke a later continuation using the ledger. No background processing promise.
+
+Continuation prompt for a future user-issued request:
+Read docs/ai-studio-tasks/MEGA_08_TO_14_ALL_REMAINING_LAB_CODE_PROGRAM.md and MEGA_08_14_PROGRESS.md. Verify source, continue from next_safe_packet, preserve completed paths, write code + tests, no local pytest/install/model/media/CI edits/GitHub push, update ledger, report Turkish status.
+
+## 18. Review and evidence discipline — final failure checklist
+
+Reject any of:
+1. "Three-arm benchmark winner" inferred from fake cosine scores.
+2. Source SHA asserted from user metadata as if bytes measured.
+3. Generated PTS frames promoted to MEASURED or binding_eligible.
+4. Nominal FPS used to infer VFR frame ordinal.
+5. Duplicate source occurrence collapsed by content hash alone.
+6. Two 768D model spaces treated as identical.
+7. ISO-BMFF track ordinal guessed from FFprobe global index.
+8. Self-declared Owner signature, E01 token, human approval or QC PASS accepted as authority.
+9. Actual HumanDecisionArtifact, EditPlan, preview or export synthesized without source/Owner evidence.
+10. Model/network/provider access or actual/protected video decoding/rendering.
+11. Reimplementing existing batch retrieval, profile embeddings, Gate-2 recovery journal, Gate-3 temporal engine.
+12. Editing existing canonical producer code, protected repository or original WBS/Atlas.
+13. Git reset/clean/force push or deleting files while syncing ZIP.
+14. Swallowing unknown exceptions to print READY_SYNTHETIC.
+15. Deleting/skipping/xfailing failing tests to greenwash CI.
+16. Reporting syntax-only compilation as runtime integration PASS.
+17. Reporting all remaining B00–B11/Gate tasks as completed from these LAB waves.
+18. Calling an independent local Codex review passed before a reviewer actually examined exact SHA.
+
+## 19. Required Turkish final report
+
+A. Baseline preflight — all required source files and verified code facts, ZIP/.git uncertainty.
+
+B. Gaps by wave — which behavior already existed, which is genuinely missing, rejected duplication and authority-limited items.
+
+C. Changed paths — every created/modified file; no vague claims.
+
+D. Implemented behavior — P08 through P14, actual producer/consumer, test-first assertion, negative path and no-effect boundary.
+
+E. Tests written — list individual suites/functions, positive and hostile cases, no fabricated test count.
+
+F. Verification — print AI_STUDIO_PYTEST=NOT_EXECUTED_BY_DESIGN; static syntax only if actually executed; hosted CI NOT_OBSERVED before a real run.
+
+G. Protected decisions — PR #258, A-7/S5, H3-C05/A04, D-3 Gate-0, authentic SigLIP2 Gate B, real scale Gate-2 and real Gate-3 edit/export remain separate.
+
+H. Ledger — MEGA_08_14_PROGRESS.md exact current wave, next_safe_packet and source API rulings.
+
+I. Delivery — only changed files published selectively to LAB main; preserve .github and six gate0/media dependencies. Local Codex auditor uses separate branch/worktree without writing main.
+
+J. Per-wave status and total: IMPLEMENTED_UNVERIFIED, PARTIAL_BLOCKED, BLOCKED_SCOPE, NOT_NEEDED, NOT_IMPLEMENTED; no false VERIFIED_COMPLETE before CI and review.
+
+STOP after this comprehensive assignment. No unapproved real operations or production deployment.
