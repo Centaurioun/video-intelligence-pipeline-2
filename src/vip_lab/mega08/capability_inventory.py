@@ -30,10 +30,9 @@ from ..common import (
     NOT_OBSERVED,
     VipLabError,
 )
-from .gap_digest import compute_gap_digest
+from .gap_digest import MEGA_08_14_SPEC_VERSION, compute_gap_digest
 
 
-MEGA_08_14_SPEC_VERSION = "LAB-MEGA-08-14-v1.0.0"
 DECLARED_BASELINE_REVISION = "22f1ffa7064f697d4049e39587945b1decabec4e"
 CANONICAL_VIP_REFERENCE_SHA = "592952daf475b1bbae2eebdee64d992c1a744f08"
 MAX_INVENTORY_SOURCE_BYTES = 1024 * 1024  # 1 MiB per inspected source file
@@ -48,6 +47,15 @@ ALLOWED_INVENTORY_PREFIXES: tuple[str, ...] = (
     "src/persistent_local_index/",
     "tests/vip_lab/",
     "docs/ai-studio-tasks/",
+)
+
+ALLOWED_GOVERNANCE_DOC_PATHS: frozenset[str] = frozenset(
+    {
+        "docs/decisions/2026-10-28-a7-s5-shared-admission-owner-adoption.md",
+        "docs/decisions/2026-10-29-a7-s5-scoped-synthetic-tdd-plan-owner-adoption.md",
+        "docs/superpowers/plans/2026-10-29-g3-a7-s5-scoped-synthetic-tdd-plan-proposal.md",
+        "docs/project/12_2026-10-25_FOUR_GATE_PRODUCT_COMPLETION_WBS.md",
+    }
 )
 
 CANONICAL_CAPABILITY_CLASSES = frozenset(
@@ -201,8 +209,7 @@ DEFAULT_MODULE_EXPECTATIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def validate_allowlisted_relative_path(rel_path: str) -> str:
-    """Validate that ``rel_path`` is a clean relative POSIX path under an allowlisted prefix."""
+def _normalize_clean_relative_posix_path(rel_path: str) -> str:
     if not isinstance(rel_path, str) or not rel_path.strip() or "\x00" in rel_path:
         raise VipLabError(
             "INVENTORY_PATH_INVALID",
@@ -223,7 +230,12 @@ def validate_allowlisted_relative_path(rel_path: str) -> str:
             f"Path traversal or dot segment is forbidden: {rel_path!r}",
             field_path="relative_path",
         )
-    clean_posix = "/".join(parts)
+    return "/".join(parts)
+
+
+def validate_allowlisted_relative_path(rel_path: str) -> str:
+    """Validate that ``rel_path`` is a clean relative POSIX path under an AST-allowlisted prefix."""
+    clean_posix = _normalize_clean_relative_posix_path(rel_path)
     if not any(clean_posix.startswith(prefix) for prefix in ALLOWED_INVENTORY_PREFIXES):
         raise VipLabError(
             "INVENTORY_PATH_NOT_ALLOWLISTED",
@@ -231,6 +243,20 @@ def validate_allowlisted_relative_path(rel_path: str) -> str:
             field_path="relative_path",
         )
     return clean_posix
+
+
+def validate_capability_source_reference_path(rel_path: str) -> str:
+    """Validate a capability metadata reference path (allowlisted source prefix or closed governance doc)."""
+    clean_posix = _normalize_clean_relative_posix_path(rel_path)
+    if any(clean_posix.startswith(prefix) for prefix in ALLOWED_INVENTORY_PREFIXES):
+        return clean_posix
+    if clean_posix in ALLOWED_GOVERNANCE_DOC_PATHS:
+        return clean_posix
+    raise VipLabError(
+        "INVENTORY_PATH_NOT_ALLOWLISTED",
+        f"Capability reference path {clean_posix!r} is neither in ALLOWED_INVENTORY_PREFIXES nor in ALLOWED_GOVERNANCE_DOC_PATHS",
+        field_path="source_paths",
+    )
 
 
 def _read_bounded_regular_bytes(path: Path, *, max_bytes: int = MAX_INVENTORY_SOURCE_BYTES) -> bytes:
@@ -691,7 +717,10 @@ def _default_capability_matrix(workspace_root: Path) -> tuple[CapabilityEntry, .
             gate="G3",
             classification="BLOCKED_BY_AUTHORITY",
             evidence_state=NOT_OBSERVED,
-            source_paths=("docs/decisions/2026-10-29-a7-s5-scoped-synthetic-tdd-plan-owner-adoption.md",),
+            source_paths=(
+                "src/vip_lab/mega03/a7_s5_audit.py",
+                "docs/decisions/2026-10-29-a7-s5-scoped-synthetic-tdd-plan-owner-adoption.md",
+            ),
             authority_blocker="PR_258_ABSENT_IN_SNAPSHOT_AND_SEPARATE_T1_GRANT_REQUIRED",
         ),
         CapabilityEntry(
@@ -787,7 +816,7 @@ def build_capability_inventory(
             )
         seen_cap_ids.add(cap.capability_id)
         for src_p in cap.source_paths:
-            validate_allowlisted_relative_path(src_p)
+            validate_capability_source_reference_path(src_p)
 
     wbs_map = _build_wbs_h3_advisory_map()
     stretch_map = _build_stretch_advisory_crosswalks()

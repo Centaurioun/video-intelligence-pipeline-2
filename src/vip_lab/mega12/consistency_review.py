@@ -18,6 +18,7 @@ from vip_lab.mega12.fault_scenarios import evaluate_fault_scenario_matrix
 from vip_lab.mega12.replay_graph import (
     ReplayGraph,
     build_replay_graph_from_workload,
+    coerce_canonical_workload_spec,
     verify_replay_graph,
 )
 
@@ -37,38 +38,37 @@ def build_synthetic_recovery_measurement_set(
 ) -> MeasurementSet:
     mset = MeasurementSet()
     mset.add(
-        Measurement(
-            name="synthetic_jobs_committed",
+        Measurement.measured(
+            metric_id="synthetic_jobs_committed",
             value=replay_graph.job_count,
             unit="jobs",
-            evidence="MEASURED",
-            source="gate2.workload+gate2.recovery:synthetic_in_memory",
+            derivation="gate2.workload+gate2.recovery:synthetic_in_memory",
+            evidence_class="MEASURED",
         )
     )
     mset.add(
-        Measurement(
-            name="synthetic_stages_replayed",
+        Measurement.measured(
+            metric_id="synthetic_stages_replayed",
             value=len(replay_graph.nodes),
             unit="stages",
-            evidence="MEASURED",
-            source="vip_lab.mega12.replay_graph:synthetic_in_memory",
+            derivation="vip_lab.mega12.replay_graph:synthetic_in_memory",
+            evidence_class="MEASURED",
         )
     )
     mset.add(
-        Measurement(
-            name="synthetic_harnessed_faults_tested",
+        Measurement.measured(
+            metric_id="synthetic_harnessed_faults_tested",
             value=int(fault_matrix.get("harnessed_count", 0)),
             unit="fault_classes",
-            evidence="MEASURED",
-            source="gate2.faults:synthetic_in_memory",
+            derivation="gate2.faults:synthetic_in_memory",
+            evidence_class="MEASURED",
         )
     )
     for metric_name in REQUIRED_NOT_OBSERVED_METRICS:
         mset.add(
             Measurement.not_observed(
-                name=metric_name,
-                unit="archive_observation",
-                source="synthetic_lab_no_real_archive",
+                metric_id=metric_name,
+                reason="synthetic_lab_no_real_archive_observation",
             )
         )
     return mset
@@ -124,7 +124,7 @@ def inspect_recovery_replay_consistency(
     fault_matrix: dict[str, Any] | None = None
     measurement_dict: dict[str, Any] | None = None
 
-    if not isinstance(spec_raw, Mapping):
+    if not isinstance(spec_raw, (WorkloadSpec, Mapping)):
         code = "INVALID_WORKLOAD_SPEC"
         reasons.append(code)
         blockers.append(code)
@@ -132,23 +132,18 @@ def inspect_recovery_replay_consistency(
             ReadinessFinding(
                 code=code,
                 status=ReadinessStatus.INVALID,
-                message="workload_spec must be a mapping.",
+                message="workload_spec must be a WorkloadSpec or mapping.",
                 evidence_state=NOT_OBSERVED,
             )
         )
     else:
         try:
-            spec = WorkloadSpec(
-                workload_id=str(spec_raw.get("workload_id", "wl-mega12-default")),
-                seed=int(spec_raw.get("seed", 20261104)),
-                job_count=int(spec_raw.get("job_count", 3)),
-                stages_per_job=int(spec_raw.get("stages_per_job", 2)),
-                payload_bytes=int(spec_raw.get("payload_bytes", 48)),
-            )
+            spec, wl_id = coerce_canonical_workload_spec(spec_raw)
             graph = build_replay_graph_from_workload(
                 workload_spec=spec,
                 generation_id=generation_id,
                 semantic_space_id=semantic_space_id,
+                workload_id=wl_id,
             )
             verify_replay_graph(graph)
             replay_graph_dict = graph.to_dict()
@@ -156,12 +151,13 @@ def inspect_recovery_replay_consistency(
                 workload_spec=spec,
                 generation_id=generation_id,
                 semantic_space_id=semantic_space_id,
+                workload_id=wl_id,
             )
             mset = build_synthetic_recovery_measurement_set(
                 replay_graph=graph,
                 fault_matrix=fault_matrix,
             )
-            measurement_dict = mset.as_dict()
+            measurement_dict = mset.to_dict()
         except (WorkloadError, VipLabError, ValueError, TypeError) as exc:
             code = exc.code if isinstance(exc, VipLabError) else "WORKLOAD_OR_REPLAY_ERROR"
             reasons.append(code)

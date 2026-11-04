@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from gate2.workload import WorkloadError
 from vip_fvs.synthetic_profiles import CLOSED_SYNTHETIC_PROFILE_IDS, V1_PROFILE_ID
 from vip_lab.common import (
     VipLabError,
@@ -13,6 +14,7 @@ from vip_lab.common import (
     sanitize_untrusted_authority_claims,
     validate_hex_digest,
 )
+from vip_lab.mega12.replay_graph import coerce_canonical_workload_spec
 
 E2E_SCENARIO_SCHEMA_VERSION = "vip-lab-e2e-scenario-v1"
 ALLOWED_SCENARIO_MODES: tuple[str, ...] = ("SINGLE_ARM", "THREE_ARM")
@@ -125,10 +127,18 @@ def default_three_arm_scenario() -> SyntheticLabScenario:
         requested_end_pts=6006,
         workload={
             "workload_id": "wl-mega14-e2e",
+            "jobs": 3,
+            "stages": 2,
+            "artifact_bytes": 48,
+            "cost_units": 10,
+            "fault_position": 0,
             "seed": 20261104,
-            "job_count": 3,
-            "stages_per_job": 2,
-            "payload_bytes": 48,
+            "f01_sha": "1" * 40,
+            "c04_sha": "2" * 40,
+            "e05_sha": "3" * 40,
+            "config_digest": "4" * 64,
+            "concurrency": 1,
+            "repetitions": 2,
         },
     )
 
@@ -240,6 +250,13 @@ def parse_e2e_scenario_mapping(raw: Mapping[str, Any]) -> SyntheticLabScenario:
     workload_raw = raw.get("workload")
     if not isinstance(workload_raw, Mapping):
         raise VipLabError("SCENARIO_WORKLOAD_INVALID", "workload must be a mapping.")
+    try:
+        wl_spec, wl_id = coerce_canonical_workload_spec(workload_raw)
+    except (WorkloadError, VipLabError, ValueError, TypeError) as exc:
+        raise VipLabError(
+            "SCENARIO_WORKLOAD_INVALID",
+            f"Invalid canonical workload specification: {exc}",
+        ) from exc
 
     return SyntheticLabScenario(
         schema_version=E2E_SCENARIO_SCHEMA_VERSION,
@@ -256,11 +273,8 @@ def parse_e2e_scenario_mapping(raw: Mapping[str, Any]) -> SyntheticLabScenario:
         requested_start_pts=int(raw.get("requested_start_pts", pts_ticks[0])),
         requested_end_pts=int(raw.get("requested_end_pts", pts_ticks[-1])),
         workload={
-            "workload_id": str(workload_raw.get("workload_id", "wl-custom")),
-            "seed": int(workload_raw.get("seed", 20261104)),
-            "job_count": int(workload_raw.get("job_count", 3)),
-            "stages_per_job": int(workload_raw.get("stages_per_job", 2)),
-            "payload_bytes": int(workload_raw.get("payload_bytes", 48)),
+            **wl_spec.to_dict(),
+            "workload_id": wl_id or "wl-custom",
         },
     )
 

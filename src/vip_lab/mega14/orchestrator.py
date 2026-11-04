@@ -57,6 +57,7 @@ from vip_lab.mega11 import (
 from vip_lab.mega12 import (
     build_replay_graph_from_workload,
     build_synthetic_recovery_measurement_set,
+    coerce_canonical_workload_spec,
     evaluate_fault_scenario_matrix,
     inspect_recovery_replay_consistency,
 )
@@ -326,22 +327,18 @@ def run_end_to_end_synthetic_lab(
     )
 
     # 6. MEGA-12 (+ Stretch S3): Generated-Only Recovery & Replay Consistency
-    wl_spec = WorkloadSpec(
-        workload_id=str(scen.workload["workload_id"]),
-        seed=int(scen.workload["seed"]),
-        job_count=int(scen.workload["job_count"]),
-        stages_per_job=int(scen.workload["stages_per_job"]),
-        payload_bytes=int(scen.workload["payload_bytes"]),
-    )
+    wl_spec, wl_id = coerce_canonical_workload_spec(scen.workload)
     replay_graph = build_replay_graph_from_workload(
         workload_spec=wl_spec,
         generation_id=lead_item.generation_id,
         semantic_space_id=lead_item.space_id,
+        workload_id=wl_id,
     )
     fault_matrix = evaluate_fault_scenario_matrix(
         workload_spec=wl_spec,
         generation_id=lead_item.generation_id,
         semantic_space_id=lead_item.space_id,
+        workload_id=wl_id,
     )
     measurement_set = build_synthetic_recovery_measurement_set(
         replay_graph=replay_graph,
@@ -396,7 +393,7 @@ def run_end_to_end_synthetic_lab(
         "proposal_revision_chain": rev_chain_dicts,
         "replay_graph": replay_graph.to_dict(),
         "fault_matrix": fault_matrix,
-        "recovery_measurements": measurement_set.as_dict(),
+        "recovery_measurements": measurement_set.to_dict(),
         "lineage_receipt": lineage_receipt.to_dict(),
         "release_blocker_summary": blocker_summary,
         "stage_packets": {

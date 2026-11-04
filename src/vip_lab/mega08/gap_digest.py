@@ -9,6 +9,8 @@ from typing import Any, Mapping
 
 from ..common import VipLabError, canonical_sha256, validate_hex_digest
 
+MEGA_08_14_SPEC_VERSION = "LAB-MEGA-08-14-v1.0.0"
+
 
 def compute_gap_digest(report_without_digest: Mapping[str, Any]) -> str:
     """Compute canonical SHA-256 digest over a MEGA-08 inventory report body."""
@@ -35,3 +37,10 @@ def verify_gap_digest(report_payload: Mapping[str, Any]) -> bool:
             field_path="inventory_digest",
         )
     return True
+
+
+__all__ = [
+    "MEGA_08_14_SPEC_VERSION",
+    "compute_gap_digest",
+    "verify_gap_digest",
+]

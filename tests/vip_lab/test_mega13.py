@@ -104,14 +104,22 @@ def _sample_pipeline_artifacts():
     )
     graph = build_replay_graph_from_workload(
         workload_spec=WorkloadSpec(
-            workload_id="wl-mega13",
+            jobs=2,
+            stages=2,
+            artifact_bytes=32,
+            cost_units=10,
+            fault_position=0,
             seed=42,
-            job_count=2,
-            stages_per_job=2,
-            payload_bytes=32,
+            f01_sha="1" * 40,
+            c04_sha="2" * 40,
+            e05_sha="3" * 40,
+            config_digest="4" * 64,
+            concurrency=1,
+            repetitions=2,
         ),
         generation_id="gen-v1-01",
         semantic_space_id="1" * 64,
+        workload_id="wl-mega13",
     )
     return queue, req, v1, v2, graph
 

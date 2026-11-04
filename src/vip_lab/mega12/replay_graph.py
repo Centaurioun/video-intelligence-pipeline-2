@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+from pathlib import Path
+import tempfile
 from typing import Any, Mapping, Sequence
 
-from gate2.recovery import RecoveryBinding, RecoveryHarness
-from gate2.workload import WorkloadSpec, generate
+from gate2.recovery import (
+    RecoveryBinding,
+    RecoveryHarness,
+    RecoveryRefusal,
+    SimulatedCrash,
+)
+from gate2.workload import SyntheticFixture, WorkloadSpec, generate
 from vip_lab.common import (
     VipLabError,
     canonical_json_dumps,
@@ -16,6 +24,91 @@ from vip_lab.common import (
 )
 
 REPLAY_GRAPH_SCHEMA_VERSION = "vip-lab-replay-graph-v1"
+
+DEFAULT_SYNTHETIC_F01_SHA = "1" * 40
+DEFAULT_SYNTHETIC_C04_SHA = "2" * 40
+DEFAULT_SYNTHETIC_E05_SHA = "3" * 40
+DEFAULT_SYNTHETIC_CONFIG_DIGEST = "4" * 64
+DEFAULT_PREV_MANIFEST_DIGEST = "5" * 64
+DEFAULT_CURR_MANIFEST_DIGEST = "6" * 64
+DEFAULT_RECEIPT_IDENTITY = "e05-receipt-synth-mega12"
+
+
+def coerce_canonical_workload_spec(
+    spec_or_mapping: WorkloadSpec | Mapping[str, Any],
+) -> tuple[WorkloadSpec, str | None]:
+    """Coerce a canonical WorkloadSpec or mapping into (WorkloadSpec, optional_workload_id)."""
+    if isinstance(spec_or_mapping, WorkloadSpec):
+        return spec_or_mapping, None
+    if not isinstance(spec_or_mapping, Mapping):
+        raise VipLabError(
+            "INVALID_WORKLOAD_SPEC",
+            "workload_spec must be a gate2.workload.WorkloadSpec or mapping.",
+        )
+    jobs = int(spec_or_mapping.get("jobs", spec_or_mapping.get("job_count", 3)))
+    stages = int(spec_or_mapping.get("stages", spec_or_mapping.get("stages_per_job", 2)))
+    artifact_bytes = int(
+        spec_or_mapping.get("artifact_bytes", spec_or_mapping.get("payload_bytes", 48))
+    )
+    cost_units = int(spec_or_mapping.get("cost_units", 10))
+    fault_position = int(spec_or_mapping.get("fault_position", 0))
+    seed = int(spec_or_mapping.get("seed", 20261104))
+    f01_sha = str(spec_or_mapping.get("f01_sha", DEFAULT_SYNTHETIC_F01_SHA))
+    c04_sha = str(spec_or_mapping.get("c04_sha", DEFAULT_SYNTHETIC_C04_SHA))
+    e05_sha = str(spec_or_mapping.get("e05_sha", DEFAULT_SYNTHETIC_E05_SHA))
+    config_digest = str(
+        spec_or_mapping.get("config_digest", DEFAULT_SYNTHETIC_CONFIG_DIGEST)
+    )
+    concurrency = int(spec_or_mapping.get("concurrency", 1))
+    repetitions = int(spec_or_mapping.get("repetitions", 2))
+    raw_wl_id = spec_or_mapping.get("workload_id")
+    workload_id = (
+        str(raw_wl_id).strip()
+        if isinstance(raw_wl_id, str) and str(raw_wl_id).strip()
+        else None
+    )
+    return (
+        WorkloadSpec(
+            jobs=jobs,
+            stages=stages,
+            artifact_bytes=artifact_bytes,
+            cost_units=cost_units,
+            fault_position=fault_position,
+            seed=seed,
+            f01_sha=f01_sha,
+            c04_sha=c04_sha,
+            e05_sha=e05_sha,
+            config_digest=config_digest,
+            concurrency=concurrency,
+            repetitions=repetitions,
+        ),
+        workload_id,
+    )
+
+
+def build_canonical_recovery_binding(
+    *,
+    fixture: SyntheticFixture,
+    generation_id: str,
+    semantic_space_id: str,
+    previous_manifest_digest: str = DEFAULT_PREV_MANIFEST_DIGEST,
+    current_manifest_digest: str = DEFAULT_CURR_MANIFEST_DIGEST,
+    receipt_identity: str = DEFAULT_RECEIPT_IDENTITY,
+) -> RecoveryBinding:
+    """Construct the canonical 10-field gate2.recovery.RecoveryBinding."""
+    spec = fixture.spec
+    return RecoveryBinding(
+        f01_sha=spec.f01_sha,
+        c04_sha=spec.c04_sha,
+        e05_sha=spec.e05_sha,
+        workload_digest=fixture.fixture_digest,
+        configuration_digest=spec.config_digest,
+        previous_manifest_digest=previous_manifest_digest,
+        current_manifest_digest=current_manifest_digest,
+        generation_id=generation_id,
+        semantic_space_id=semantic_space_id,
+        receipt_identity=receipt_identity,
+    )
 
 
 @dataclass(frozen=True)
@@ -106,11 +199,133 @@ def _compute_step_state_digest(
     )
 
 
+class SyntheticReplayHarnessAdapter:
+    """In-memory adapter implementing the canonical gate2.recovery.RecoveryHarness protocol."""
+
+    def __init__(
+        self,
+        *,
+        fixture: SyntheticFixture,
+        generation_id: str,
+        semantic_space_id: str,
+        valid_receipt_identity: str = DEFAULT_RECEIPT_IDENTITY,
+        stage_payload_overrides: Mapping[tuple[int, int], bytes] | None = None,
+        truncated_stage_list_for_job: int | None = None,
+    ) -> None:
+        self.fixture = fixture
+        self.generation_id = generation_id
+        self.semantic_space_id = semantic_space_id
+        self.valid_receipt_identity = valid_receipt_identity
+        self.stage_payload_overrides = dict(stage_payload_overrides or {})
+        self.truncated_stage_list_for_job = truncated_stage_list_for_job
+
+        self.initial_state_digest = canonical_sha256(
+            {
+                "kind": "vip_lab.mega12.initial_state",
+                "workload_digest": fixture.fixture_digest,
+                "generation_id": generation_id,
+                "semantic_space_id": semantic_space_id,
+            }
+        )
+        self._current_state_digest = self.initial_state_digest
+        self.reconcile_calls = 0
+        self.applied_ops: dict[str, str] = {}
+        self.completed_ops: set[str] = set()
+        self.duplicate_side_effects = 0
+
+        self._op_index: dict[str, tuple[int, int, bytes, str]] = {}
+        self._ordered_ops: list[str] = []
+        for job in fixture.jobs:
+            stages = (
+                job.stages[:-1]
+                if self.truncated_stage_list_for_job == job.job_index
+                else job.stages
+            )
+            for stg in stages:
+                op_id = f"job-{job.job_index:03d}-stage-{stg.stage_index:03d}"
+                payload = self.stage_payload_overrides.get(
+                    (job.job_index, stg.stage_index),
+                    stg.artifact,
+                )
+                self._op_index[op_id] = (
+                    job.job_index,
+                    stg.stage_index,
+                    payload,
+                    stg.artifact_digest,
+                )
+                self._ordered_ops.append(op_id)
+
+    def validate_receipt(self, receipt_identity: str) -> bool:
+        return receipt_identity == self.valid_receipt_identity
+
+    def reconcile_sqlite_tail(self) -> None:
+        self.reconcile_calls += 1
+
+    def state_digest(self) -> str:
+        return self._current_state_digest
+
+    def start_or_resume(self, binding: RecoveryBinding) -> Sequence[str]:
+        if binding.generation_id != self.generation_id:
+            raise RecoveryRefusal(
+                f"GENERATION_MISMATCH: {binding.generation_id!r} != {self.generation_id!r}"
+            )
+        if binding.semantic_space_id != self.semantic_space_id:
+            raise RecoveryRefusal(
+                f"SEMANTIC_SPACE_MISMATCH: {binding.semantic_space_id!r} != {self.semantic_space_id!r}"
+            )
+        expected_total = self.fixture.spec.jobs * self.fixture.spec.stages
+        if len(self._ordered_ops) != expected_total:
+            raise RecoveryRefusal(
+                f"PARTIAL_INDEX: expected {expected_total} stage operations, got {len(self._ordered_ops)}"
+            )
+        return tuple(self._ordered_ops)
+
+    def is_complete(self, operation_id: str) -> bool:
+        return operation_id in self.completed_ops
+
+    def apply_idempotent(self, operation_id: str) -> None:
+        if operation_id in self.applied_ops:
+            # Already applied prior to crash/resume: idempotent no-op
+            return
+        job_idx, stage_idx, payload, expected_sha = self._op_index[operation_id]
+        expected_len = self.fixture.spec.artifact_bytes
+        if len(payload) == expected_len - 1:
+            raise RecoveryRefusal(
+                f"PARTIAL_RECORD: stage ({job_idx}, {stage_idx}) missing trailing byte"
+            )
+        if len(payload) < expected_len:
+            raise RecoveryRefusal(
+                f"TRUNCATED_PAYLOAD: stage ({job_idx}, {stage_idx}) length {len(payload)} < {expected_len}"
+            )
+        actual_sha = hashlib.sha256(payload).hexdigest()
+        if actual_sha != expected_sha:
+            raise RecoveryRefusal(
+                f"DIGEST_MISMATCH: stage ({job_idx}, {stage_idx}) sha256 {actual_sha} != {expected_sha}"
+            )
+        next_digest = _compute_step_state_digest(
+            parent_state_digest=self._current_state_digest,
+            generation_id=self.generation_id,
+            semantic_space_id=self.semantic_space_id,
+            job_index=job_idx,
+            stage_index=stage_idx,
+            stage_payload_sha256=actual_sha,
+        )
+        self.applied_ops[operation_id] = next_digest
+        self._current_state_digest = next_digest
+
+    def mark_complete(self, operation_id: str) -> None:
+        if operation_id in self.completed_ops:
+            self.duplicate_side_effects += 1
+            return
+        self.completed_ops.add(operation_id)
+
+
 def build_replay_graph_from_workload(
     *,
     workload_spec: WorkloadSpec,
     generation_id: str = "gen-synth-001",
     semantic_space_id: str = "siglip-v1-base:768:v1",
+    workload_id: str | None = None,
 ) -> ReplayGraph:
     if not isinstance(workload_spec, WorkloadSpec):
         raise VipLabError(
@@ -118,60 +333,65 @@ def build_replay_graph_from_workload(
             "workload_spec must be a gate2.workload.WorkloadSpec instance.",
         )
     fixture = generate(workload_spec)
-    binding = RecoveryBinding(
+    resolved_workload_id = (
+        workload_id.strip()
+        if isinstance(workload_id, str) and workload_id.strip()
+        else f"wl-{fixture.fixture_digest[:16]}"
+    )
+    binding = build_canonical_recovery_binding(
+        fixture=fixture,
         generation_id=generation_id,
         semantic_space_id=semantic_space_id,
     )
-    harness = RecoveryHarness(binding)
-    initial_digest = harness.state_digest()
+    adapter = SyntheticReplayHarnessAdapter(
+        fixture=fixture,
+        generation_id=generation_id,
+        semantic_space_id=semantic_space_id,
+    )
+    initial_digest = adapter.initial_state_digest
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        ckpt_path = Path(tmp_dir) / "recovery_checkpoint.json"
+        # 1. Simulate crash after first stage side effect before completion
+        harness_crash = RecoveryHarness.open(ckpt_path, binding, adapter)
+        try:
+            harness_crash.run(crash_point="after_side_effect_before_completion")
+        except SimulatedCrash:
+            pass
+        # 2. Resume and complete all remaining operations
+        harness_commit = RecoveryHarness.open(ckpt_path, binding, adapter)
+        committed_out = harness_commit.run(crash_point=None)
+        # 3. Re-run against completed checkpoint to verify idempotent replay
+        harness_replay = RecoveryHarness.open(ckpt_path, binding, adapter)
+        replay_out = harness_replay.run(crash_point=None)
+
+    duplicate_side_effects = adapter.duplicate_side_effects
+    idempotent_replay_verified = (
+        duplicate_side_effects == 0
+        and committed_out.get("post_state_digest") == replay_out.get("post_state_digest")
+        and committed_out.get("post_state_digest") == adapter.state_digest()
+        and len(adapter.completed_ops) == workload_spec.jobs * workload_spec.stages
+    )
 
     nodes: list[ReplayNode] = []
     journal_lines: list[str] = []
     running_parent_digest = initial_digest
-    duplicate_side_effects = 0
-    idempotent_replay_verified = True
 
     for job in fixture.jobs:
-        outcome = harness.run_job(
-            job_id=job.job_index,
-            stages=job.stages,
-            expected_count=len(job.stages),
-            expected_bytes=workload_spec.payload_bytes,
-            generation_id=generation_id,
-            semantic_space_id=semantic_space_id,
-            declared_digest=job.digest,
-        )
-        replay_outcome = harness.run_job(
-            job_id=job.job_index,
-            stages=job.stages,
-            expected_count=len(job.stages),
-            expected_bytes=workload_spec.payload_bytes,
-            generation_id=generation_id,
-            semantic_space_id=semantic_space_id,
-            declared_digest=job.digest,
-        )
-        if (
-            outcome.get("status") != "COMMITTED"
-            or replay_outcome.get("status") != "SKIPPED_ALREADY_COMMITTED"
-            or outcome.get("post_state_digest") != replay_outcome.get("post_state_digest")
-        ):
-            idempotent_replay_verified = False
-            duplicate_side_effects += 1
-
-        for stage_idx, stage_bytes in enumerate(job.stages):
-            stage_sha = canonical_sha256({"stage_hex": stage_bytes.hex()})
+        for stage in job.stages:
+            stage_sha = stage.artifact_digest
             step_post_digest = _compute_step_state_digest(
                 parent_state_digest=running_parent_digest,
                 generation_id=generation_id,
                 semantic_space_id=semantic_space_id,
                 job_index=job.job_index,
-                stage_index=stage_idx,
+                stage_index=stage.stage_index,
                 stage_payload_sha256=stage_sha,
             )
             node = ReplayNode(
-                node_id=f"node_j{job.job_index:03d}_s{stage_idx:03d}",
+                node_id=f"node_j{job.job_index:03d}_s{stage.stage_index:03d}",
                 job_index=job.job_index,
-                stage_index=stage_idx,
+                stage_index=stage.stage_index,
                 generation_id=generation_id,
                 semantic_space_id=semantic_space_id,
                 parent_state_digest=running_parent_digest,
@@ -185,12 +405,12 @@ def build_replay_graph_from_workload(
 
     body: dict[str, Any] = {
         "schema_version": REPLAY_GRAPH_SCHEMA_VERSION,
-        "workload_id": workload_spec.workload_id,
+        "workload_id": resolved_workload_id,
         "seed": workload_spec.seed,
         "generation_id": generation_id,
         "semantic_space_id": semantic_space_id,
-        "job_count": workload_spec.job_count,
-        "stages_per_job": workload_spec.stages_per_job,
+        "job_count": workload_spec.jobs,
+        "stages_per_job": workload_spec.stages,
         "initial_state_digest": initial_digest,
         "final_state_digest": running_parent_digest,
         "idempotent_replay_verified": idempotent_replay_verified,
@@ -201,12 +421,12 @@ def build_replay_graph_from_workload(
     graph_digest = compute_replay_graph_digest(body)
     return ReplayGraph(
         schema_version=REPLAY_GRAPH_SCHEMA_VERSION,
-        workload_id=workload_spec.workload_id,
+        workload_id=resolved_workload_id,
         seed=workload_spec.seed,
         generation_id=generation_id,
         semantic_space_id=semantic_space_id,
-        job_count=workload_spec.job_count,
-        stages_per_job=workload_spec.stages_per_job,
+        job_count=workload_spec.jobs,
+        stages_per_job=workload_spec.stages,
         initial_state_digest=initial_digest,
         final_state_digest=running_parent_digest,
         idempotent_replay_verified=idempotent_replay_verified,

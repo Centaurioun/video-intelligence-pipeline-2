@@ -193,6 +193,34 @@ def test_contract_gate_rejects_path_traversal_and_non_allowlisted_paths() -> Non
         inspect_module_symbols_ast(REPO_ROOT, "/etc/passwd")
     assert exc_info3.value.code == "INVENTORY_ABSOLUTE_PATH_REFUSED"
 
+    # Governance decision docs are never permitted as Python AST module targets
+    with pytest.raises(VipLabError) as exc_info4:
+        inspect_module_symbols_ast(
+            REPO_ROOT,
+            "docs/decisions/2026-10-29-a7-s5-scoped-synthetic-tdd-plan-owner-adoption.md",
+        )
+    assert exc_info4.value.code == "INVENTORY_PATH_NOT_ALLOWLISTED"
+
+    # Unlisted docs or external files in custom_capabilities are refused
+    bad_cap_pkt = inspect_capability_gate(
+        {
+            "workspace_root": str(REPO_ROOT),
+            "custom_capabilities": [
+                {
+                    "capability_id": "UNLISTED_DOC_CAP",
+                    "title": "Unlisted Doc Reference",
+                    "gate": "G3",
+                    "classification": "BLOCKED_BY_AUTHORITY",
+                    "evidence_state": NOT_OBSERVED,
+                    "source_paths": ["docs/decisions/unlisted-arbitrary-doc.md"],
+                    "authority_blocker": "TEST_BLOCKER",
+                }
+            ],
+        }
+    )
+    assert bad_cap_pkt.status == ReadinessStatus.INVALID
+    assert "INVENTORY_PATH_NOT_ALLOWLISTED" in bad_cap_pkt.blockers
+
 
 def test_contract_gate_rejects_duplicate_capability_ids() -> None:
     dup_entry = CapabilityEntry(

@@ -22,11 +22,18 @@ from vip_lab.mega12 import (
 
 def _sample_spec() -> WorkloadSpec:
     return WorkloadSpec(
-        workload_id="wl-mega12-synth",
+        jobs=3,
+        stages=2,
+        artifact_bytes=48,
+        cost_units=10,
+        fault_position=0,
         seed=20261104,
-        job_count=3,
-        stages_per_job=2,
-        payload_bytes=48,
+        f01_sha="1" * 40,
+        c04_sha="2" * 40,
+        e05_sha="3" * 40,
+        config_digest="4" * 64,
+        concurrency=1,
+        repetitions=2,
     )
 
 
@@ -36,10 +43,11 @@ def test_build_replay_graph_and_idempotent_single_commit() -> None:
         workload_spec=spec,
         generation_id="gen-mega12-01",
         semantic_space_id="siglip-v1-base:768:v1",
+        workload_id="wl-mega12-synth",
     )
     assert isinstance(graph, ReplayGraph)
     assert graph.schema_version == REPLAY_GRAPH_SCHEMA_VERSION
-    assert graph.workload_id == spec.workload_id
+    assert graph.workload_id == "wl-mega12-synth"
     assert graph.job_count == 3
     assert graph.stages_per_job == 2
     assert len(graph.nodes) == 6
@@ -62,6 +70,7 @@ def test_replay_journal_rejects_truncated_line_wrong_generation_and_stage_gap() 
         workload_spec=spec,
         generation_id="gen-mega12-01",
         semantic_space_id="siglip-v1-base:768:v1",
+        workload_id="wl-mega12-synth",
     )
 
     truncated = list(graph.journal_lines) + ['{"job_index": 0, "truncated": ']
@@ -104,7 +113,9 @@ def test_fault_scenario_matrix_distinguishes_harnessed_and_non_harnessed() -> No
         workload_spec=_sample_spec(),
         generation_id="gen-mega12-01",
         semantic_space_id="siglip-v1-base:768:v1",
+        workload_id="wl-mega12-synth",
     )
+    assert matrix["workload_id"] == "wl-mega12-synth"
     assert matrix["total_fault_classes"] == 13
     assert matrix["harnessed_count"] == 9
     assert matrix["not_yet_harnessed_count"] == 2
@@ -131,6 +142,7 @@ def test_fault_scenario_matrix_distinguishes_harnessed_and_non_harnessed() -> No
     assert refusal_codes["PARTIAL_RECORD"] == "PARTIAL_RECORD"
     assert refusal_codes["PARTIAL_INDEX"] == "PARTIAL_INDEX"
     assert refusal_codes["DIGEST_MISMATCH"] == "DIGEST_MISMATCH"
+    assert all(r["state_unchanged"] is True for r in matrix["refusal_checks"])
 
 
 def test_stretch_s3_measurement_set_and_consistency_review() -> None:
@@ -139,29 +151,31 @@ def test_stretch_s3_measurement_set_and_consistency_review() -> None:
         workload_spec=spec,
         generation_id="gen-mega12-01",
         semantic_space_id="siglip-v1-base:768:v1",
+        workload_id="wl-mega12-synth",
     )
     matrix = evaluate_fault_scenario_matrix(
         workload_spec=spec,
         generation_id="gen-mega12-01",
         semantic_space_id="siglip-v1-base:768:v1",
+        workload_id="wl-mega12-synth",
     )
     mset = build_synthetic_recovery_measurement_set(
         replay_graph=graph,
         fault_matrix=matrix,
     )
-    mset_dict = mset.as_dict()
+    mset_dict = mset.to_dict()
+    assert mset_dict["schema_version"] == "gate2.measurement.v1"
+    not_obs_by_id = {row["metric_id"]: row for row in mset_dict["not_observed"]}
     for metric_name in REQUIRED_NOT_OBSERVED_METRICS:
-        assert mset_dict[metric_name]["value"] == NOT_OBSERVED
-        assert mset_dict[metric_name]["status"] == NOT_OBSERVED
+        assert metric_name in not_obs_by_id
+        assert not_obs_by_id[metric_name]["status"] == NOT_OBSERVED
+        assert bool(not_obs_by_id[metric_name]["reason"])
 
     packet = inspect_recovery_replay_consistency(
         {
             "workload_spec": {
-                "workload_id": spec.workload_id,
-                "seed": spec.seed,
-                "job_count": spec.job_count,
-                "stages_per_job": spec.stages_per_job,
-                "payload_bytes": spec.payload_bytes,
+                **spec.to_dict(),
+                "workload_id": "wl-mega12-synth",
             },
             "generation_id": "gen-mega12-01",
             "semantic_space_id": "siglip-v1-base:768:v1",
@@ -175,11 +189,8 @@ def test_stretch_s3_measurement_set_and_consistency_review() -> None:
     overclaim_packet = inspect_recovery_replay_consistency(
         {
             "workload_spec": {
-                "workload_id": spec.workload_id,
-                "seed": spec.seed,
-                "job_count": spec.job_count,
-                "stages_per_job": spec.stages_per_job,
-                "payload_bytes": spec.payload_bytes,
+                **spec.to_dict(),
+                "workload_id": "wl-mega12-synth",
             },
             "claim_archive_scale_proven": True,
         }
