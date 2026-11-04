@@ -384,6 +384,17 @@ def test_cli_run_verify_and_refusals(
     )
 
 
+def test_cli_verify_missing_report_does_not_create_parent_directories(
+    tmp_path: Path,
+) -> None:
+    missing_report = tmp_path / "missing-parent" / "nested" / "report.json"
+    assert not missing_report.parent.exists()
+
+    assert mega16_cli_main(["verify-report", "--input", str(missing_report)]) == 2
+
+    assert not missing_report.parent.exists()
+
+
 def test_cli_output_refuses_symlinked_ancestor(tmp_path: Path) -> None:
     outside = tmp_path / "outside"
     outside.mkdir()

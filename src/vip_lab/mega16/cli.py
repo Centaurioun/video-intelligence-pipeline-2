@@ -143,7 +143,9 @@ def _validate_safe_output_path(raw_path: str) -> Path:
     return p
 
 
-def _open_parent_directory_without_symlinks(path: Path) -> int:
+def _open_parent_directory_without_symlinks(
+    path: Path, *, create_missing: bool = True
+) -> int:
     flags = (
         os.O_RDONLY
         | getattr(os, "O_DIRECTORY", 0)
@@ -163,6 +165,8 @@ def _open_parent_directory_without_symlinks(path: Path) -> int:
             try:
                 next_fd = os.open(component, flags, dir_fd=current_fd)
             except FileNotFoundError:
+                if not create_missing:
+                    raise
                 try:
                     os.mkdir(component, mode=0o700, dir_fd=current_fd)
                 except FileExistsError:
@@ -250,7 +254,9 @@ def _safe_read_report_file(raw_path: str) -> dict:
     parent_fd: int | None = None
     fd: int | None = None
     try:
-        parent_fd = _open_parent_directory_without_symlinks(p)
+        parent_fd = _open_parent_directory_without_symlinks(
+            p, create_missing=False
+        )
         fd = os.open(
             p.name,
             os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
