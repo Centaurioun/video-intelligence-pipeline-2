@@ -28,7 +28,7 @@ Every `Mega17ProductReadinessReport` enforces and verifies the exact eight boole
 |---|---|---|
 | `software_available` | `true` | Deterministic Python preparation, validation, and refusal modules exist in `src/vip_lab/mega17/` |
 | `synthetic_tests_authored` | `true` | Six `tests/vip_lab/test_mega17_*.py` suites covering all 30 required test categories are authored |
-| `hosted_ci_verified` | `false` | Newly authored MEGA-17 code in AI Studio has not yet been executed on GitHub Actions |
+| `hosted_ci_verified` | `false` | The readiness report does not ingest hosted run receipts. GitHub Actions independently passed the six MEGA-17 suites on PR #2 head `994baa626b260bdae55b8d141cdd3932ab83afde` for Python 3.11 and 3.14 (37 tests per run, zero skips). |
 | `canonical_integration_verified` | `false` | `Centaurioun/video-intelligence-pipeline` remains READ-ONLY; no canonical PR has been executed |
 | `real_media_authorized` | `false` | D-3 real archive discovery/processing remains `NOT_AUTHORIZED` |
 | `real_experiment_executed` | `false` | Authentic Gate-0 retrieval experiment remains `NOT_RUN` |
@@ -40,7 +40,7 @@ Every `Mega17ProductReadinessReport` enforces and verifies the exact eight boole
 ## 3. Six-Level Maturity Classification (Section 12)
 
 ### Workstream Maturity (`workstream_maturity`)
-- `WORKSTREAM_A_CANONICAL_INTEGRATION`: `M2_SYNTHETIC_IMPLEMENTED` (awaiting hosted CI run to advance to `M3_HOSTED_SYNTHETIC_VERIFIED`)
+- `WORKSTREAM_A_CANONICAL_INTEGRATION`: `M2_SYNTHETIC_IMPLEMENTED` (the readiness report does not consume hosted CI receipts, so this generated report remains at M2 despite the independently observed hosted test run)
 - `WORKSTREAM_B_SOURCE_AND_D2_READINESS`: `M2_SYNTHETIC_IMPLEMENTED`
 - `WORKSTREAM_C_GATE0_EXPERIMENT_READINESS`: `M2_SYNTHETIC_IMPLEMENTED`
 - `WORKSTREAM_D_EDITORIAL_WORKFLOW_READINESS`: `M2_SYNTHETIC_IMPLEMENTED`
