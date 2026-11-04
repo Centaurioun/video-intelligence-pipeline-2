@@ -1,7 +1,7 @@
 # VIDEO INTELLIGENCE PIPELINE — AI STUDIO LAB
 # MEGA-03 → MEGA-07: ONE-TURN MULTI-GATE SYNTHETIC INTEGRATION PROGRAM
 
-**Version:** LAB-MEGA-03-07-v1.0.0
+**Version:** LAB-MEGA-03-07-v1.1.0 — Six-cycle refined specification
 **Status:** AUTHORING AUTHORIZED FOR EXPERIMENTAL LAB ONLY — NOT CANONICAL IMPLEMENTATION OR GATE PROMOTION
 **Date:** 2026-11-04
 **Target:** https://github.com/Centaurioun/video-intelligence-pipeline-2
@@ -33,6 +33,24 @@ All waves should be attempted in this ONE task turn. Each wave has a self-contai
 **There is no requirement to fabricate 5 green deliverables.** No implemented behavior may claim a Gate is accepted or a real model/media has been observed.
 
 ---
+
+## 0A. CYCLE 1 — BRAINSTORMING, ALTERNATIVES AND CHOSEN DESIGN
+
+**Owner intent is already settled:** one long AI Studio request, as much meaningful implementation as fits, no AI Studio pytest execution, lab GitHub CI after human push, Codex review later. Do not re-ask the Owner to split the prompt.
+
+**Alternatives tested against this intent:**
+
+| Alternative | Why it fails or wins |
+|---|---|
+| A. Implement all remaining B00–B11 as one monolithic subsystem | REJECTED: some Gates require real people, model assets, source permissions and decisions; huge unreviewable diffs |
+| B. Five isolated user prompts | REJECTED FOR NOW: repeated context setup and coordination despite user authorizing a long session |
+| **C. One prompt, five independent vertical slices, one durable ledger** | **SELECTED:** maximize one-turn authoring while allowing separate wave CI, blocked waves and independent later adoption |
+
+**Success is NOT a large changed-file count.** For every wave either deliver actual new source-backed lab behavior AND meaningful positive/refusal pytest source, or explicitly mark \`NOT_NEEDED\` / \`BLOCKED_SCOPE\` with inspected source evidence. Avoid generating thin wrappers whose only action is relabeling an existing result.
+
+**Superpowers applicability, not an indiscriminate checklist:** brainstorming shaped this scope; writing-plans shapes atomic packets; test-driven-development shapes test-first intent but cannot be completed without execution; systematic-debugging is mandatory when real CI failures appear; verification-before-completion and requesting-code-review govern any later success claim. Parallel-agent and worktree skills apply only when actually available and isolated; do not fabricate a Git worker, a branch, a subagent or an observed review in an imported ZIP.
+
+**Important method boundary:** the explicit NO-PYTEST rule means Superpowers' verified RED→GREEN cannot happen in AI Studio. Write the tests first and record \`TEST_AUTHORED_NOT_EXECUTED\`; test outcomes are \`NOT_OBSERVED\` until GitHub Actions actually executes them. Do not present static compilation as a TDD cycle.
 
 ## 1. GOVERNING PROJECT FACTS AND WHAT ALREADY EXISTS
 
@@ -176,6 +194,26 @@ If a genuinely required integration fix is outside the allowlist, report BLOCKED
 
 ---
 
+## 2A. CYCLE 2 — WRITING-PLANS: SOURCE INTERFACES AND EXCLUSIVE OWNERSHIP
+
+**Verified symbol map (from the lab repository source):**
+
+| Wave | Existing exact source symbols that can be inspected and reused | Correct constraint |
+|---|---|---|
+| 03 | \`ReviewBundle.from_record\`, \`current_e01_validated\`, \`dependency_digest\`; \`require_bound_stream_identity\` | Never infer valid E01 from a self-declared JSON flag; never invent positive BMFF mapping |
+| 04 | \`load_d2_package\`, \`evaluate_d2_package\`, \`D2IntakeReport.as_dict\`; \`inspect_freeze_readiness\`; \`build_queries\`, \`build_gold_events\`, \`ranking_inputs\` | D-2 only reads permitted package-local text artifacts, not corpus paths; D-3 closed |
+| 05 | \`make_synthetic_profile\`, \`build_synthetic_profile_runtime\`, \`load_synthetic_profile_bundle\`; \`validate_model_profile\`, \`profile_semantic_space\` | V1 768D, V2 Base 768D and SO400M 1152D remain distinct; no authentic SigLIP2 |
+| 06 | \`WorkloadSpec\`, \`generate\`; \`RecoveryBinding\`, \`RecoveryHarness.open\`, \`RecoveryHarness.run\`; \`MeasurementSet\`, \`decide\` | Generated workload and real-scale observations must never be conflated |
+| 07 | \`PtsTable.ordinal_of\`, \`resolve_start\`, \`resolve_end\`; \`ReviewBundle.from_record\`, \`create_human_decision\`, \`build_real_edit_plan\`, \`TechnicalQC.evaluate\` | Inspect real editorial/plan/QC APIs, but never execute real-media dependent operations |
+
+**New lab interface targets** (these are proposed function names for new code; do NOT describe them as already existing): \`inspect_s5_declaration\`, \`inspect_stream_namespace\`, \`inspect_review_bundle_record\`, \`inspect_d2_readiness\`, \`inspect_gate0_entry\`, \`inspect_model_asset_claims\`, \`inspect_benchmark_entry\`, \`inspect_workload_plan\`, \`inspect_recovery_scenario\`, \`inspect_candidate_temporal\`, \`inspect_editorial_lineage\`, \`inspect_qc_export_readiness\`, and \`summarize_program\`. Their public outputs must be immutable/strictly validated \`ReadinessPacket\` instances, not arbitrary success dictionaries.
+
+**Ownership:** \`common.py\` has exactly one writer and owns canonical lab JSON, status enums and validation. Each \`megaNN\` package owns only its inputs/outputs and test file. \`integration.py\` and \`cli.py\` are written last, after producer interfaces are stable. Do not make concurrent AI Studio writers share these paths. This is a single-worker task unless genuinely disjoint subagents become available.
+
+**Interfaces before imports:** inspect the full actual constructor and exception names before importing; do not invent symbols such as the historical nonexistent \`CLOSED_PROFILE_IDS\`. For any incompatible proposed signature, record \`RULING: old assumption → checked source API → narrow change\` in the ledger before dependent modules are written.
+
+**Review-focus input classes:** forged signing/approval flags; equal numeric stream ordinals without real identity proof; duplicate or ambiguous VFR PTS; malformed/duplicate-key/oversized/symlink JSON; partial multi-wave success. Assign each a negative test in the owning packet.
+
 ## 3. SHARED INFRASTRUCTURE: src/vip_lab/common.py
 
 Implement small lab-wide, dependency-light functions, not a new generic framework.
@@ -201,6 +239,22 @@ Do not add a daemon, service registry, workflow engine, generic plugin loader or
 Tests for shared functions may live in tests/vip_lab/test_cross_gate_integration.py.
 
 ---
+
+## 3A. CYCLE 3 — THREAT MODEL, TRUST BOUNDARIES AND SOURCE PATHS
+
+This repository is PUBLIC; all lab metadata and paths in generated fixtures are untrusted. A syntactically valid source SHA, E01 flag, Owner signature string, model digest, review status or report digest is a **declaration**, not independent authority.
+
+**Allowed data IO:** source-code inspection; synthetic in-memory records; test-created \`tmp_path\` JSON/journals; the existing Gate-0 D-2 validator's explicitly bounded package-local **text** fixtures. No corpus directory scanning, source-media open/stat/hash, image decode, FFmpeg/FFprobe, actual model load, network or output rendering.
+
+**Strict JSON loading:** require bounded bytes, UTF-8, duplicate-key refusal, rejection of NaN/Inf, closed schema and exact path class. For generic lab fixture paths use no-follow regular-file handling; if unavailable, fail closed, not arbitrary \`Path.read_text()\`. The D-2 loader has its own package-containment rules and must not be replaced by a broader generic loader.
+
+**Structural vs authoritative:** a \`READY_SYNTHETIC\` packet can mean only that generated input is structurally suitable for further laboratory checks. It must never become a real Gate permission. A source digest or record self-hash does not independently prove the source bytes were observed.
+
+**Temporal:** candidate PTS/timebase are locators. Only independent source-native measured frames, valid stream evidence and human approval may be used for edit binding; never seconds × nominal FPS, even if a constructed CFR fixture happens to agree.
+
+**No-side-effect refusal:** reject malformed identities and forbidden mode BEFORE source access, model creation, index mutation, plan construction or preview. Tests must spy on the forbidden downstream boundary; merely checking an error string is insufficient.
+
+**No counterfeit cross-gate evidence:** after joining the five packets, absence of human labels, source custody, native-model observation, representative performance or editorial QC remains \`NOT_OBSERVED\`/not authorized. Cross-gate integration cannot upgrade evidence classes.
 
 ## 4. MEGA-03 — S5 / E01 / REVIEWBUNDLE DRY-RUN INTEGRATION
 
@@ -662,6 +716,20 @@ If your audit finds a proposed module would merely duplicate an existing API and
 
 ---
 
+## 10A. CYCLE 4 — TRUE TEST-FIRST VS DEFERRED CI VERIFICATION
+
+The user-selected workflow changes *where* test execution occurs, not whether tests are needed.
+
+For each atomic task: (1) read exact source API, (2) author intended failing regression pytest FIRST, (3) implement minimal new lab code, (4) perform optional \`ast.parse\`/\`compile\` as syntax-only check, (5) self-review all imports, constructors, error codes and forbidden effects, (6) report \`IMPLEMENTED_UNVERIFIED\`. **Never invent a witnessed RED or GREEN result.**
+
+After human-selected LAB push: hosted CI is responsible for the real run. If a failure occurs, apply Superpowers systematic-debugging in order: collect SHA/log and reproduce → identify actual root cause → form one falsifiable hypothesis → write or adjust regression → smallest compatible repair → rerun exact failed and relevant regression suites. Do NOT patch an expectation merely to match a current broken behavior.
+
+**Review gate:** after CI, independent Codex source review remains required. CI PASS alone proves that selected synthetic tests executed, not that architecture/security/evidence design is sound. A self-review by the author does not count as independent review.
+
+**Three separate statuses:** \`LAB_IMPLEMENTED\` (source+tests written), \`LAB_HOSTED_VERIFIED\` (exact lab SHA, both Python 3.11 and 3.14 named suites executed successfully), \`CANONICAL_ACCEPTED\` (separate original-repo review, Owner authority and relevant Gate evidence). Never silently transition from one to another.
+
+**Host CI blind spot:** the current workflow can pass with all five new wave tests SKIPPED when the files are absent; file-presence checks do not prove semantic test coverage. Record each wave's test selector, executed/skipped status, count and SHA; green BASELINE ≠ MEGA-03–07 verified.
+
 ## 11. TEST AUTHORING WITHOUT PYTEST EXECUTION
 
 Write all seven listed test files. Test **actual contract functions**, not mocks that return exactly the expected hardcoded results without touching the integrated code.
@@ -685,6 +753,37 @@ Do NOT use FFmpeg/FFprobe.
 Do NOT push to GitHub; user controls publication.
 
 ---
+
+## 11A. CYCLE 5 — WRITING-PLANS ATOMIC PACKETS INSIDE ONE UMBRELLA
+
+Do not treat an entire MEGA wave as one amorphous programming step. The smallest reviewable implementation packet is a behavior plus one owned test. Within the single user-selected turn, work down this table, recording a checkpoint after each wave.
+
+| Task packet | Owned module(s) | Test / mandatory negative case |
+|---|---|---|
+| P00 | \`src/vip_lab/common.py\`, package init | cross-gate tests: closed JSON, forged authority, duplicate keys, no-follow, status digest |
+| P03a | \`mega03/s5_preflight.py\` | \`test_mega03.py\`: declared checksum cannot authorize source |
+| P03b | \`mega03/stream_identity_preflight.py\` | same test: ordinal/global index equality cannot prove tract mapping |
+| P03c | \`mega03/review_bundle_check.py\` | same test: tampered bundle and E01 self-assertion refused |
+| P04a | \`mega04/d2_readiness.py\` | \`test_mega04.py\`: untrusted OWNER_SIGNED still PENDING |
+| P04b | \`mega04/query_review_preflight.py\` | same test: 24+8+8 synthetic text is NOT a human-gold label |
+| P04c | \`mega04/experiment_readiness.py\` | same test: D-3 stays closed with missing genuine inputs |
+| P05a | \`mega05/model_assets.py\` | \`test_mega05.py\`: profile 768/768/1152 bound and no digest-as-auth |
+| P05b | \`mega05/runtime_authority.py\` | same test: source policy denial before any real-model callback |
+| P05c | \`mega05/benchmark_entry.py\` | same test: no winner without measured eligible benchmark |
+| P06a | \`mega06/workload_plan.py\` | \`test_mega06.py\`: bounded generated-only reproducible plan |
+| P06b | \`mega06/recovery_matrix.py\` | same test: truncated journal and mismatched recovery binding refuse |
+| P06c | \`mega06/measurement_review.py\` | same test: synthetic counters do not authorize ANN/cache/queue |
+| P07a | \`mega07/candidate_temporal_gate.py\` | \`test_mega07.py\`: duplicate PTS ambiguity and MATCHED nonbinding |
+| P07b | \`mega07/editorial_lineage.py\` | same test: mismatched revision/bundle/decision cannot bind plan |
+| P07c | \`mega07/qc_export_readiness.py\` | same test: synthetic preview cannot authorize export/QC PASS |
+| PX | \`integration.py\`, \`cli.py\` | cross-gate + CLI tests: blocked stage does not create success |
+
+For EACH packet, append in the progress ledger:
+\`Consumes: exact existing source API | Produces: lab-only function and return type | Happy case: intended assertion | Refusal: exact invalid case | Side effect: forbidden call counter | Execution: NOT_EXECUTED_BY_DESIGN | Ruling/blocker\`.
+
+**Frontier:** P00 before any wave; P03a→b→c; P04a→b→c; P05a→b→c; P06a→b→c; P07a→b→c. P04, P05 and P06 are independent from a blocked P03; P07's inert PTS tests may proceed, but its real-source eligibility cannot be inferred from P03. PX integrates only actual defined outputs, not invented placeholders.
+
+**Right-size discipline:** if a proposed module repeats an existing function with no additional contract, record \`NOT_NEEDED\` with the exact source symbol. Do not generate filler just to satisfy file-count; the Owner must be told if the remote CI completeness detector expects that file.
 
 ## 12. ONE-TURN EXECUTION AND CONTINUATION PROTOCOL
 
@@ -715,6 +814,9 @@ The ledger must always contain:
 - a list of tests authored, all NOT_EXECUTED_BY_DESIGN;
 - most recent completed wave and exact safe next independent step;
 - no fabricated CI PASS, commit SHA or real-model/media evidence.
+- per-packet source API inspected, changed paths, regression assertions and actual local `NOT_EXECUTED_BY_DESIGN` status.
+- per-wave `READY_FOR_HOSTED_CI` only when all corresponding required production/test files are present, never as proof CI passed.
+- exact future CI selector; `CI_STATUS=NOT_OBSERVED` until independently retrieved.
 
 **If context/time/response budget is exhausted mid-task:** Finish a coherent, saveable slice, update the ledger, and stop with PARTIAL_BLOCKED. The owner can use a new AI Studio turn to resume from the ledger with the instruction at the bottom of this document. Do not rewrite completed work just to fill time. Do not silently mark the task complete.
 
@@ -732,7 +834,7 @@ Existing remote lab workflow:
 
 It is maintained separately by the user/ChatGPT GitHub controller, not by AI Studio.
 
-The controller will configure:
+The Owner-controlled workflow already has wave-specific selectors on the current remote lab main; AI Studio must not modify it. Verify its actual imported contents rather than assume remote and ZIP are identical. Hosted CI configuration targets:
 - Python 3.11 and 3.14;
 - existing 267-per-version synthetic baseline;
 - bounded test suites tests/vip_lab/test_mega03.py through test_mega07.py;
@@ -813,6 +915,22 @@ Final overall state cannot be VERIFIED_COMPLETE until GitHub CI and independent 
 Do not start new task packages after MEGA-07. Do not proceed to real operations.
 
 ---
+
+## 15A. CYCLE 6 — CONTINUATION, CI COMPLETENESS AND FINAL REVIEW
+
+**Checkpoint after EACH wave**, not merely at final response: \`docs/ai-studio-tasks/MEGA_03_07_PROGRESS.md\` must record task-spec version, ZIP source uncertainty, owner of shared files, all created paths, packet-level SOURCE_VERIFIED / ASSUMED / BLOCKED API facts, authored-but-unexecuted tests, and exact next safe packet.
+
+**Partial push is intentionally not a green release:** the current GitHub Actions completeness gate requires a fixed set of wave files if any part of that wave is present; an interrupted partial wave may produce a red CI. Do not add empty modules, fake tests, blanket \`pytest.skip\` or unconditional xfail to trick that check. Owner may selectively push completed waves and preserve partial source privately, or intentionally use red CI while repairing. A skipped/not-submitted wave remains NOT_SUBMITTED, not PASS.
+
+**Minimum final acceptance record:** one table with MEGA-03–07 rows: source API inspected, actual distinct feature implemented, changed Python paths, test file and collection count (UNVERIFIED if no pytest), refusal/side-effect assertions, dependency blocker, LAB implementation state. Add exact CI selectors and note which remain unexecuted. Never invent commit SHA in a ZIP.
+
+**Pre-push self-review checklist:** verify importable names against source AST, correct actual dataclass signatures, status enum uses, record digest rules, absence of secret values in public repo, no prohibited IO path, no canonical code edits, no inferred source-native edit cut from semantic seconds, and no authority upgrade. Static check is not a runtime test.
+
+**Independent gate after hosted green:** Codex must inspect the diff against this brief, test usefulness (not only file existence), threat boundaries, cross-Gate evidence vocabulary, and original-repo compatibility before any canonical adoption. If criticism is received, apply Superpowers receiving-code-review: verify it against source before editing; if defects are real use systematic-debugging and new tests.
+
+**Six-cycle audit trail (author-side, not independent agents):** 1. brainstorming rejected unstructured all-Gate rewrite, 2. source interface matrix and one-writer ownership, 3. threat/no-follow/PTS/trust separation, 4. genuine test-first versus deferred CI distinction, 5. atomic implementation packets with adversarial review focus, 6. checkpoint/partial-CI/review gates. Every cycle produced a substantive amendment to this same document. This is a **specification refinement**, not implementation, actual TDD verification, an independent security audit or Gate acceptance.
+
+**Rejected shortcuts and reconsideration triggers:** if AI Studio exhausts context, preserve a coherent packet and ledger, do not reimplement prior packets. If the same source API mismatch blocks two waves, inspect canonical contracts before additional code; do not solve it by changing established gate code. If two unrelated waves prove independent and a native multi-agent environment later exists, evaluate exclusive-writer parallelism then; do not fabricate parallel execution in a ZIP.
 
 ## 16. SHORT CONTINUATION PROMPT FOR A LATER AI STUDIO TURN (ONLY IF INTERRUPTED)
 
