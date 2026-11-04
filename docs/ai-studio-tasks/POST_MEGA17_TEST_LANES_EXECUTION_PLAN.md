@@ -64,7 +64,7 @@ Canonical dosyalar yalnız ayrı, sonradan owner-onaylı canonical branch/PR'de 
 - Create: tests/contracts/canonical_history_expected_nodeids.json (canonical VIP)
 - Create: scripts/validate_canonical_history_manifest.py (canonical VIP)
 - Test: tests/scripts/test_validate_canonical_history_manifest.py (canonical VIP)
-- Oracle provenance: design source commit `f69334705919f10b10c4b78ecc235c6f160d3b6b`, source blob `eb5972bd1fa8098a82b8ca78720b47d51d9ab907`; canonical CI reads the committed canonical oracle only, never a LAB path or network resource.
+- Oracle provenance: design source commit `5b713e9452e447701af49fa04cca89dffe473b5a`, source blob `7fae19f14c03e09e838a79b3837f6eee86f64722`; canonical CI reads the committed canonical oracle only, never a LAB path or network resource.
 
 **Interfaces:**
 - Manifest alanları: schema_version, lane_id=canonical-history, owner_repository=Centaurioun/video-intelligence-pipeline, canonical_base_sha, python_versions=[3.11,3.14], expected_node_count=33, nodes[].
