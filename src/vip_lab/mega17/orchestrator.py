@@ -227,37 +227,7 @@ def run_mega17_product_readiness_chain(
     # Run upstream MEGA-14/15/16 offline pipeline once so Workstreams D and E share the exact same lineage
     mega15_16_rep = run_mega15_16_offline_pipeline(scenario=scen)
     upstream_packet = mega15_16_rep.preparation_packet
-    expected_queries = {str(q["query_id"]) for q in scen.queries}
-    actual_queries = {row["query_id"] for row in upstream_packet.query_identities}
-    expected_sources = {
-        (
-            str(source["revision_id"]),
-            str(source["content_id"]),
-            str(source["source_path"]),
-            str(source["source_sha256"]),
-        )
-        for source in scen.sources
-    }
-    actual_sources = {
-        (
-            row["revision_id"],
-            row["content_id"],
-            row["source_path"],
-            row["source_sha256"],
-        )
-        for row in upstream_packet.occurrence_identities
-    }
-    actual_arms = {record.arm_id for record in upstream_packet.temporal_records}
-    expected_arm_count = 1 if scen.mode == "SINGLE_ARM" else 3
-    if (
-        actual_queries != expected_queries
-        or actual_sources != expected_sources
-        or len(actual_arms) != expected_arm_count
-    ):
-        raise VipLabError(
-            "MEGA17_UPSTREAM_SCENARIO_MISMATCH",
-            "MEGA-15/16 candidate queue does not match the selected scenario's mode, query IDs, and source membership.",
-        )
+    _validate_mega15_16_scenario_lineage(scen, upstream_packet)
 
     ws_a = build_canonical_integration_readiness(root_path)
     ws_b = build_source_readiness_packet()

@@ -9,6 +9,7 @@ import pytest
 from vip_lab.common import ReadinessStatus, VipLabError, canonical_sha256
 from vip_lab.mega14.scenario import default_single_arm_scenario, default_three_arm_scenario
 from vip_lab.mega16.release_refusal import run_mega15_16_offline_pipeline
+from vip_lab.mega17 import orchestrator as mega17_orchestrator
 from vip_lab.mega17.orchestrator import _validate_mega15_16_scenario_lineage
 from vip_lab.mega17 import (
     MATURITY_LEVELS,
@@ -143,20 +144,31 @@ def test_mega15_16_pipeline_preserves_custom_single_arm_membership() -> None:
     assert report.workstream_d.lineage_spine["source_revision_id"] == "rev-mega17-pin"
 
 
-def test_mega17_rejects_upstream_occurrence_drop_even_when_membership_sets_match() -> None:
+def test_mega17_rejects_upstream_occurrence_drop_even_when_membership_sets_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     scenario = default_three_arm_scenario()
-    packet = run_mega15_16_offline_pipeline(scenario=scenario).preparation_packet
-    tampered_packet = replace(
-        packet,
-        occurrence_identities=packet.occurrence_identities[:-1],
-    )
-    tampered_packet = replace(
-        tampered_packet,
-        packet_digest=canonical_sha256(tampered_packet._digest_payload()),
+    real_producer = run_mega15_16_offline_pipeline
+
+    def producer_with_dropped_occurrence(*, scenario):
+        report = real_producer(scenario=scenario)
+        packet = replace(
+            report.preparation_packet,
+            occurrence_identities=report.preparation_packet.occurrence_identities[:-1],
+        )
+        packet = replace(packet, packet_digest=canonical_sha256(packet._digest_payload()))
+        return replace(report, preparation_packet=packet)
+
+    monkeypatch.setattr(
+        mega17_orchestrator,
+        "run_mega15_16_offline_pipeline",
+        producer_with_dropped_occurrence,
     )
 
     with pytest.raises(VipLabError, match="MEGA17_UPSTREAM_SCENARIO_MISMATCH"):
-        _validate_mega15_16_scenario_lineage(scenario, tampered_packet)
+        mega17_orchestrator.run_mega17_product_readiness_chain(
+            scenario, workspace_root=WORKSPACE_ROOT
+        )
 
 
 def test_mega17_eight_readiness_dimensions_and_maturity_model_ceilings() -> None:
