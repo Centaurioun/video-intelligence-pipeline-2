@@ -16,7 +16,7 @@
 - Hiçbir test silinmez, sessizce seçilmez, xfail yapılmaz, beklentisi zayıflatılmaz veya fixture'ı LAB'ye kopyalanmaz.
 - LAB synthetic ve canonical-history iki ayrı sahiplik lane'idir. PR #258 bounded-admission canonical lane içinde ayrı workflow/evidence slice olarak ölçülür; üç ayrı receipt/result gösterilir, tek “combined PASS” üretilmez.
 - Kanonik kod, tarihsel test beklentileri ve protected media bu planın parçası değildir; PR #258/#259 base güncellemesi owner kontrollü ayrı GitHub işlemi olarak kalır.
-- 2026-11-05 account billing ekranındaki Usage blocked, owner açıklamasına göre included Actions allowance'ın bitmesi değil ücretli aşım harcamasının engellenmesidir. Owner şu anda yaklaşık 3.000 dakika allowance kaldığını bildiriyor; bu miktar UI'da bağımsız okunmadı. Gelecek her hosted run öncesi ilgili hesabın kalan included minutes ve repo/runner kapsamı yenilenerek kontrol edilir; yeterli dakika varsa mevcut Usage blocked göstergesi tek başına durdurma nedeni değildir. Plan dışı ücretli aşım kullanılmaz, billing ayarı değiştirilmez.
+- Owner açıklamasına göre GitHub, dahil edilmiş Actions dakikaları bittiğinde işi otomatik engeller; ek ödeme yapılmaz. Hosted run'lar normal PR akışında kullanılabilir. İş dakika sınırı nedeniyle otomatik engellenirse sonuç `BLOCKED/NOT RUN` olarak kaydedilir; bu pytest sonucu değildir. Billing/allowance kontrolü veya ayar değişikliği bu planın adımı değildir.
 - PR #258'in yeni tests/vip_fvs/unit/test_bounded_admission.py testi canonical repo ve gerçek PR head üzerinde Python 3.11/3.14'te sıfır skip ile yürütülmeden hosted-test doğrulaması sayılmaz.
 - Workflow'lar mevcut pull_request/push politikasını korur; tarihsel ref erişimi açık doğrulanır. fetch-depth: 0 tek başına preserved ref'in mevcut olduğunu kanıtlamaz.
 - Gerçek media, model indirme/çalıştırma, provider, render/export, Gate promotion veya merge yapılmaz.
@@ -24,7 +24,7 @@
 
 ## Review Focus
 
-- **Allowance'ı tüketilmiş varsayma veya overage'a girme:** hosted execution öncesi hedef hesap/repo için kalan included Actions minutes yenilenip doğrulanır; Usage blocked göstergesi tek başına allowance'ın tükendiğini göstermez. Yeterli included minutes yoksa ve ücretli aşım gerekecekse run durdurulur.
+- **Otomatik dakika sınırı engelini test hatası sayma:** GitHub işi otomatik engellerse `BLOCKED/NOT RUN` yazılır; pytest PASS/FAIL iddiası üretilmez ve ücretli işlem yapılmaz.
 - **33 node'un manifestten düşmesi veya yanlış owner'a atanması:** doğrulayıcı tam node-ID kümesinin design envanteriyle birebir eşitliğini ve canonical-history owner'ını kontrol eder.
 - **Tarihsel Git ref/object runner'da yokken testleri çalışmış varsayma:** preflight pinned commit/tree/blob ve archive ref'i testten önce doğrular; eksikse lane BLOCKED ve test UNRESOLVED kalır.
 - **Collection sırasında skip/deselect veya Python matrisi eksikliği:** JUnit ve pytest collection çıktısı iki interpreter için beklenen node'ların toplandığını ve skip/deselected olmadığını doğrular.
@@ -34,10 +34,10 @@
 
 ## Önkoşullar ve bağımlılık sırası
 
-1. **Allowance/billing gate (her hosted run öncesi tazele):** UI Usage blocked, owner açıklamasına göre harcama üst sınırındaki ücretli aşımı durdurur; included allowance'ın tükendiğini göstermez. Owner yaklaşık 3.000 Actions dakikası kaldığını bildiriyor; bu sayı owner-reported, Codex tarafından ölçülmedi. Gelecek her hosted execution öncesi ilgili hesapta remaining included minutes ve repo/runner kapsamını yenile. Yeterli included allowance varsa bu gösterge tek başına engel değildir; aşım ücreti gerekecekse run başlatma. Billing ayarlarını değiştirme.
+1. **Hosted execution davranışı:** owner, included dakika sınırında GitHub'ın işi otomatik engellediğini ve ek ödeme yapmadığını belirtti. Normal PR event'i kullanılabilir; bir iş bu nedenle başlamazsa `BLOCKED/NOT RUN` kaydet. Manuel allowance/billing kontrolü, ayar değişikliği veya ücretli adım yoktur.
 2. **Canonical PR zemini:** PR #258 ve #259 eski 592952da… base'indedir; main@bee314b92981b9ae7ea38d83fe2dbae120c474e4 iki doküman ileridedir. Owner, #258 base refresh/rebase kararını ayrıca verir. GitHub contents API test path'ini canonical main üzerinde 404, PR #258 head `5a60cd8e0abc021767b05c87ca50202822c049d0` üzerinde blob `5ecbbd33d9d136984424cdcb787669b83be4db84` olarak doğruladı. Workflow adımı #258 source/test ile aynı PR candidate/head'e eklenir; workflow-only main PR açılmaz.
 3. **Uygulama onayı:** aşağıdaki plan bağımsız lane sınırlarını tanımlar, ancak workflow/manifest değişikliğine başlamadan owner'ın planı ve uygulama kapsamını onaylaması gerekir.
-4. **DAG:** Task 1 (independent oracle + manifest exact equality) → Task 2 (canonical history lane) → Task 5 (receipt reconciliation). Task 3 (PR #258 source/test/workflow same-head candidate) mevcut PR #258 içinde yürütülür; workflow-only change main'e veya ayrı PR'a önceden indirilmez. Task 4 (LAB receipt) bağımsızdır. Hosted işler Task 2–4 sonrasında allowance refresh ve exact candidate head'e bağlıdır.
+4. **DAG:** Task 1 (independent oracle + manifest exact equality) → Task 2 (canonical history lane) → Task 5 (receipt reconciliation). Task 3 (PR #258 source/test/workflow same-head candidate) mevcut PR #258 içinde yürütülür; workflow-only change main'e veya ayrı PR'a önceden indirilmez. Task 4 (LAB receipt) bağımsızdır. Hosted sonuçlar Task 2–4 sonrası exact candidate head'e bağlanır; GitHub'ın otomatik dakika sınırı blokları `BLOCKED/NOT RUN` olarak kaydedilir.
 
 ## Dosya haritası
 
@@ -122,7 +122,7 @@ Canonical dosyalar yalnız ayrı, sonradan owner-onaylı canonical branch/PR'de 
 - [ ] **Adım 2: Prove red on pre-change canonical main.** Run the verified contract node against main and confirm failure due to absent test/step. Never run the proposed PR workflow on main without the test.
 - [ ] **Adım 3: Update the existing PR #258 candidate together.** After owner-authorized base refresh, amend the existing #258 branch with both source modules, test file, and workflow selector. Run: python -m pytest -q --junitxml=<runner-temp>/bounded-admission-junit.xml tests/vip_fvs/unit/test_bounded_admission.py. Add a fail-closed existence/selection assertion; no skip logic.
 - [ ] **Adım 4: Verify the exact candidate locally.** Check all four paths and test blob at candidate commit; run the workflow contract test and PYTHONPATH=src:experiments:scripts python -m pytest -q tests/vip_fvs/unit/test_bounded_admission.py on Python 3.11 and 3.14. Record real collection/pass/fail/error/skip counts; do not hardcode historical 22.
-- [ ] **Adım 5: Hosted execution gate.** Immediately refresh relevant account/repo remaining included minutes and billing UI. If sufficient allowance is available, the owner-authorized normal PR #258 event may run without an overage charge; Usage blocked alone does not mean the allowance is exhausted. If included allowance is insufficient and an overage would be billed, stop. Verify PR base/head/merge SHA and test/workflow blobs.
+- [ ] **Adım 5: Hosted execution.** Use the normal PR #258 event after the source, test and workflow changes share one reviewed candidate. No billing or allowance check is required. Verify PR base/head/merge SHA and test/workflow blobs; if GitHub automatically blocks execution at the included-minute limit, record `BLOCKED/NOT RUN` and take no paid action.
 - [ ] **Adım 6: Atomic integration boundary.** Existing PR #258 is the sole carrier of source, test, and selector through review. No workflow-only merge. A stale-base conflict returns to PR review; never split changes or weaken selection.
 
 **Kabul:** Exact #258 candidate has both implementation modules, test file, and focused workflow step. Python 3.11/3.14 execute the exact test with zero skip/deselection and separate receipts; missing target fails the job. Unrelated PRs against main are unaffected before atomic #258 adoption. No media/model/provider/render calls.
@@ -156,9 +156,9 @@ Canonical dosyalar yalnız ayrı, sonradan owner-onaylı canonical branch/PR'de 
 - Status: PASS, FAIL, BLOCKED, NOT RUN, UNRESOLVED. PASS yalnız exact beklenen node set'i çalışıp tümü geçtiğinde, skip/deselect yokken verilir.
 
 - [ ] **Adım 1: Receipt consistency test yaz.** Üç evidence receipt'inin iki sahiplik lane'ini doğru gösterdiğini, PR #258 sonucunun canonical lane'e ait olduğunu, ortak overall PASS üretmediğini ve 33 canonical node için tek tek sonuç bulunduğunu doğrula.
-- [ ] **Adım 2: Kırmızı doğrula.** Eksik receipt, billing block, eski workflow SHA, stale PR head, node mismatch, skip/deselect veya Git object yokluğu PASS üretememeli.
-- [ ] **Adım 3: Receipt'i exact ref'e bağla.** Repo, base/head/merge SHA, tree SHA, workflow SHA, run/job URL/ID, Python/pytest, lock hash, manifest hash, node list/counts, artifact digest ve ilgili hesabın included allowance gözlem zamanını karşılaştır.
-- [ ] **Adım 4: Hosted kabul kapısı.** Run'dan hemen önce ilgili hesap/repo için kalan included Actions minutes değerini tazele ve receipt'e allowance miktarı + zaman damgası olarak kaydet. Usage blocked, owner açıklamasına göre ücretli overage guard'dır; yeterli included minutes varsa bu tek başına run'ı durdurmaz. Overage gerekirse dur. PR #258 source/test/workflow aynı candidate head'inde olmalıdır; workflow'u default branch'e önceden indirme.
+- [ ] **Adım 2: Kırmızı doğrula.** Eksik receipt, otomatik dakika sınırı nedeniyle başlamayan run, eski workflow SHA, stale PR head, node mismatch, skip/deselect veya Git object yokluğu PASS üretememeli.
+- [ ] **Adım 3: Receipt'i exact ref'e bağla.** Repo, base/head/merge SHA, tree SHA, workflow SHA, run/job URL/ID, Python/pytest, lock hash, manifest hash, node list/counts ve artifact digest'i karşılaştır.
+- [ ] **Adım 4: Hosted kabul kapısı.** PR #258 source/test/workflow aynı candidate head'inde olmalıdır; workflow'u default branch'e önceden indirme. Normal PR run'ını kullan. GitHub işi otomatik dakika sınırında engellerse receipt'e `BLOCKED/NOT RUN` ve gözlenen run/job kimliğini yaz; allowance miktarı veya billing bilgisi toplama, ücretli adım atma.
 - [ ] **Adım 5: Gözlenen sonuçları raporla.** Her Python job ve node için PASS/FAIL/ERROR/SKIP/NOT RUN yaz. Koşmayan canonical node'lar UNRESOLVED kalır. Yeni kanıt olmadan hata kök nedeni genellenmez.
 - [ ] **Adım 6: Yalnız gözlenen kanıtı belgeleyen reconciliation commit'i üret.** Kaynak ve test beklentisi değiştirme.
 
@@ -170,25 +170,25 @@ Canonical dosyalar yalnız ayrı, sonradan owner-onaylı canonical branch/PR'de 
 
 - CI değişikliği geri alınacaksa owner-onaylı PR'de yalnız ilgili workflow/validator commit'i revert edilir; test veya beklenti değişiklikleri rollback bahanesi olmaz.
 - Manifest pinleri ve historical tests değiştirilemez. Yanlış pin varsa ayrı kanıta dayalı review gerekir; tarihi testleri yeşile döndürmek için pin gevşetilmez.
-- Included allowance yetersiz ve ücretli overage gerekecekse hosted run başlatılmaz. Başlamış workflow başarısızsa root cause incelenmeden rerun yapılmaz.
-- PR #258/#259 base yenilemesi, canonical main merge'i ve billing ayarları LAB planının uygulama/rollback kapsamı dışındadır.
+- Included Actions dakika sınırında GitHub işi otomatik engellerse sonucu `BLOCKED/NOT RUN` olarak kaydet; ücretli işlem veya billing ayarı değişikliği yapma. Başlamış workflow başarısızsa root cause incelenmeden rerun yapılmaz.
+- PR #258/#259 base yenilemesi ve canonical main merge'i LAB planının uygulama/rollback kapsamı dışındadır.
 - Yanlış ownership, ref veya eksik manifest lane'i BLOCKED yapar; fixture mirror veya skip çözüm değildir.
 
 ## Altı döngülü iteratif iyileştirme
 
-1. **Cycle 1 — Kanıt ve sınır:** güncel refs, PR listeleri, workflow seçimleri, overage budget ile included allowance ayrımı ve 33 node sahipliği tasarım belgesinde sabitlendi.
+1. **Cycle 1 — Kanıt ve sınır:** güncel refs, PR listeleri, workflow seçimleri, otomatik Actions dakika sınırı davranışı ve 33 node sahipliği tasarım belgesinde sabitlendi.
 2. **Cycle 2 — Alternatifler:** iki lane, artifact mirror, seçimden çıkarma ve birleşik suite karşılaştırıldı; owner iki lane'i onayladı, mirror reddedildi.
-3. **Cycle 3 — Bağımlılık haritası:** run-öncesi remaining allowance refresh, stale canonical PR base, preserved refs ve PR #258 source/test/workflow same-head bağımlılığı sıralamaya bağlandı.
+3. **Cycle 3 — Bağımlılık haritası:** stale canonical PR base, preserved refs ve PR #258 source/test/workflow same-head bağımlılığı sıralamaya bağlandı; otomatik dakika engeli için `BLOCKED/NOT RUN` raporlama tanımlandı.
 4. **Cycle 4 — Task/arayüz:** manifest → canonical lane → receipt zinciri; bounded smoke ve LAB receipt işleri ayrı dosya sınırlarıyla tanımlandı.
-5. **Cycle 5 — Negatif kontroller:** eksik refs, node farkı, skip/deselect, stale head, billing block ve lane karışması fail-closed kabul koşullarına çevrildi.
-6. **Cycle 6 — Özdenetim:** spec coverage, 33 node sayısı, dosyalar, komutlar, merge/billing yetkisi ve bağımsız sonuçlar yeniden kontrol edildi. Owner planı uygulama öncesi incelemelidir.
+5. **Cycle 5 — Negatif kontroller:** eksik refs, node farkı, skip/deselect, stale head, otomatik dakika engeli ve lane karışması fail-closed kabul koşullarına çevrildi.
+6. **Cycle 6 — Özdenetim:** spec coverage, 33 node sayısı, dosyalar, komutlar, merge sınırı ve bağımsız sonuçlar yeniden kontrol edildi. Owner planı uygulama öncesi incelemelidir.
 
 ## Plan özdenetimi
 
-- **Kapsam:** LAB lane, canonical-history lane, 33 node manifesti ve bağımsız oracle, canonical lane içindeki #258 focused test slice'ı, run-öncesi allowance refresh, stale PR base, source provenance, ayrı receipts ve no-merge sınırları görevlere bağlandı.
+- **Kapsam:** LAB lane, canonical-history lane, 33 node manifesti ve bağımsız oracle, canonical lane içindeki #258 focused test slice'ı, stale PR base, source provenance, ayrı receipts, otomatik dakika engeli raporlaması ve no-merge sınırları görevlere bağlandı.
 - **Test-first:** her davranış/CI contract değişiminden önce negatif test ve komut tanımlandı; hosted kabul yerel doğrulamadan ayrıldı.
 - **Kimlikler:** canonical gözlem main SHA `bee314b92981b9ae7ea38d83fe2dbae120c474e4`; LAB design base `1fd14c0b246c8da97e07129f6b84173d86f6a500`; PR #258 kaydedilmiş head `5a60cd8e0abc021767b05c87ca50202822c049d0`, test blob `5ecbbd33d9d136984424cdcb787669b83be4db84`; oracle canonical JSON SHA-256 `8248fbf704f0ebba5e877a26106ab9e8b77a9b7a92fd5695a7f4e2820002b016`. Uygulamada tekrar fetch etmeden SHA'lar güncel sayılmaz.
-- **Belirsizlik:** Usage blocked overage harcamasını durduruyor; owner yaklaşık 3.000 included Actions dakikası kaldığını bildiriyor. Bu sayı owner-reported ve her execution öncesi ilgili hesap/repo'da yeniden doğrulanmalı; hiçbir ücretli overage yapılmaz. Test sayısı gerçek pytest çıktısından alınır, tarihsel 22 bildirimi sabitlenmez.
+- **Belirsizlik:** hosted run'ın başlayıp başlamadığı GitHub run/job sonucundan gözlenir. Owner'a göre limit dolunca GitHub işi otomatik engeller ve ek ödeme yapılmaz; böyle bir olay `BLOCKED/NOT RUN` olarak kalır. Test sayısı gerçek pytest çıktısından alınır, tarihsel 22 bildirimi sabitlenmez.
 - **Dış onay:** belge uygulama yetkisi değildir. Owner planı ve uygulama kapsamını ayrıca onaylamalıdır; merge yapılmaz.
 
 ## Owner plan incelemesi
