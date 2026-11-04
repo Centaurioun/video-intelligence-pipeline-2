@@ -18,6 +18,7 @@ from gate0.d2_intake import (
     D2_BASELINE_STATES,
     D2_FIELDS,
     D2_FIELD_IDS,
+    D2_FIELD_BY_ID,
     D2_PACKAGE_FILE,
     D2_PACKAGE_SCHEMA_VERSION,
     D2IntakeError,
@@ -198,7 +199,7 @@ def inspect_d2_readiness(
             blocked_fields.append(row.field_id)
 
         primary_reason = row.reasons[0] if row.reasons else "NO_REASON"
-        is_evidence_row = row.validator_check == "EVIDENCE"
+        is_evidence_row = D2_FIELD_BY_ID[row.field_id].state_rule == "EVIDENCE"
         row_intake_failed = False
 
         if is_evidence_row:
