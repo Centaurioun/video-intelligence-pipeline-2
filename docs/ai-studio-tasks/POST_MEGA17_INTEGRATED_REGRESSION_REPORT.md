@@ -17,6 +17,8 @@ Kapsam: yalnızca sentetik testler, kaynak incelemesi ve LAB dokümantasyonu. Bu
 | Güncel LAB main `1fd14c0b…`, Actions run [41912239686](https://github.com/Centaurioun/video-intelligence-pipeline-2/actions/runs/41912239686) | 3.11 | job 126862542146; MEGA-17 adımı | 37 geçti, altı dosyanın tamamı çalıştı, skip yok |
 | Aynı run | 3.14 | job 126862543156; MEGA-17 adımı | 37 geçti, altı dosyanın tamamı çalıştı, skip yok |
 | PR #1+#2 birleşik commit `f20f4a7e…`, Actions run [41911453896](https://github.com/Centaurioun/video-intelligence-pipeline-2/actions/runs/41911453896) | 3.11 / 3.14 | hosted pytest çıktısı | iki sürümde de 37 geçti; kuyruk doğrulaması altı suite ve sıfır skip bildirdi |
+| Bu rapor PR'si, ilk belge commit'i `f83ca9d0…`, Actions run [41915073493](https://github.com/Centaurioun/video-intelligence-pipeline-2/actions/runs/41915073493) | 3.11 | job 126872473149 | tüm workflow başarılı; altı MEGA-17 dosyasında 37 geçti, sıfır skip |
+| Aynı PR run | 3.14 | job 126872472466 | tüm workflow başarılı; altı MEGA-17 dosyasında 37 geçti, sıfır skip |
 
 Python 3.14.9 ile `PYTHONPATH=src:experiments:. python -m pytest -q` eşdeğer interpreter komutları bu worktree'de çalıştırıldı:
 
