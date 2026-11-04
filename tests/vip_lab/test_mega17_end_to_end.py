@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 import pytest
 
-from vip_lab.common import ReadinessStatus, VipLabError
+from vip_lab.common import ReadinessStatus, VipLabError, canonical_sha256
 from vip_lab.mega14.scenario import default_single_arm_scenario, default_three_arm_scenario
+from vip_lab.mega16.release_refusal import run_mega15_16_offline_pipeline
 from vip_lab.mega17 import (
     MATURITY_LEVELS,
     MEGA17_REPORT_SCHEMA_VERSION,
@@ -56,6 +58,88 @@ def test_mega17_end_to_end_three_arm_and_single_arm_deterministic_replay() -> No
     assert rep_1a.mode == "SINGLE_ARM"
     assert rep_1a.report_digest != rep_3a_1.report_digest
     verify_mega17_product_readiness_report(rep_1a)
+
+
+def test_mega17_single_and_three_arm_keep_matching_upstream_scenario_lineage() -> None:
+    single_scenario = default_single_arm_scenario()
+    three_scenario = default_three_arm_scenario()
+    single_upstream = run_mega15_16_offline_pipeline(scenario=single_scenario)
+    three_upstream = run_mega15_16_offline_pipeline(scenario=three_scenario)
+
+    single_packet = single_upstream.preparation_packet
+    three_packet = three_upstream.preparation_packet
+    assert len({record.arm_id for record in single_packet.temporal_records}) == 1
+    assert len({record.arm_id for record in three_packet.temporal_records}) == 3
+    assert {row["query_id"] for row in single_packet.query_identities} == {
+        q["query_id"] for q in single_scenario.queries
+    }
+    assert {row["query_id"] for row in three_packet.query_identities} == {
+        q["query_id"] for q in three_scenario.queries
+    }
+    assert {row["revision_id"] for row in single_packet.occurrence_identities} == {
+        source["revision_id"] for source in single_scenario.sources
+    }
+    assert {row["revision_id"] for row in three_packet.occurrence_identities} == {
+        source["revision_id"] for source in three_scenario.sources
+    }
+
+    single_report = run_mega17_product_readiness_chain(
+        single_scenario, workspace_root=WORKSPACE_ROOT
+    )
+    three_report = run_mega17_product_readiness_chain(
+        three_scenario, workspace_root=WORKSPACE_ROOT
+    )
+    single_digest = single_report.stage_digests["mega15_16_offline_report_digest"]
+    three_digest = three_report.stage_digests["mega15_16_offline_report_digest"]
+    assert single_digest == single_upstream.report_digest
+    assert three_digest == three_upstream.report_digest
+    assert single_digest != three_digest
+
+    mismatched = single_report.to_dict()
+    mismatched["stage_digests"]["mega15_16_offline_report_digest"] = three_digest
+    mismatched["report_digest"] = canonical_sha256(
+        {key: value for key, value in mismatched.items() if key != "report_digest"}
+    )
+    with pytest.raises(VipLabError, match="MEGA17_FOREIGN_DIGEST_MISMATCH"):
+        verify_mega17_product_readiness_report(mismatched)
+
+    tampered = single_report.to_dict()
+    tampered["workstream_d"]["lineage_spine"]["source_revision_id"] = "rev-forged"
+    with pytest.raises(VipLabError, match="digest"):
+        verify_mega17_product_readiness_report(tampered)
+
+
+def test_mega15_16_pipeline_preserves_custom_single_arm_membership() -> None:
+    base = default_single_arm_scenario()
+    scenario = replace(
+        base,
+        scenario_id="scen-mega17-custom-single-arm",
+        queries=({"query_id": "q-mega17-pin", "text": "synthetic pinned query"},),
+        sources=(
+            {
+                **base.sources[0],
+                "revision_id": "rev-mega17-pin",
+                "content_id": "content-mega17-pin",
+                "source_path": "/synthetic/archive/pinned-source.mov",
+                "source_sha256": "d" * 64,
+            },
+        ),
+    )
+
+    upstream = run_mega15_16_offline_pipeline(scenario=scenario)
+    queue = upstream.preparation_packet
+
+    assert len({record.arm_id for record in queue.temporal_records}) == 1
+    assert {row["query_id"] for row in queue.query_identities} == {"q-mega17-pin"}
+    assert {row["revision_id"] for row in queue.occurrence_identities} == {
+        "rev-mega17-pin"
+    }
+    assert {row["source_sha256"] for row in queue.occurrence_identities} == {"d" * 64}
+    report = run_mega17_product_readiness_chain(scenario, workspace_root=WORKSPACE_ROOT)
+    assert report.scenario_id == scenario.scenario_id
+    assert report.mode == scenario.mode
+    assert report.workstream_d.lineage_spine["query_id"] == "q-mega17-pin"
+    assert report.workstream_d.lineage_spine["source_revision_id"] == "rev-mega17-pin"
 
 
 def test_mega17_eight_readiness_dimensions_and_maturity_model_ceilings() -> None:

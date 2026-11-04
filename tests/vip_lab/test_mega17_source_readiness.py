@@ -39,6 +39,7 @@ def test_workstream_b_closed_synthetic_d2_fixture_and_invariants() -> None:
     assert packet.real_source_rights_verified is False
     assert packet.d3_authorized_local_execution is False
 
+
     # D-2 30-field accounting: 0 VERIFIED, 7 PENDING, 21 BLOCKED, 2 NOT_OBSERVED
     d2_summary = packet.d2_readiness_summary
     assert d2_summary["verified_count"] == 0
@@ -76,6 +77,47 @@ def test_workstream_b_closed_synthetic_d2_fixture_and_invariants() -> None:
 
     verified = verify_source_readiness_packet(packet)
     assert verified["packet_digest"] == packet.packet_digest
+
+
+def test_workstream_b_synthetic_dev_eval_partitions_are_disjoint_on_all_identity_axes() -> None:
+    fixture = build_closed_synthetic_d2_fixture_payload()
+    corpus = fixture["artifacts"]["corpus-designation.json"]
+    query_doc = fixture["artifacts"]["editor-queries.json"]
+    revisions = corpus["revisions"]
+    development_revisions = [row for row in revisions if row["split"] == "DEVELOPMENT"]
+    evaluation_revisions = [row for row in revisions if row["split"] == "EVALUATION"]
+    development_sessions = {row["session_id"] for row in development_revisions}
+    evaluation_sessions = {row["session_id"] for row in evaluation_revisions}
+    development_queries = [
+        row for row in query_doc["queries"] if row["split"] == "DEVELOPMENT"
+    ]
+    evaluation_queries = [
+        row for row in query_doc["queries"] if row["split"] == "EVALUATION"
+    ]
+
+    assert development_sessions.isdisjoint(evaluation_sessions)
+    assert {row["revision_id"] for row in development_revisions}.isdisjoint(
+        row["revision_id"] for row in evaluation_revisions
+    )
+    packet = build_source_readiness_packet()
+    development_content = {
+        row.source_content_id
+        for row in packet.identity_custody_entries
+        if row.partition_split == "DEVELOPMENT"
+    }
+    evaluation_content = {
+        row.source_content_id
+        for row in packet.identity_custody_entries
+        if row.partition_split == "EVALUATION"
+    }
+    assert development_content.isdisjoint(evaluation_content)
+    assert {row["query_id"] for row in development_queries}.isdisjoint(
+        row["query_id"] for row in evaluation_queries
+    )
+    assert {row["text"] for row in development_queries}.isdisjoint(
+        row["text"] for row in evaluation_queries
+    )
+    assert packet.dev_eval_partition_disjoint is True
 
 
 def test_workstream_b_refuses_identical_filename_as_byte_identity() -> None:
@@ -136,6 +178,33 @@ def test_workstream_b_refuses_dev_eval_partition_leakage() -> None:
             },
         }
     )
+    assert pkt.status == ReadinessStatus.BLOCKED
+    assert REFUSAL_DEV_EVAL_PARTITION_LEAKAGE in pkt.blockers
+
+
+@pytest.mark.parametrize(
+    ("development_key", "evaluation_key"),
+    [
+        ("development_session_ids", "evaluation_session_ids"),
+        ("development_content_ids", "evaluation_content_ids"),
+        ("development_query_ids", "evaluation_query_ids"),
+        ("development_query_text_ids", "evaluation_query_text_ids"),
+    ],
+)
+def test_workstream_b_refuses_cross_partition_identity_overlap(
+    development_key: str, evaluation_key: str
+) -> None:
+    pkt = inspect_source_and_d2_readiness(
+        {
+            "partition_check": {
+                "development_revision_ids": ["rev-development"],
+                "evaluation_revision_ids": ["rev-evaluation"],
+                development_key: ["shared-identity"],
+                evaluation_key: ["shared-identity"],
+            },
+        }
+    )
+
     assert pkt.status == ReadinessStatus.BLOCKED
     assert REFUSAL_DEV_EVAL_PARTITION_LEAKAGE in pkt.blockers
 

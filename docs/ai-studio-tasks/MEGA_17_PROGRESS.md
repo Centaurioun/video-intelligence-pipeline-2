@@ -29,6 +29,16 @@
   - Because AI Studio does not automatically pull GitHub PR #1 back into the persistent container and `.gitignore` is read-only under MEGA-17 rules, `/.gitignore` line 26 in this container still shows unanchored `media/`.
   - **Publication Requirement:** Publish ONLY the 19 new MEGA-17 files (`src/vip_lab/mega17/**`, `tests/vip_lab/test_mega17_*.py`, `docs/ai-studio-tasks/MEGA_17_*`) onto post-PR #1 `main`. Never overwrite `.gitignore` or existing files from a raw container ZIP export.
 
+## 2026-11-04 Independent Recovery Addendum
+
+- Reconciled current LAB `main@6694b79f3da98d467f96dbc7287e282019401133` with existing repair PR #1; it remains an open PR and its branch must retain the six exact media restoration blobs.
+- Failed run `41889181778` failed during MEGA-04 and cross-gate collection because `gate0.media` was absent from that run's LAB `main`. It did not run the six MEGA-17 pytest files. Earlier successful run `41875647638` is on PR #1 head `85a4190925fbb2c6ca11c4b354ad9f1296daf82f`, before MEGA-17 was added to LAB main.
+- Independent review found that `run_mega17_product_readiness_chain(scenario=...)` called the hardcoded default three-arm MEGA-15/16 producer. `run_mega15_16_offline_pipeline` now accepts optional `scenario: SyntheticLabScenario | Mapping[str, Any] | None`. With no scenario and no seed, it retains legacy `seed=20261102` behavior; existing callers and output structure remain compatible. MEGA-17 passes the selected scenario and checks arm count plus source/query membership against the returned MEGA-15 occurrence/query identities.
+- Additional review repairs: report verification no longer creates missing input directories; generated DEVELOPMENT/EVALUATION partitions are checked across sessions, revisions, content, query IDs, and query text; the editorial packet retains MEGA-15's occurrence identity tuple and reports its absent canonical occurrence ID as `NOT_OBSERVED` instead of deriving one from a revision.
+- Source-admission status: generated D-2 and custody prerequisites only. No direct calls to the four admission/sealing APIs listed in the acceptance addendum. No protected media bytes or hashes were read.
+- Canonical Gate-0 comparison used original VIP `main@592952daf475b1bbae2eebdee64d992c1a744f08`; the code, manifest, and tests use the correct 40-query / Hit@10 protocol. The false 50-video / Hit@5 / 0.20 / four-arm claims are an external reporting error, not a repository contract or code defect.
+- Local Python 3.14 evidence: all six MEGA-17 suites passed with 35 cases and zero skips; `tests/vip_lab` passed 141/141; Gate-0 tests excluding only the media-generation integration and nine checks requiring absent frozen Git objects or `.orchestration` prompt files passed 1,036/1,036 with zero skips. The combined available-tree run reported those same nine environment-bound failures. Hosted Python 3.11/3.14 CI remains pending on the exact candidate.
+
 ## 2. Cycle Log
 
 ### Cycle 1 — Reconnaissance (`CYCLE_1_COMPLETE`)

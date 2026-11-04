@@ -36,6 +36,11 @@ from vip_lab.mega13 import (
     evaluate_qc_readiness,
 )
 from vip_lab.mega14 import run_end_to_end_synthetic_lab
+from vip_lab.mega14.scenario import (
+    SyntheticLabScenario,
+    default_three_arm_scenario,
+    parse_e2e_scenario_mapping,
+)
 from vip_lab.mega15.editorial_handoff import (
     EditorialHandoffEnvelope,
     Gate3OfflinePreparationPacket,
@@ -700,17 +705,32 @@ def verify_mega15_16_offline_report(
 
 def run_mega15_16_offline_pipeline(
     *,
-    seed: int = 20261102,
+    seed: int | None = None,
+    scenario: SyntheticLabScenario | Mapping[str, Any] | None = None,
     untrusted_authority_payload: Mapping[str, Any] | None = None,
 ) -> Mega1516OfflineReport:
-    """Execute the deterministic offline synthetic MEGA-08..14 -> MEGA-15 -> MEGA-16 pipeline."""
-    from vip_lab.mega09 import build_queue_from_batch_report
-    from vip_lab.mega14 import default_three_arm_scenario
+    """Run the offline pipeline for a supplied scenario or the legacy default scenario.
 
-    scen = default_three_arm_scenario()
-    if int(seed) != 20261104:
+    With no scenario and no seed, behavior and digest pins match the legacy
+    ``seed=20261102`` default. An explicit scenario uses its own workload seed
+    unless ``seed`` is supplied.
+    """
+    from vip_lab.mega09 import build_queue_from_batch_report
+
+    supplied_scenario = scenario is not None
+    if scenario is None:
+        scen = default_three_arm_scenario()
+    elif isinstance(scenario, SyntheticLabScenario):
+        scen = scenario
+    else:
+        scen = parse_e2e_scenario_mapping(scenario)
+
+    effective_seed = seed
+    if not supplied_scenario and effective_seed is None:
+        effective_seed = 20261102
+    if effective_seed is not None and int(effective_seed) != 20261104:
         scen_dict = scen.to_dict()
-        scen_dict["workload"]["seed"] = int(seed)
+        scen_dict["workload"]["seed"] = int(effective_seed)
         e2e_report = run_end_to_end_synthetic_lab(scen_dict)
     else:
         e2e_report = run_end_to_end_synthetic_lab(scen)

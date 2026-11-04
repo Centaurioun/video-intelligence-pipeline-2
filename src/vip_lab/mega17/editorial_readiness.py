@@ -149,6 +149,11 @@ def build_editorial_workflow_readiness_packet(
     temp_rec = prep_pkt.temporal_records[0]
     ed_env = prep_pkt.handoff_envelopes[0]
     rev_entries = ed_env.revision_history
+    source_occurrence_identity = next(
+        identity
+        for identity in prep_pkt.occurrence_identities
+        if identity["queue_item_id"] == temp_rec.queue_item_id
+    )
 
     consumed_mega15_summary = {
         "preparation_packet_id": prep_pkt.packet_id,
@@ -165,7 +170,8 @@ def build_editorial_workflow_readiness_packet(
     }
 
     lineage_spine = {
-        "source_occurrence_id": f"occ-{temp_rec.source_revision_id}",
+        "source_occurrence_id": NOT_OBSERVED,
+        "source_occurrence_identity": dict(source_occurrence_identity),
         "source_revision_id": temp_rec.source_revision_id,
         "source_sha256": temp_rec.source_sha256,
         "selected_stream_index": temp_rec.selected_stream_index,

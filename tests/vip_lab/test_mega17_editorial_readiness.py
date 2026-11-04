@@ -41,7 +41,9 @@ def test_workstream_d_consumes_mega15_and_preserves_lineage_and_mandatory_flags(
 
     # Preserves full source/stream/timebase/query/queue/proposal lineage
     lin = packet.lineage_spine
-    assert lin["source_occurrence_id"].startswith("occ-")
+    assert lin["source_occurrence_id"] == "NOT_OBSERVED"
+    assert lin["source_occurrence_identity"]["queue_item_id"] == lin["queue_item_id"]
+    assert lin["source_occurrence_identity"]["revision_id"] == lin["source_revision_id"]
     assert lin["source_revision_id"]
     assert len(lin["source_sha256"]) == 64
     assert lin["selected_stream_index"] == 0
