@@ -441,3 +441,103 @@ jobs:
             fi
           done
           echo 'No submitted MEGA-08–14 suite failed. SKIPPED does not mean complete.'
+
+      - name: Check MEGA-15–16 submitted wave completeness
+        id: mega1516complete
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_wave() {
+            local wave="$1"; shift
+            local any=0
+            for file in "$@"; do
+              if [[ -f "$file" ]]; then any=1; fi
+            done
+            if [[ "$any" -eq 0 ]]; then
+              echo "MEGA-$wave: NOT_SUBMITTED (not a PASS)"
+              return 0
+            fi
+            if [[ ! -f docs/ai-studio-tasks/MEGA_15_16_PROGRESS.md ]]; then
+              echo "::error::MEGA-$wave: missing durable progress ledger"
+              return 1
+            fi
+            for file in "$@"; do
+              if [[ ! -f "$file" ]]; then
+                echo "::error::MEGA-$wave: missing required file $file"
+                return 1
+              fi
+            done
+            echo "MEGA-$wave: SUBMITTED_UNVERIFIED"
+          }
+          check_wave 15 \
+            src/vip_lab/mega15/__init__.py \
+            src/vip_lab/mega15/temporal_preflight.py \
+            src/vip_lab/mega15/editorial_handoff.py \
+            src/vip_lab/mega15/lineage.py \
+            tests/vip_lab/test_mega15.py
+          check_wave 16 \
+            src/vip_lab/mega16/__init__.py \
+            src/vip_lab/mega16/render_preflight.py \
+            src/vip_lab/mega16/qc_requirements.py \
+            src/vip_lab/mega16/release_refusal.py \
+            src/vip_lab/mega16/cli.py \
+            tests/vip_lab/test_mega16.py \
+            tests/vip_lab/test_mega15_16_end_to_end.py
+          if [[ -f tests/vip_lab/test_mega15_16_end_to_end.py && ! -f docs/ai-studio-tasks/MEGA_15_16_DEFERRED_REAL_PILOT_PREREQUISITES.md ]]; then
+            echo "::error::MEGA-15–16: missing deferred real-pilot prerequisites"
+            exit 1
+          fi
+
+      - name: Test MEGA-15 temporal/editorial synthetic preflight
+        id: mega15
+        if: ${{ always() && hashFiles('tests/vip_lab/test_mega15.py') != '' }}
+        continue-on-error: true
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q tests/vip_lab/test_mega15.py
+
+      - name: Test MEGA-16 render/QC refusal preflight
+        id: mega16
+        if: ${{ always() && hashFiles('tests/vip_lab/test_mega16.py') != '' }}
+        continue-on-error: true
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q tests/vip_lab/test_mega16.py
+
+      - name: Test MEGA-15–16 generated-only end-to-end contract
+        id: mega1516e2e
+        if: ${{ always() && hashFiles('tests/vip_lab/test_mega15_16_end_to_end.py') != '' }}
+        continue-on-error: true
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q tests/vip_lab/test_mega15_16_end_to_end.py
+
+      - name: Enforce submitted MEGA-15–16 wave outcomes
+        if: always()
+        shell: bash
+        env:
+          M1516_COMPLETE: ${{ steps.mega1516complete.outcome }}
+          M15: ${{ steps.mega15.outcome }}
+          M16: ${{ steps.mega16.outcome }}
+          M1516_E2E: ${{ steps.mega1516e2e.outcome }}
+        run: |
+          set -euo pipefail
+          echo "M1516_COMPLETE=$M1516_COMPLETE"
+          echo "M15=$M15"
+          echo "M16=$M16"
+          echo "M1516_E2E=$M1516_E2E"
+          for outcome in "$M1516_COMPLETE" "$M15" "$M16" "$M1516_E2E"; do
+            if [[ "$outcome" == "failure" ]]; then
+              echo "::error::MEGA-15–16 submitted wave or completeness FAILED"
+              exit 1
+            fi
+          done
+          echo "No submitted MEGA-15–16 suite failed. SKIPPED waves are NOT verified."
