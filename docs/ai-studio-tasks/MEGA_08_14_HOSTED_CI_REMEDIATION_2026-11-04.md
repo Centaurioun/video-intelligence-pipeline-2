@@ -124,3 +124,34 @@ Stop after this repair. Do not invent another MEGA feature batch.
 \`IMPLEMENTED_UNVERIFIED\` until the named new tests genuinely run and PASS on both hosted Python versions. \`HOSTED_SYNTHETIC_VERIFIED\` requires all seven wave suites actually executed, prior 307 test baseline retained, no unrelated deletions and independent review separately recorded. Neither status implies authentic model performance, actual real-media source measurements, human decision, production export or canonical Gate acceptance.
 
 Report in Turkish with exact changed paths, real source API assumptions corrected, positive/refusal tests, any remaining blocker, CI run SHA and status, and safe continuation.
+
+
+## 9. Phase B independent audit addendum — exact source-contract corrections
+
+**Review evidence:** independent audit branch \`codex/audit-mega08-14-20261104\`, commit \`ecc873794cb49ad0d79e4bf97bc0e13fc8938cbf\`, file \`docs/audits/mega08-14/PHASE_B_FINDINGS_2026-11-04.md\`. Audit disposition: \`CHANGES_REQUESTED\`. This review is SOURCE_INSPECTED plus cited hosted CI, **not** a locally executed test and **not** a successful remediation.
+
+**Newly confirmed P1 (MEGA-12) — Measurement API mismatch in production code.** Review \`src/vip_lab/mega12/consistency_review.py\` before repairing M12/M13/M14. The file currently uses invalid forms such as \`Measurement(name=..., evidence="MEASURED", source=...)\`, \`Measurement.not_observed(name=..., unit=..., source=...)\`, and \`mset.as_dict()\`. These are NOT canonical API calls, and their errors can be masked by the earlier failing WorkloadSpec fixture.
+
+Current \`src/gate2/measure.py\` defines:
+- \`Measurement(metric_id, unit, value, evidence_class, derivation, reason=None)\`.
+- \`Measurement.measured(*, metric_id, value, unit, derivation, evidence_class="MEASURED")\` with numeric finite value.
+- \`Measurement.not_observed(*, metric_id, reason)\`.
+- \`MeasurementSet.add(Measurement)\` and \`MeasurementSet.to_dict()\`, NOT \`as_dict()\`.
+- \`NOT_OBSERVED\` is a state marker, never a sixth assertion evidence class.
+
+**Required repair:** replace invalid calls with these actual factory methods and \`to_dict()\`; verify the shape/serializer against source text and add tests that reach \`build_synthetic_recovery_measurement_set\` AFTER fixing WorkloadSpec and RecoveryHarness. Do not patch \`src/gate2/measure.py\`, add aliases to canonical types, or turn failures into blanket success.
+
+**P2 (evidence interpretation) — distinguish true numeric fixture observations from authentic archive metrics.** The word \`MEASURED\` can legitimately describe a *numeric observation within a generated synthetic test*, but ONLY if the structured record and every downstream consumer preserve that origin. Its meaning must never be silently upgraded into real archive measurement or real source-native PTS evidence.
+
+Define a machine-checkable generated-only provenance context in the LAB-owned summary, e.g. \`observation_domain="SYNTHETIC_FIXTURE_ONLY"\`, with exact source/derivation on each synthetic numeric counter and \`real_archive_metrics_status="NOT_OBSERVED"\`; do not claim these are canonical schema fields. For aggregate stage readiness, conservatively use \`evidence_state=NOT_OBSERVED\` when real-world measurement evidence is absent, while separate genuine synthetic fixture counters may be \`Measurement.measured(..., evidence_class="MEASURED")\` if fully source-qualified. Avoid conflating these levels.
+
+Add adversarial regression tests:
+1. Valid generated-only counters serialize under \`measurements.measured\` with explicit origin/derivation.
+2. Archive throughput, archive reliability, protected media, authentic model performance and production scale stay in \`measurements.not_observed\` and cannot be promoted by untrusted caller flags.
+3. Overall M12/M13/M14 packets never assert real source \`MEASURED\`, successful Gate-2 scale evidence, model provenance, source-native actual PTS, actual human decision or export authorization from synthetic counters.
+4. Incorrect \`Measurement\` kwargs and \`MeasurementSet.as_dict()\` never remain in production source.
+5. Hosted CI exercises these test cases on Python 3.11 **and** 3.14; old 307, M09/M10/M11 remain green.
+
+**Workflow sequencing:** fix the M14 import, then the complete M12 \`WorkloadSpec\`+\`RecoveryHarness\`+\`Measurement\` chain, M13 consumer fixtures, M08 source-vs-advisory path model, M14 true synthetic end-to-end. Continue reporting each new CI failure from its exact candidate SHA rather than assuming this list is exhaustive.
+
+**Reference state at addendum:** LAB main \`46cedd19512b8b30ac99d169908ce6716d65c165\`, original protected VIP unchanged. No code/test remediation commit yet; this appendix is DOCUMENTATION ONLY. A new CI run from a docs-only commit is not evidence that the listed defects are repaired.
