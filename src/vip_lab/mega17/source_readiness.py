@@ -140,7 +140,8 @@ def build_closed_synthetic_d2_fixture_payload() -> dict[str, Any]:
         "sessions": [
             {"session_id": "sess-ballet-01", "duration_minutes": 30},
             {"session_id": "sess-dance-02", "duration_minutes": 30},
-            {"session_id": "sess-theatre-03", "duration_minutes": 25},
+            {"session_id": "sess-theatre-03", "duration_minutes": 13},
+            {"session_id": "sess-development-04", "duration_minutes": 12},
         ],
         "revisions": [
             {
@@ -180,7 +181,7 @@ def build_closed_synthetic_d2_fixture_payload() -> dict[str, Any]:
             },
             {
                 "revision_id": "rev-dev-06",
-                "session_id": "sess-theatre-03",
+                "session_id": "sess-development-04",
                 "duration_minutes": 12,
                 "split": "DEVELOPMENT",
                 "families": families_sorted,
@@ -398,6 +399,25 @@ def _default_identity_custody_entries() -> tuple[SourceIdentityCustodyEntry, ...
     )
 
 
+def _partition_overlap_by_identity_dimension(
+    partition_check: Mapping[str, Any],
+) -> dict[str, list[str]]:
+    overlap_by_dimension: dict[str, list[str]] = {}
+    for dimension in ("session", "revision", "content", "query", "query_text"):
+        dev_ids = {
+            str(x)
+            for x in partition_check.get(f"development_{dimension}_ids", ())
+        }
+        eval_ids = {
+            str(x)
+            for x in partition_check.get(f"evaluation_{dimension}_ids", ())
+        }
+        overlap = sorted(dev_ids & eval_ids)
+        if overlap:
+            overlap_by_dimension[dimension] = overlap
+    return overlap_by_dimension
+
+
 def _build_owner_input_requirements() -> dict[str, Any]:
     pending_evidence = [
         {"field_id": f.field_id, "title": f.title, "validator": f.validator}
@@ -439,9 +459,41 @@ def build_source_readiness_packet() -> SourceReadinessPacket:
         )
 
     entries = _default_identity_custody_entries()
-    eval_shas = {e.source_sha256 for e in entries if e.partition_split == "EVALUATION"}
-    dev_shas = {e.source_sha256 for e in entries if e.partition_split == "DEVELOPMENT"}
-    disjoint = eval_shas.isdisjoint(dev_shas)
+    corpus = d2_payload["artifacts"]["corpus-designation.json"]
+    query_rows = d2_payload["artifacts"]["editor-queries.json"]["queries"]
+    revision_rows = corpus["revisions"]
+    dev_revisions = [row for row in revision_rows if row["split"] == "DEVELOPMENT"]
+    eval_revisions = [row for row in revision_rows if row["split"] == "EVALUATION"]
+    dev_queries = [row for row in query_rows if row["split"] == "DEVELOPMENT"]
+    eval_queries = [row for row in query_rows if row["split"] == "EVALUATION"]
+    partition_overlap = _partition_overlap_by_identity_dimension(
+        {
+            "development_session_ids": [row["session_id"] for row in dev_revisions],
+            "evaluation_session_ids": [row["session_id"] for row in eval_revisions],
+            "development_revision_ids": [row["revision_id"] for row in dev_revisions],
+            "evaluation_revision_ids": [row["revision_id"] for row in eval_revisions],
+            "development_content_ids": [
+                entry.source_content_id
+                for entry in entries
+                if entry.partition_split == "DEVELOPMENT"
+            ],
+            "evaluation_content_ids": [
+                entry.source_content_id
+                for entry in entries
+                if entry.partition_split == "EVALUATION"
+            ],
+            "development_query_ids": [row["query_id"] for row in dev_queries],
+            "evaluation_query_ids": [row["query_id"] for row in eval_queries],
+            "development_query_text_ids": [row["text"] for row in dev_queries],
+            "evaluation_query_text_ids": [row["text"] for row in eval_queries],
+        }
+    )
+    disjoint = not partition_overlap
+    if not disjoint:
+        raise VipLabError(
+            "WORKSTREAM_B_SYNTHETIC_PARTITION_LEAKAGE",
+            f"Synthetic D-2 fixture overlaps across DEVELOPMENT and EVALUATION identities: {partition_overlap}",
+        )
 
     permission_matrix = {
         PERMISSION_DISCOVER_SOURCES: "SYNTHETIC_FIXTURE_ONLY",
@@ -616,18 +668,16 @@ def inspect_source_and_d2_readiness(
 
     partition_check = cleaned.get("partition_check")
     if isinstance(partition_check, Mapping):
-        dev_revs = {str(x) for x in partition_check.get("development_revision_ids", ())}
-        eval_revs = {str(x) for x in partition_check.get("evaluation_revision_ids", ())}
-        overlap = sorted(dev_revs & eval_revs)
-        if overlap:
+        overlap_by_dimension = _partition_overlap_by_identity_dimension(partition_check)
+        if overlap_by_dimension:
             blockers.append(REFUSAL_DEV_EVAL_PARTITION_LEAKAGE)
             reasons.append(REFUSAL_DEV_EVAL_PARTITION_LEAKAGE)
             findings.append(
                 ReadinessFinding(
                     code=REFUSAL_DEV_EVAL_PARTITION_LEAKAGE,
                     status=ReadinessStatus.BLOCKED,
-                    message=f"DEVELOPMENT and EVALUATION partitions share revision IDs: {overlap}",
-                    details={"overlapping_revisions": overlap},
+                    message="DEVELOPMENT and EVALUATION partitions share source or query identities.",
+                    details={"overlap_by_dimension": overlap_by_dimension},
                 )
             )
 

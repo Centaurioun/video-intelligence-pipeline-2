@@ -25,6 +25,7 @@ And tracks the 6 maturity levels (Section 12):
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -34,13 +35,20 @@ from vip_lab.common import (
     ReadinessFinding,
     ReadinessPacket,
     ReadinessStatus,
-     sanitize_untrusted_authority_claims,
+    VipLabError,
+    sanitize_untrusted_authority_claims,
     canonical_sha256,
 )
 from vip_lab.mega14.scenario import (
     SyntheticLabScenario,
     default_three_arm_scenario,
     parse_e2e_scenario_mapping,
+)
+from vip_lab.mega14.orchestrator import (
+    ARM_VIP_V1_BASE,
+    ARM_VIP_V2_BASE,
+    ARM_VIP_V2_SO400M,
+    PROFILE_ID_TO_ARM,
 )
 from vip_lab.mega16.release_refusal import run_mega15_16_offline_pipeline
 from vip_lab.mega17.canonical_integration import (
@@ -77,6 +85,82 @@ MATURITY_LEVELS: tuple[str, ...] = (
     "M4_AUTHORIZED_LOCAL_VALIDATED",
     "M5_GATE_EVIDENCE_COMPLETE",
 )
+
+
+def _validate_mega15_16_scenario_lineage(
+    scenario: SyntheticLabScenario,
+    preparation_packet: Any,
+) -> None:
+    """Require complete query/source/arm membership for the selected scenario."""
+    query_rows = preparation_packet.query_identities
+    occurrence_rows = preparation_packet.occurrence_identities
+    temporal_records = preparation_packet.temporal_records
+
+    query_by_item = {
+        row["queue_item_id"]: (row["query_id"], row["query_text"])
+        for row in query_rows
+    }
+    occurrence_by_item = {
+        row["queue_item_id"]: (
+            row["revision_id"],
+            row["content_id"],
+            row["source_path"],
+            row["source_sha256"],
+        )
+        for row in occurrence_rows
+    }
+    arm_by_item = {
+        record.queue_item_id: record.arm_id for record in temporal_records
+    }
+    item_ids = set(query_by_item)
+    actual_arms = set(arm_by_item.values())
+    expected_arms = (
+        {PROFILE_ID_TO_ARM[scenario.single_arm_profile_id]}
+        if scenario.mode == "SINGLE_ARM"
+        else {ARM_VIP_V1_BASE, ARM_VIP_V2_BASE, ARM_VIP_V2_SO400M}
+    )
+
+    if (
+        len(query_by_item) != len(query_rows)
+        or len(occurrence_by_item) != len(occurrence_rows)
+        or len(arm_by_item) != len(temporal_records)
+        or set(occurrence_by_item) != item_ids
+        or set(arm_by_item) != item_ids
+        or actual_arms != expected_arms
+    ):
+        raise VipLabError(
+            "MEGA17_UPSTREAM_SCENARIO_MISMATCH",
+            "MEGA-15/16 queue-item, query, occurrence, or arm lineage is incomplete or duplicated.",
+        )
+
+    actual_membership = Counter(
+        (
+            query_by_item[item_id],
+            occurrence_by_item[item_id],
+            arm_by_item[item_id],
+        )
+        for item_id in item_ids
+    )
+    expected_membership = Counter(
+        (
+            (str(query["query_id"]), str(query["text"])),
+            (
+                str(source["revision_id"]),
+                str(source["content_id"]),
+                str(source["source_path"]),
+                str(source["source_sha256"]),
+            ),
+            arm_id,
+        )
+        for query in scenario.queries
+        for source in scenario.sources[: scenario.top_k]
+        for arm_id in expected_arms
+    )
+    if actual_membership != expected_membership:
+        raise VipLabError(
+            "MEGA17_UPSTREAM_SCENARIO_MISMATCH",
+            "MEGA-15/16 candidate lineage does not preserve the scenario's complete query/source/arm membership.",
+        )
 
 
 @dataclass(frozen=True)
@@ -153,7 +237,9 @@ def run_mega17_product_readiness_chain(
     )
 
     # Run upstream MEGA-14/15/16 offline pipeline once so Workstreams D and E share the exact same lineage
-    mega15_16_rep = run_mega15_16_offline_pipeline()
+    mega15_16_rep = run_mega15_16_offline_pipeline(scenario=scen)
+    upstream_packet = mega15_16_rep.preparation_packet
+    _validate_mega15_16_scenario_lineage(scen, upstream_packet)
 
     ws_a = build_canonical_integration_readiness(root_path)
     ws_b = build_source_readiness_packet()
