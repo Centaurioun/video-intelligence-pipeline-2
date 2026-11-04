@@ -226,3 +226,103 @@ Superpowers:
 See the **next appended sections** for the two exact latest prepared prompts: combined Google AI Studio MEGA-15/16 implementation and local Codex Projects V2 issue linking. Their presence in GitHub is only an archival copy; there is **no confirmed evidence they were sent or executed**.
 
 **Next ChatGPT first answer should be a short live-state verification in Turkish and then proceed with the Owner's new message. No reflexive new MEGA task.**
+
+
+## 11. LAST PREPARED GOOGLE AI STUDIO PROMPT — MEGA-15 + MEGA-16
+
+**Historical prompt status:** prepared for the Owner; actual delivery/execution by Google AI Studio NOT_OBSERVED at this checkpoint. Version and SHA below were verified at prompt authoring. Recheck live main before reissuing; if already submitted, do NOT duplicate work.
+
+\`\`\`text
+VIDEO INTELLIGENCE PIPELINE — MEGA-15 + MEGA-16
+
+Execute the complete engineering program:
+
+docs/ai-studio-tasks/MEGA_15_16_GATE3_OFFLINE_PREPARATION_PROGRAM.md
+
+Required version: LAB-MEGA-15-16-v1.0.0
+
+Verified starting LAB main:
+f0d06caa7ce1fd04c36d3edb1eb4df7e805f5eb7
+
+Implement MEGA-15 and MEGA-16 as ONE comprehensive assignment.
+
+Primary objectives
+
+MEGA-15: Gate-3 source-native temporal preparation, editorial handoff, lineage validation and fail-closed refusal boundaries.
+
+MEGA-16: Render/export/QC preflight infrastructure, readiness reports, technical and editorial evidence requirements, and synthetic end-to-end integration.
+
+Reuse existing Gate-3 and vip_fvs implementations. Do not duplicate established PTS, human-decision, edit-plan, FFmpeg or QC engines.
+
+Explicitly deferred
+
+Do not perform real video processing, real source inventory, real model inference, benchmark evaluation, human editorial evaluation, actual render/export or Gate promotion.
+
+Prepare only the prerequisites for roadmap steps 2, 3 and 4. Preserve every missing human or source measurement as NOT_OBSERVED.
+
+Development requirements
+
+Follow the full specification, six refinement cycles, test-first source authoring, adversarial tests, exact source contracts and strict authorization boundaries.
+
+Do not modify the original VIP repository, canonical Gate modules, existing MEGA-03–14 code, or GitHub Actions.
+
+Write all required MEGA-15/16 Python modules, tests, cross-wave integration and progress documents.
+
+Do not run pytest or access real media, FFmpeg, models, providers or network services in AI Studio.
+
+When publishing to LAB main, preserve all existing files, especially the six src/gate0/media dependency modules. Report any unexpected deletion.
+
+Do not claim completion until the new suites actually pass hosted CI on Python 3.11 and 3.14.
+
+At the end, respond in Turkish with implemented capabilities, tests authored, reused source contracts, unresolved blockers and exact continuation point.
+
+Begin the complete assignment now.
+\`\`\`
+
+## 12. LAST PREPARED LOCAL CODEX PROMPT — GITHUB PROJECTS V2
+
+**Historical prompt status:** prepared for the Owner, not independently confirmed to have been executed. Requires a local authenticated GitHub CLI/GraphQL environment with Projects V2 permissions. Only Project items/fields are in scope, not source code.
+
+\`\`\`text
+Update the existing GitHub Projects V2 board:
+
+https://github.com/users/Centaurioun/projects/2
+
+Repository:
+Centaurioun/video-intelligence-pipeline
+
+Read Issue #236 and its latest project-triage comment.
+
+Add the following existing issues to Project #2, only if not already linked:
+
+- #260 — Backlog, P2, Orchestration, PENDING
+- #261 — Backlog, P3, Ideas, NOT_OBSERVED
+- #262 — Backlog, P3, Security/Policy, NOT_OBSERVED
+
+Use authenticated GitHub CLI / GraphQL Projects V2 functionality.
+
+Do not duplicate project items, create new issues, modify application code, change canonical Gate states or modify project configuration beyond the specified items and fields.
+
+Verify the three actual project item IDs, statuses and field values.
+
+If your authentication lacks project permissions, report the exact blocker without claiming success.
+
+Respond briefly in Turkish.
+\`\`\`
+
+## 13. INDEPENDENT REVIEW AND HISTORICAL PROMPT SAFETY
+
+Prior MEGA-12/14 bugfix prompts about \`SimulatedCrash\`, \`WorkloadSpec\`, \`FaultClass\`, fake \`Measurement\` promotion and \`concurrency\` are **historical/superseded** after the 350/350 genuine hosted CI at \`9bdd810...\`. Their authoritative remediation design/progress texts are in \`docs/ai-studio-tasks/MEGA_08_14_HOSTED_CI_REMEDIATION_2026-11-04.md\` and \`MEGA_08_14_PROGRESS.md\`. Do NOT run old remediation prompts merely because they are preserved.
+
+**Independent Codex MEGA-08–14 Phase C remains pending,** and it must verify the final 350-test SHA and actual code diff, not reapply old pre-remediation findings. **MEGA-15/16 has no authored code** at this handoff. Never treat docs-only commits or old CI runs as evidence of a future task.
+
+### Suggested minimal prompt for the next NEW ChatGPT instance
+
+\`\`\`text
+Video Intelligence Pipeline projesine bu GitHub handoff'unu eksiksiz okuyarak devam et:
+https://github.com/Centaurioun/video-intelligence-pipeline-2/blob/main/docs/project/2026-11-04_CHATGPT_HANDOFF_POST_MEGA14_PRE_MEGA15_16.md
+
+Önce orijinal VIP ve LAB depolarının güncel main, açık PR, GitHub Actions ve Projects durumlarını bağımsız doğrula. Handoff'taki çalışma şeklini, MEGA-08–14 kanıt sınırlarını, MEGA-15/16 planını, Google AI Studio/Codex iş bölüşümünü ve tüm yetki kurallarını koru. Benimle Türkçe konuş; önceki soruları tekrar sorma. Şimdilik yeni Codex promptu üretme. Bir sonraki sonucumu verdiğimde kaldığımız noktadan devam et.
+\`\`\`
+
+**End of dated handoff. The next model must verify live mutable facts again.**
