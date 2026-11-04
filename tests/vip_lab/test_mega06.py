@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from gate2.faults import Capability, FaultClass, capability
 from vip_lab.common import ReadinessStatus
 from vip_lab.mega06 import (
     inspect_measurement_review,
@@ -69,7 +70,18 @@ class TestMega06RecoveryMatrix:
         assert pkt.summary["resume_run"]["recomputed_count"] == 0
         assert pkt.summary["resume_run"]["corrupted_count"] == 0
         assert pkt.summary["fault"]["fault_class"] == "c"
-        assert pkt.summary["fault"]["detected"] is True
+        assert capability(FaultClass.C_PARTIAL_ARTIFACT) is Capability.NOT_YET_HARNESSED
+        assert pkt.summary["fault"]["capability"] == Capability.NOT_YET_HARNESSED.value
+        assert pkt.summary["fault"]["detected"] is False
+
+        harnessed = inspect_recovery_scenario(
+            {
+                "workload": _make_workload_spec_dict(),
+                "fault_class": FaultClass.A_BEFORE_STAGE_START.name,
+            }
+        )
+        assert harnessed.summary["fault"]["capability"] == Capability.HARNESSED.value
+        assert harnessed.summary["fault"]["detected"] is True
 
     def test_tampered_binding_or_corrupt_artifact_refused_fail_closed(self) -> None:
         tampered_pkt = inspect_recovery_scenario(

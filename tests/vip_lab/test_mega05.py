@@ -81,8 +81,8 @@ class TestMega05ModelAssetClaims:
         claims[0]["semantic_space_id"] = "shared_768d_space"
         claims[1]["semantic_space_id"] = "shared_768d_space"
         collision_pkt = inspect_model_asset_claims({"profiles": claims})
-        assert collision_pkt.status == ReadinessStatus.BLOCKED
-        assert "MODEL_PROFILE_CROSS_SPACE_COLLISION" in collision_pkt.blockers
+        assert collision_pkt.status == ReadinessStatus.INVALID
+        assert "MODEL_PROFILE_SEMANTIC_SPACE_ID_MISMATCH" in collision_pkt.blockers
 
         dl_claims = _make_three_arm_claims()
         dl_claims[2]["allow_download"] = True

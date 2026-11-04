@@ -1,5 +1,21 @@
 # MEGA-03 → MEGA-07 Combined Synthetic Implementation Progress Ledger
 
+## 2026-11-04 Codex remediation execution record
+
+- LAB main before remediation: `daea9ed82449807f2799323ffd458613639479fe` (verified clean after fast-forward from prior local `b71875eabab6db066907bdd4b2c112fe03a6148e`; `origin/main` matched).
+- Isolated feature lane: `codex/lab-mega03-07-remediation`, base `daea9ed82449807f2799323ffd458613639479fe`; canonical `main` was not used for edits.
+- Protected repository `Centaurioun/video-intelligence-pipeline`: not accessed or modified.
+- Failure run: [Actions 41754031739](https://github.com/Centaurioun/video-intelligence-pipeline-2/actions/runs/41754031739), run SHA `daea9ed82449807f2799323ffd458613639479fe`, Python 3.11.18 and 3.14.9. Per-version results: existing baseline `146 + 39 + 82 = 267 PASS`; MEGA-03 `13 PASS`; MEGA-07 `6 PASS`; MEGA-04 collection error; MEGA-05 `4 FAILED / 1 PASSED`; MEGA-06 collection error; PX cross-gate and CLI each collection error. Final aggregate failure followed these suite outcomes.
+- Independent failure causes from job logs: MEGA-04 and PX could not import `gate0.media`; MEGA-05 indexed the `SemanticSpace` dataclass as a dict (three failed tests) and accepted a caller-forged shared space ID as canonical (one failed test); MEGA-06 import-time references named nonexistent `FaultClass` members; MEGA-07 and the 267 + 13 protected test counts passed on this run.
+- Six requested files under `src/gate0/media/` restored only from `eafdde0cc60fd24f1b55fc47bfdd98789726521e`; each working blob ID was compared with that source tree and matched byte-for-byte.
+- Contract review confirmed `D2_FIELDS` has 30 `D2FieldSpec` entries; `build_queries` takes 3-tuples; `build_gold_events` takes separate reviewer rows and keyword-only `reviewer_count`; reviewer-envelope builder/validator receive `token_map`, `mapping_version`, and `config_digest` as keyword-only arguments. The current MEGA-04 adapter/test fixtures already use those shapes; canonical Gate-0 source remains unchanged.
+- MEGA-05 implementation and regression: `profile_semantic_space()` returns `SemanticSpace`; canonical `semantic_space_id()` now computes identity, and a mismatching caller declaration is invalid. Synthetic profile execution remains unauthorized.
+- MEGA-06 implementation and regression: removed references to nonexistent enum members and stale aliases; accepts actual `FaultClass` names/values and reports actual `Capability` states. `C_PARTIAL_ARTIFACT` is explicitly `NOT_YET_HARNESSED`; a bounded `A_BEFORE_STAGE_START` fixture covers `HARNESSED` behavior.
+- Local `pytest`: `NOT_EXECUTED` because the available Python 3.14 runtime has no pytest installed; no dependency installation was performed. Targeted `compileall` and `git diff --check`: `PASS` (static checks only, not behavioral evidence).
+- Pre-push workspace verifier: `FAILED` with 26 repository-wide pre-existing LAB-snapshot omissions (historical reports/reference-pack/prototype files absent from this branch); no missing files were copied. Its staged-file high-confidence secret scan reported no matches. `scripts/verify-workspace.sh` is non-executable in this checkout and was invoked through `bash`.
+- Current remediation disposition pending hosted verification: MEGA-04 `IMPLEMENTED_UNVERIFIED` (restore unblocks import; hosted retest required); MEGA-05 `IMPLEMENTED_UNVERIFIED`; MEGA-06 `IMPLEMENTED_UNVERIFIED`; MEGA-07 `VERIFIED` only for the six tests on run 41754031739; PX `IMPLEMENTED_UNVERIFIED` pending full rerun. MEGA-03 `VERIFIED` only for 13 tests on that run; prior baseline `VERIFIED` only for 267 tests on that run.
+- Remediation candidate commit and hosted rerun: `NOT_EXECUTED` at this checkpoint. No merge, Gate promotion, media access, model/provider activity, or video rendering occurred.
+
 - **Program Version:** `LAB-MEGA-03-07-v1.1.0`
 - **Active Remediation Spec:** `LAB-MEGA-03-07-REMEDIATION-v1.0` (`docs/ai-studio-tasks/MEGA_03_07_CI_REMEDIATION_2026-11-04.md`)
 - **Target Experimental Repository:** `https://github.com/Centaurioun/video-intelligence-pipeline-2`

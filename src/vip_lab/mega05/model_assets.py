@@ -27,6 +27,7 @@ from vip_fvs.synthetic_profiles import (
     build_synthetic_profile_runtime,
     make_synthetic_profile,
 )
+from persistent_local_index.model_space import semantic_space_id
 
 from ..common import (
     NOT_OBSERVED,
@@ -243,8 +244,20 @@ def _inspect_single_asset_claim(
         )
         return None, findings, blockers
 
-    sem_space_dict = profile_semantic_space(candidate_prof)
-    sem_space = str(claim.get("semantic_space_id") or sem_space_dict["space_id"])
+    semantic_space = profile_semantic_space(candidate_prof)
+    sem_space = semantic_space_id(semantic_space)
+    claimed_sem_space = claim.get("semantic_space_id")
+    if claimed_sem_space is not None and claimed_sem_space != sem_space:
+        code = "MODEL_PROFILE_SEMANTIC_SPACE_ID_MISMATCH"
+        blockers.append(code)
+        findings.append(
+            ReadinessFinding(
+                code=code,
+                status=ReadinessStatus.INVALID,
+                message="Declared semantic_space_id does not match the canonical profile identity",
+                field_path=f"{path_prefix}.semantic_space_id",
+            )
+        )
     row_bytes = profile_row_width_bytes(candidate_prof)
 
     info = {

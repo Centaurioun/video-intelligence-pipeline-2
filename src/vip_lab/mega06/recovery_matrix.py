@@ -30,24 +30,6 @@ from ..common import (
 
 STAGE_ID = "MEGA-06.RECOVERY_MATRIX"
 
-_FAULT_CLASS_ALIASES: dict[str, FaultClass] = {
-    "PARTIAL_WRITE": FaultClass.C_AFTER_COMPUTE_BEFORE_PERSIST,
-    "BEFORE_STAGE_START": FaultClass.A_BEFORE_STAGE_START,
-    "DURING_DECODE": FaultClass.B_DURING_DECODE,
-    "AFTER_COMPUTE_BEFORE_PERSIST": FaultClass.C_AFTER_COMPUTE_BEFORE_PERSIST,
-    "ORPHAN_PAYLOAD": FaultClass.D_ORPHAN_PAYLOAD,
-    "INDEX_SQLITE_DIVERGENCE": FaultClass.E_INDEX_SQLITE_DIVERGENCE,
-    "STALE_LOCK": FaultClass.F_STALE_LOCK,
-    "DUPLICATE_DELIVERY": FaultClass.G_DUPLICATE_DELIVERY,
-    "INTERRUPTED_RECOVERY": FaultClass.H_INTERRUPTED_RECOVERY,
-    "CORRUPT_AT_REST": FaultClass.I_CORRUPT_AT_REST,
-    "SCHEMA_MISMATCH": FaultClass.J_SCHEMA_MISMATCH,
-    "PARTIAL_BATCH": FaultClass.K_PARTIAL_BATCH,
-    "OUT_OF_ORDER_COMPLETION": FaultClass.L_OUT_OF_ORDER_COMPLETION,
-    "DUPLICATE_INSERT": FaultClass.M_DUPLICATE_INSERT,
-}
-
-
 class _SimulatedInterruptionError(RuntimeError):
     """Raised by the synthetic adapter to simulate mid-run interruption."""
 
@@ -109,34 +91,31 @@ class _SyntheticRecoveryAdapter:
 
 def _resolve_fault_class(raw_name: str) -> FaultClass:
     cleaned_name = raw_name.strip()
-    if cleaned_name in _FAULT_CLASS_ALIASES:
-        return _FAULT_CLASS_ALIASES[cleaned_name]
     if cleaned_name.upper() in FaultClass.__members__:
         return FaultClass[cleaned_name.upper()]
-    return FaultClass(cleaned_name.lower())
+    return FaultClass(cleaned_name)
 
 
 def _default_fault_payload(fc: FaultClass) -> dict[str, Any]:
-    if fc in (
-        FaultClass.A_BEFORE_STAGE_START,
-        FaultClass.B_DURING_DECODE,
-        FaultClass.C_AFTER_COMPUTE_BEFORE_PERSIST,
-        FaultClass.F_STALE_LOCK,
-        FaultClass.G_DUPLICATE_DELIVERY,
-        FaultClass.H_INTERRUPTED_RECOVERY,
-        FaultClass.K_PARTIAL_BATCH,
-        FaultClass.L_OUT_OF_ORDER_COMPLETION,
-    ):
-        return {"completed": ["op_0"], "inflight": "op_1"}
-    if fc == FaultClass.D_ORPHAN_PAYLOAD:
-        return {"manifest_refs": ["ref_0"], "payloads": ["ref_0", "orphan_1"]}
-    if fc == FaultClass.E_INDEX_SQLITE_DIVERGENCE:
-        return {"sqlite_ids": ["id_0"], "matrix_ids": ["id_0", "extra_1"]}
+    if fc is FaultClass.A_BEFORE_STAGE_START:
+        return {"predecessor_succeeded": False}
+    if fc is FaultClass.E_REPEATED_IDEMPOTENCY_KEY:
+        return {"second_submission": True}
+    if fc is FaultClass.F_RESTART_RECONSTRUCTION:
+        return {"decision_vector_a": "first", "decision_vector_b": "second"}
+    if fc is FaultClass.H_INTERRUPTED_RECOVERY:
+        return {"interruption_observed": True, "recovery_swallowed": False}
     if fc == FaultClass.I_CORRUPT_AT_REST:
-        return {"digest": "0" * 64, "bytes": "corrupted-checkpoint-bytes"}
-    if fc == FaultClass.J_SCHEMA_MISMATCH:
-        return {"declared_version": 1, "expected_version": 2}
-    return {"duplicate_keys": ["dup_key_0"]}
+        return {"payload": "not-json"}
+    if fc is FaultClass.J_POST_SUCCESS_INVALIDATION:
+        return {"chain": ["AVAILABLE", "CLEANED"]}
+    if fc is FaultClass.K_IDENTITY_DRIFT:
+        return {"sealed_digest": "a" * 64, "observed_digest": "b" * 64}
+    if fc is FaultClass.L_CONCURRENT_WRITER:
+        return {"writers": ["writer-a", "writer-b"]}
+    if fc is FaultClass.M_REFERENTIAL_DIVERGENCE:
+        return {"attempts": [], "referenced_attempt_ids": ["missing"]}
+    return {}
 
 
 def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
@@ -245,7 +224,7 @@ def inspect_recovery_scenario(payload: Mapping[str, Any]) -> ReadinessPacket:
                 "fault_class": fc.value,
                 "fault_class_name": fc.name,
                 "requested_fault_class": str(fault_class_name),
-                "capability": cap,
+                "capability": cap.value,
                 "disposition": inj.disposition,
                 "detected": inj.detected,
                 "payload_digest": inj.payload_digest,
