@@ -543,11 +543,14 @@ jobs:
           echo "No submitted MEGA-15–16 suite failed. SKIPPED waves are NOT verified."
 
       - name: Verify and run all MEGA-17 synthetic acceptance suites
+        id: mega17
+        if: always()
+        continue-on-error: true
         env:
           PYTHONPATH: src:experiments:scripts
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
-          set -euo pipefail
+          set -uo pipefail
           suites=(
             tests/vip_lab/test_mega17_editorial_readiness.py
             tests/vip_lab/test_mega17_end_to_end.py
@@ -556,34 +559,66 @@ jobs:
             tests/vip_lab/test_mega17_release_readiness.py
             tests/vip_lab/test_mega17_source_readiness.py
           )
+          suite_preflight_status=0
           for suite in "${suites[@]}"; do
             if [[ ! -f "$suite" ]]; then
               echo "::error::MEGA-17 acceptance suite is missing: $suite"
-              exit 1
+              suite_preflight_status=2
             fi
           done
-          report="$RUNNER_TEMP/mega17-junit.xml"
+          collection="$RUNNER_TEMP/mega17-collection.txt"
+          report="$RUNNER_TEMP/lab-synthetic-junit.xml"
+          set +e
+          python -m pytest --collect-only -q "${suites[@]}" > "$collection"
+          collection_status=$?
           python -m pytest -q --junitxml="$report" "${suites[@]}"
-          python - "$report" "${suites[@]}" <<'PY'
+          pytest_status=$?
+          set -e
+          effective_status="$pytest_status"
+          if [[ "$collection_status" -ne 0 ]]; then effective_status="$collection_status"; fi
+          if [[ "$suite_preflight_status" -ne 0 ]]; then effective_status="$suite_preflight_status"; fi
+          echo "collection_exit_status=$collection_status" >> "$GITHUB_OUTPUT"
+          echo "pytest_exit_status=$pytest_status" >> "$GITHUB_OUTPUT"
+          echo "exit_status=$effective_status" >> "$GITHUB_OUTPUT"
+
+      - name: Create LAB synthetic receipt
+        if: always()
+        env:
+          LAB_JOB_ID: gate1-synthetic-${{ matrix.python-version }}
+        run: |
+          python scripts/lab_synthetic_receipt.py create \
+            --collection "$RUNNER_TEMP/mega17-collection.txt" \
+            --junit "$RUNNER_TEMP/lab-synthetic-junit.xml" \
+            --collection-exit-status '${{ steps.mega17.outputs.collection_exit_status }}' \
+            --pytest-exit-status '${{ steps.mega17.outputs.pytest_exit_status }}' \
+            --exit-status '${{ steps.mega17.outputs.exit_status }}' \
+            --output "$RUNNER_TEMP/lab-synthetic-receipt.json"
+
+      - name: Validate LAB synthetic receipt
+        if: always()
+        run: python scripts/lab_synthetic_receipt.py validate "$RUNNER_TEMP/lab-synthetic-receipt.json"
+
+      - name: Enforce MEGA-17 receipt PASS status
+        if: always()
+        run: |
+          python - "$RUNNER_TEMP/lab-synthetic-receipt.json" <<'PY'
+          import json
           import sys
-          import xml.etree.ElementTree as ET
           from pathlib import Path
 
-          report, *files = sys.argv[1:]
-          root = ET.parse(report).getroot()
-          cases = list(root.iter("testcase"))
-          errors = []
-          for filename in files:
-              module = f"tests.vip_lab.{Path(filename).stem}"
-              selected = [case for case in cases if case.get("classname") == module]
-              skipped = sum(case.find("skipped") is not None for case in selected)
-              if not selected:
-                  errors.append(f"suite did not execute: {filename}")
-              elif skipped:
-                  errors.append(f"suite had {skipped} skipped test(s): {filename}")
-          if errors:
-              for error in errors:
-                  print(f"::error::{error}")
+          receipt = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          if receipt.get("status") != "PASS" or receipt.get("exit_status") != 0:
+              print("::error::LAB synthetic MEGA-17 receipt is not PASS")
               raise SystemExit(1)
-          print(f"MEGA-17 executed {len(cases)} pytest cases across all {len(files)} submitted suites; no skips.")
+          print("LAB synthetic receipt PASS; canonical-history status is independent and unchanged.")
           PY
+
+      - name: Upload LAB synthetic job evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab-synthetic-${{ matrix.python-version }}
+          path: |
+            ${{ runner.temp }}/lab-synthetic-receipt.json
+            ${{ runner.temp }}/lab-synthetic-junit.xml
+          if-no-files-found: warn
