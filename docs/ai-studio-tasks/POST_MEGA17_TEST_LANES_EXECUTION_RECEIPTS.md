@@ -55,12 +55,12 @@ PR #258's verified candidate tree contains all eight changed paths together: `sr
 |---|---:|---|---|---|---|---|---|
 | C1 / 3.11.17 | 33 | yes | yes | yes | yes, 33 unique | 0 / 0 / 0 | 33 PASS; `pytest_exit_code=0`, `deselected=0` |
 | C1 / 3.14.9 | 33 | yes | yes | yes | yes, 33 unique | 0 / 0 / 0 | 33 PASS; `pytest_exit_code=0`, `deselected=0` |
-| C2 / 3.11 | 22 | yes | yes | yes | yes after JUnit `classname` + `name` normalization, 22 unique | 0 / 0 / 0 | collected/executed/passed 22; failed/errors/skipped/deselected 0 |
-| C2 / 3.14 | 22 | yes | yes | yes | yes after JUnit `classname` + `name` normalization, 22 unique | 0 / 0 / 0 | collected/executed/passed 22; failed/errors/skipped/deselected 0 |
+| C2 / 3.11.18 | 22 | yes | yes | yes | yes after JUnit `classname` + `name` normalization, 22 unique | 0 / 0 / 0 | collected/executed/passed 22; failed/errors/skipped/deselected 0 |
+| C2 / 3.14.9 | 22 | yes | yes | yes | yes after JUnit `classname` + `name` normalization, 22 unique | 0 / 0 / 0 | collected/executed/passed 22; failed/errors/skipped/deselected 0 |
 | L1 / 3.11.18 | 37 | yes | yes | yes | yes, 37 unique | 0 / 0 / 0 | collected/executed/passed 37; failed/errors/skipped/deselected 0 |
 | L1 / 3.14.9 | 37 | yes | yes | yes | yes, 37 unique | 0 / 0 / 0 | collected/executed/passed 37; failed/errors/skipped/deselected 0 |
 
-The C1 workflow reports exact patch versions and pytest `8.3.3`. The LAB receipts report exact patch versions and pytest `8.3.3`. PR #258 receipts report only Python `3.11` / `3.14` (major/minor); the exact patch version is `NOT_OBSERVED` in the downloaded receipt. The workflow job matrix and hosted job execution establish which interpreter line ran, but this ledger does not infer a patch version.
+The C1 workflow reports exact patch versions and pytest `8.3.3`. The LAB receipts report exact patch versions and pytest `8.3.3`. PR #258 receipts report only Python `3.11` / `3.14` (major/minor), while the hosted job logs independently report CPython `3.11.18` and `3.14.9`; the receipt-level patch field remains `NOT_OBSERVED` and is not backfilled.
 
 The LAB collection sidecar bytes hash to the exact `collection_sha256` in each JSON receipt. JUnit and JSON receipt SHA-256 values are also cross-checked by the receipt fields wherever present. JUnit outcome nodes are all pass and match exact expected identities. This confirms scoped test execution evidence; it is not formal acceptance of any PR.
 
