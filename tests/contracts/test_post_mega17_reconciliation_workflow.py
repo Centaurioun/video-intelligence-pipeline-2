@@ -85,6 +85,8 @@ def test_workflow_is_separate_and_scoped_to_relevant_pull_request_changes():
     assert "fetch-depth: 0" in workflow
     assert "persist-credentials: false" in workflow
     assert "python-version: ['3.11', '3.14']" in workflow
+    workflow_concurrency = workflow.split("concurrency:", 1)[1].split("\njobs:", 1)[0]
+    assert "matrix." not in workflow_concurrency
 
 
 def test_workflow_fails_closed_and_runs_the_real_contract_module():

@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: post-mega17-reconciliation-${{ github.event.pull_request.number }}-${{ matrix.python-version }}
+  group: post-mega17-reconciliation-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
