@@ -251,3 +251,15 @@ tests.vip_lab.test_mega17_source_readiness::test_workstream_b_refuses_cross_part
 tests.vip_lab.test_mega17_source_readiness::test_workstream_b_refuses_cross_partition_identity_overlap[development_query_text_ids-evaluation_query_text_ids]
 tests.vip_lab.test_mega17_source_readiness::test_workstream_b_tampered_packet_is_rejected
 ```
+
+## S. Owner-authorized post-Task5 CI certification extension — 2026-11-05
+
+### Rationale and scope boundary
+
+The existing reconciliation validator has only local test evidence. Hosted execution of its adversarial contract tests is needed before integration review. The Owner separately authorized this limited POST-TASK5 CI certification extension because the existing LAB workflow did not select `tests/contracts/test_post_mega17_receipt_reconciliation.py`.
+
+This extension adds a standalone read-only GitHub Actions workflow and a pinned expected node population for the existing validator tests. It does not change reconciliation semantics, the original test module, any of the three historical evidence slices, or the six existing JUnit/JSON artifacts. It does not combine lanes, grant integration or merge authority, authorize real-media/model/provider execution, or promote a Gate.
+
+## T. Read-only Task 3 CodeScene recheck — 2026-11-05
+
+Canonical PR #258 remains open/Draft at the required HEAD `0a97f96c04510e57216f8b9e1d5d1cd21df81fdc`. The current-head check is `CodeScene Code Health Review (main)`, GitHub check-run ID `127205104236`, started `2026-11-05T11:01:48Z`, status `queued`, conclusion `null`; `TASK3_CODE_HEALTH = PENDING`. No quality conclusion is inferred from the passing functional tests. No canonical PR #258 file or ref was changed.
