@@ -330,7 +330,10 @@ def sample_one_pass(
     if not images:
         raise ValueError("NO_SAMPLES")
 
-    for raw_filter_tb in SHOWINFO_CONFIG_TIMEBASE.findall(completed.stderr):
+    filter_timebases = SHOWINFO_CONFIG_TIMEBASE.findall(completed.stderr)
+    if not filter_timebases:
+        raise ValueError("FILTER_TIMEBASE_MISSING")
+    for raw_filter_tb in filter_timebases:
         filter_num, filter_den = _parse_rational_timebase(
             raw_filter_tb, error_prefix="INVALID_FILTER_TIMEBASE"
         )

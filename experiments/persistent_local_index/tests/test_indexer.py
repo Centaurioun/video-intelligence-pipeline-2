@@ -558,17 +558,16 @@ def test_index_one_source_persists_nonzero_video_stream_index_and_non_unit_timeb
     generation = open_or_create_generation(index_root, spec)
     outcome = index_one_source(source, generation, spec, make_image_embedder())
     assert outcome.disposition == "INDEXED"
-    assert outcome.samples_written == 3
 
     conn = connect_db(generation)
     try:
         src_row = conn.execute(
-            "SELECT stream_index, timebase_num, timebase_den FROM sources WHERE source_sha256 = ?",
+            "SELECT stream_index, timebase_num, timebase_den FROM source_objects WHERE source_sha256 = ?",
             (outcome.source_sha256,),
         ).fetchone()
         sample_rows = conn.execute(
-            "SELECT frame_ordinal, pts, pts_time, timebase_num, timebase_den, timestamp_human "
-            "FROM samples WHERE source_sha256 = ? ORDER BY frame_ordinal",
+            "SELECT row_id, pts, pts_time, timebase_num, timebase_den, timestamp_human "
+            "FROM samples WHERE source_sha256 = ? ORDER BY row_id",
             (outcome.source_sha256,),
         ).fetchall()
     finally:
@@ -577,6 +576,7 @@ def test_index_one_source_persists_nonzero_video_stream_index_and_non_unit_timeb
     assert src_row is not None
     assert src_row["stream_index"] == 1
     assert (src_row["timebase_num"], src_row["timebase_den"]) == (1001, 30000)
+    assert len(sample_rows) == 3
     assert [row["pts"] for row in sample_rows] == [0, 60, 120]
     assert [row["pts_time"] for row in sample_rows] == pytest.approx([0.0, 2.002, 4.004])
     assert all(
@@ -596,11 +596,11 @@ def test_index_inputs_records_failed_count_when_stream_or_pts_refused(
 
     monkeypatch.setattr(indexer_module, "probe_stream", refusing_probe)
     spec = make_spec()
-    summary = index_inputs([bad_source], index_root, spec, make_image_embedder())
+    summary = index_inputs(bad_source.parent, index_root, spec, make_image_embedder())
     assert summary.indexed == 0
     assert summary.skipped == 0
     assert summary.reused == 0
     assert summary.failed == 1
-    assert summary.outcomes[0].disposition == "FAILED"
-    assert "MISSING_STREAM_INDEX" in (summary.outcomes[0].error or "")
+    assert summary.results[0].disposition == "FAILED"
+    assert "MISSING_STREAM_INDEX" in (summary.results[0].error or "")
 

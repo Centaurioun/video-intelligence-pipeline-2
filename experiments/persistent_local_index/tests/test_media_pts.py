@@ -317,6 +317,7 @@ def test_sample_one_pass_recovers_pts_for_non_unit_rational_timebases(
 @pytest.mark.parametrize(
     ("filter_tb", "expected_match"),
     [
+        (None, "FILTER_TIMEBASE_MISSING"),
         ("1/90000", "FILTER_TIMEBASE_MISMATCH"),
         ("1001/24000", "FILTER_TIMEBASE_MISMATCH"),
         ("0/30000", "INVALID_FILTER_TIMEBASE"),
@@ -326,7 +327,7 @@ def test_sample_one_pass_recovers_pts_for_non_unit_rational_timebases(
 def test_sample_one_pass_refuses_filter_timebase_mismatch_or_malformed_filter_tb(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    filter_tb: str,
+    filter_tb: str | None,
     expected_match: str,
 ) -> None:
     video = tmp_path / "mismatch.mp4"
@@ -351,10 +352,11 @@ def test_sample_one_pass_refuses_filter_timebase_mismatch_or_malformed_filter_tb
             return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(payload), stderr="")
         if cmd[0] == "ffmpeg":
             _make_png(staging / "s_000001.png", (64, 64))
-            stderr = (
+            config = (
                 f"[Parsed_showinfo_1 @ 0x1] config in time_base: {filter_tb}\n"
-                "[Parsed_showinfo_1 @ 0x1] n: 0 pts: 0 pts_time:0\n"
+                if filter_tb is not None else ""
             )
+            stderr = config + "[Parsed_showinfo_1 @ 0x1] n: 0 pts: 0 pts_time:0\n"
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr=stderr)
         raise AssertionError(f"unexpected command: {cmd}")
 

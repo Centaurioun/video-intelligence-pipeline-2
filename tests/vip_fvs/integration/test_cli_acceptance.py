@@ -556,6 +556,6 @@ def test_index_local_cli_upstream_exception_refusal_returns_nonzero_with_single_
     out_lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
     assert len(out_lines) == 1
     parsed = json.loads(out_lines[0])
-    assert parsed["status"] == "refused"
+    assert parsed["all_checks_passed"] is False
     assert "MISSING_STREAM_INDEX" in parsed["error"]
 
