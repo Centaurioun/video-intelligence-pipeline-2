@@ -355,3 +355,261 @@ def test_service_rejects_retrieval_space_mismatch(tmp_path, monkeypatch):
     )
     with pytest.raises(RealSourcePreparationRefusal, match="RETRIEVAL_SEMANTIC_SPACE_ID_MISMATCH"):
         prepare_real_source(request)
+
+
+# --- MEGA_CORE_01 Repair C candidate semantic interval regressions ----------
+
+
+def test_candidate_from_hit_places_two_nonzero_positions_without_resetting_string_timestamp(
+    tmp_path: Path,
+) -> None:
+    from types import SimpleNamespace
+    from vip_fvs.real_source_service import _candidate_from_hit
+
+    source = _source(tmp_path)
+    probe = _probe(source, tmp_path / "run")
+
+    hit_first = SimpleNamespace(
+        source_sha256=probe.source_sha256,
+        source_path=str(source),
+        rank=1,
+        score=0.91,
+        pts=2000,
+        timebase_num=1,
+        timebase_den=1000,
+        timestamp_human="00:00:02.000",
+    )
+    hit_second = SimpleNamespace(
+        source_sha256=probe.source_sha256,
+        source_path=str(source),
+        rank=2,
+        score=0.84,
+        pts=6500,
+        timebase_num=1,
+        timebase_den=1000,
+        timestamp_human="00:00:06.500",
+    )
+
+    cand_first = _candidate_from_hit(hit_first, probe, "attempt-pos-1")
+    cand_second = _candidate_from_hit(hit_second, probe, "attempt-pos-2")
+
+    assert cand_first["evidence_class"] == "MATCHED"
+    assert cand_first["binding_eligible"] is False
+    assert cand_first["semantic_interval"]["time_domain"] == "semantic_seconds"
+    assert cand_first["semantic_interval"]["endpoint_semantics"] == "half_open"
+    assert cand_first["semantic_interval"]["start"] == pytest.approx(2.0, abs=1e-9)
+    assert cand_first["semantic_interval"]["end"] == pytest.approx(2.0, abs=1e-9)
+
+    assert cand_second["evidence_class"] == "MATCHED"
+    assert cand_second["binding_eligible"] is False
+    assert cand_second["semantic_interval"]["start"] == pytest.approx(6.5, abs=1e-9)
+    assert cand_second["semantic_interval"]["end"] == pytest.approx(6.5, abs=1e-9)
+    assert (
+        cand_first["semantic_interval"]["start"]
+        != cand_second["semantic_interval"]["start"]
+    )
+
+    hit_with_window = SimpleNamespace(
+        source_sha256=probe.source_sha256,
+        source_path=str(source),
+        rank=1,
+        score=0.91,
+        pts=2000,
+        timebase_num=1,
+        timebase_den=1000,
+        timestamp_human="00:00:02.000",
+        coarse_window_seconds=4.5,
+    )
+    cand_window = _candidate_from_hit(hit_with_window, probe, "attempt-pos-win")
+    assert cand_window["semantic_interval"]["start"] == pytest.approx(2.0, abs=1e-9)
+    assert cand_window["semantic_interval"]["end"] == pytest.approx(6.5, abs=1e-9)
+
+
+def test_candidate_from_hit_supports_non_unit_rational_timebases(tmp_path: Path) -> None:
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from vip_fvs.real_source_service import _candidate_from_hit
+
+    source = _source(tmp_path)
+    probe_ntsc = replace(
+        _probe(source, tmp_path / "run"),
+        selected_stream_index=1,
+        timebase_num=1001,
+        timebase_den=30000,
+    )
+    hit_a = SimpleNamespace(
+        source_sha256=probe_ntsc.source_sha256,
+        source_path=str(source),
+        stream_index=1,
+        rank=1,
+        score=0.95,
+        pts=60,
+        timebase_num=1001,
+        timebase_den=30000,
+        timestamp_human="00:00:00.000",
+    )
+    hit_b = SimpleNamespace(
+        source_sha256=probe_ntsc.source_sha256,
+        source_path=str(source),
+        stream_index=1,
+        rank=2,
+        score=0.88,
+        pts=150,
+        timebase_num=1001,
+        timebase_den=30000,
+        timestamp_human="untrusted-display-string",
+    )
+    cand_a = _candidate_from_hit(hit_a, probe_ntsc, "attempt-ntsc-a")
+    cand_b = _candidate_from_hit(hit_b, probe_ntsc, "attempt-ntsc-b")
+    assert cand_a["semantic_interval"]["start"] == pytest.approx(2.002, abs=1e-9)
+    assert cand_b["semantic_interval"]["start"] == pytest.approx(5.005, abs=1e-9)
+    assert cand_a["evidence_class"] == "MATCHED"
+    assert cand_a["binding_eligible"] is False
+
+
+@pytest.mark.parametrize(
+    ("tb_fields", "expected_code"),
+    [
+        ({}, "SOURCE_LOCATOR_TIMEBASE_INVALID"),
+        ({"timebase_num": 1001}, "SOURCE_LOCATOR_TIMEBASE_INVALID"),
+        ({"timebase_den": 30000}, "SOURCE_LOCATOR_TIMEBASE_INVALID"),
+        ({"timebase_num": None, "timebase_den": 30000}, "SOURCE_LOCATOR_TIMEBASE_INVALID"),
+        ({"timebase_num": True, "timebase_den": 30000}, "SOURCE_LOCATOR_TIMEBASE_INVALID"),
+        ({"timebase_num": 0, "timebase_den": 30000}, "SOURCE_LOCATOR_TIMEBASE_INVALID"),
+        ({"timebase_num": 1001, "timebase_den": -30000}, "SOURCE_LOCATOR_TIMEBASE_INVALID"),
+        ({"timebase_num": "1001", "timebase_den": 30000}, "SOURCE_LOCATOR_TIMEBASE_INVALID"),
+        ({"timebase_num": 1, "timebase_den": 1000}, "SOURCE_LOCATOR_TIMEBASE_MISMATCH"),
+        ({"timebase_num": 1001, "timebase_den": 24000}, "SOURCE_LOCATOR_TIMEBASE_MISMATCH"),
+    ],
+)
+def test_candidate_from_hit_refuses_wrong_or_missing_timebase(
+    tmp_path: Path, tb_fields: dict[str, object], expected_code: str
+) -> None:
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from vip_fvs.real_source_service import _candidate_from_hit
+
+    source = _source(tmp_path)
+    probe = replace(
+        _probe(source, tmp_path / "run"),
+        timebase_num=1001,
+        timebase_den=30000,
+    )
+    fields: dict[str, object] = {
+        "source_sha256": probe.source_sha256,
+        "source_path": str(source),
+        "rank": 1,
+        "score": 0.9,
+        "pts": 60,
+        "timestamp_human": "00:00:02.002",
+    }
+    fields.update(tb_fields)
+    hit = SimpleNamespace(**fields)
+    with pytest.raises(RealSourcePreparationRefusal, match=expected_code):
+        _candidate_from_hit(hit, probe, "attempt-bad-tb")
+
+
+@pytest.mark.parametrize(
+    "bad_pts",
+    [None, "60", 60.0, 60.5, True, False, -1, -60],
+)
+def test_candidate_from_hit_refuses_malformed_or_missing_pts(
+    tmp_path: Path, bad_pts: object
+) -> None:
+    from types import SimpleNamespace
+    from vip_fvs.real_source_service import _candidate_from_hit
+
+    source = _source(tmp_path)
+    probe = _probe(source, tmp_path / "run")
+    hit = SimpleNamespace(
+        source_sha256=probe.source_sha256,
+        source_path=str(source),
+        rank=1,
+        score=0.9,
+        pts=bad_pts,
+        timebase_num=1,
+        timebase_den=1000,
+        timestamp_human="00:00:02.000",
+    )
+    with pytest.raises(RealSourcePreparationRefusal, match="SOURCE_PTS_NOT_OBSERVED"):
+        _candidate_from_hit(hit, probe, "attempt-bad-pts")
+
+    hit_missing_pts = SimpleNamespace(
+        source_sha256=probe.source_sha256,
+        source_path=str(source),
+        rank=1,
+        score=0.9,
+        timebase_num=1,
+        timebase_den=1000,
+        timestamp_human="00:00:02.000",
+    )
+    with pytest.raises(RealSourcePreparationRefusal, match="SOURCE_PTS_NOT_OBSERVED"):
+        _candidate_from_hit(hit_missing_pts, probe, "attempt-missing-pts")
+
+
+def test_candidate_from_hit_refuses_mismatched_source_or_stream_and_preserves_error_priority(
+    tmp_path: Path,
+) -> None:
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from vip_fvs.real_source_service import _candidate_from_hit
+
+    source = _source(tmp_path)
+    other = tmp_path / "other-source.mp4"
+    other.write_bytes(b"other source bytes")
+    probe = replace(_probe(source, tmp_path / "run"), selected_stream_index=1)
+
+    # Wrong source SHA-256 refuses with RETRIEVAL_SOURCE_IDENTITY_MISMATCH even when timebase/PTS are also invalid.
+    hit_wrong_sha = SimpleNamespace(
+        source_sha256="f" * 64,
+        source_path=str(source),
+        rank=1,
+        score=0.9,
+        pts=None,
+        timebase_num=0,
+        timebase_den=0,
+    )
+    with pytest.raises(RealSourcePreparationRefusal, match="RETRIEVAL_SOURCE_IDENTITY_MISMATCH"):
+        _candidate_from_hit(hit_wrong_sha, probe, "attempt-wrong-sha")
+
+    # Wrong source path refuses with RETRIEVAL_SOURCE_IDENTITY_MISMATCH.
+    hit_wrong_path = SimpleNamespace(
+        source_sha256=probe.source_sha256,
+        source_path=str(other),
+        rank=1,
+        score=0.9,
+        pts=40,
+        timebase_num=1,
+        timebase_den=1000,
+    )
+    with pytest.raises(RealSourcePreparationRefusal, match="RETRIEVAL_SOURCE_IDENTITY_MISMATCH"):
+        _candidate_from_hit(hit_wrong_path, probe, "attempt-wrong-path")
+
+    # Mismatched stream index refuses with RETRIEVAL_SOURCE_IDENTITY_MISMATCH.
+    hit_wrong_stream = SimpleNamespace(
+        source_sha256=probe.source_sha256,
+        source_path=str(source),
+        stream_index=0,
+        rank=1,
+        score=0.9,
+        pts=40,
+        timebase_num=1,
+        timebase_den=1000,
+    )
+    with pytest.raises(RealSourcePreparationRefusal, match="RETRIEVAL_SOURCE_IDENTITY_MISMATCH"):
+        _candidate_from_hit(hit_wrong_stream, probe, "attempt-wrong-stream")
+
+    # Timebase mismatch takes precedence over malformed PTS when source identity matches.
+    hit_tb_before_pts = SimpleNamespace(
+        source_sha256=probe.source_sha256,
+        source_path=str(source),
+        stream_index=1,
+        rank=1,
+        score=0.9,
+        pts=None,
+        timebase_num=1,
+        timebase_den=2000,
+    )
+    with pytest.raises(RealSourcePreparationRefusal, match="SOURCE_LOCATOR_TIMEBASE_MISMATCH"):
+        _candidate_from_hit(hit_tb_before_pts, probe, "attempt-tb-priority")
+

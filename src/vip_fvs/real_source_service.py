@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -248,17 +249,69 @@ def _validate_prepare_authorization(request: RealSourceRequest, source: Path) ->
 def _candidate_from_hit(hit: Any, probe: RealSourceProbeBinding, attempt_id: str) -> dict[str, Any]:
     source_sha = _value(hit, "source_sha256", probe.source_sha256)
     source_path = _value(hit, "source_path", str(probe.source_path))
-    if source_sha != probe.source_sha256 or Path(source_path).resolve() != probe.source_path.resolve():
+    if (
+        type(source_sha) is not str
+        or source_sha != probe.source_sha256
+        or not isinstance(source_path, (str, Path))
+        or Path(source_path).resolve() != probe.source_path.resolve()
+    ):
         raise _refuse("RETRIEVAL_SOURCE_IDENTITY_MISMATCH")
+    hit_stream_index = _value(
+        hit, "stream_index", _value(hit, "selected_stream_index", None)
+    )
+    if hit_stream_index is not None:
+        if (
+            isinstance(hit_stream_index, bool)
+            or not isinstance(hit_stream_index, int)
+            or hit_stream_index != probe.selected_stream_index
+        ):
+            raise _refuse("RETRIEVAL_SOURCE_IDENTITY_MISMATCH")
+    _locator_timebase(hit, probe)
+    locator_num = _value(hit, "timebase_num", None)
+    locator_den = _value(hit, "timebase_den", None)
+    pts = _value(hit, "pts", None)
+    if not isinstance(pts, int) or isinstance(pts, bool) or pts < 0:
+        raise _refuse("SOURCE_PTS_NOT_OBSERVED")
     rank = _value(hit, "rank", 1)
+    if isinstance(rank, bool) or not isinstance(rank, int) or rank < 1:
+        raise _refuse("CANDIDATE_RANK_INVALID")
     score = _value(hit, "score", 0.0)
-    pts = _value(hit, "pts", 0)
+    if (
+        isinstance(score, bool)
+        or not isinstance(score, (int, float))
+        or not math.isfinite(score)
+    ):
+        raise _refuse("CANDIDATE_SCORE_INVALID")
     # A semantic interval is deliberately coarse and never source-cut authority.
-    start = float(_value(hit, "timestamp_human", 0.0) or 0.0) if not isinstance(_value(hit, "timestamp_human", 0.0), str) else 0.0
-    interval = {"start": start, "end": start + 1.0, "time_domain": "semantic_seconds", "endpoint_semantics": "half_open"}
+    start = (pts * locator_num) / locator_den
+    coarse_window = _value(
+        hit,
+        "coarse_window_seconds",
+        _value(hit, "sampling_interval_seconds", None),
+    )
+    if coarse_window is not None:
+        if (
+            isinstance(coarse_window, bool)
+            or not isinstance(coarse_window, (int, float))
+            or not math.isfinite(coarse_window)
+            or coarse_window < 0
+        ):
+            raise _refuse("CANDIDATE_SEMANTIC_WINDOW_INVALID")
+        end = start + float(coarse_window)
+    else:
+        end = start
+    interval = {
+        "start": start,
+        "end": end,
+        "time_domain": "semantic_seconds",
+        "endpoint_semantics": "half_open",
+    }
     return {
-        "candidate_id": f"candidate:{attempt_id}", "rank": int(rank), "score": float(score),
-        "evidence_class": "MATCHED", "binding_eligible": False,
+        "candidate_id": f"candidate:{attempt_id}",
+        "rank": int(rank),
+        "score": float(score),
+        "evidence_class": "MATCHED",
+        "binding_eligible": False,
         "assertion_digest": _sha({"source": source_sha, "rank": rank, "score": score, "pts": pts}),
         "semantic_interval": interval,
     }

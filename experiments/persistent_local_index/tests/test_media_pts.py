@@ -245,3 +245,354 @@ def test_sampler_never_modifies_source_media(tmp_path: Path):
     before = sha256_file(video)
     sample_one_pass(video, 4.5, tmp_path / "out")
     assert sha256_file(video) == before, "SOURCE_MEDIA_MUTATED"
+
+
+# --- MEGA_CORE_01 Repair A & B synthetic unit regressions -------------------
+
+
+@pytest.mark.parametrize(
+    ("tb_num", "tb_den", "expected_pts", "expected_times", "include_raw_pts"),
+    [
+        (1001, 30000, [0, 60, 120], [0.0, 2.002, 4.004], True),
+        (1001, 30000, [0, 60, 120], [0.0, 2.002, 4.004], False),
+        (1001, 24000, [0, 48, 96], [0.0, 2.002, 4.004], True),
+        (1001, 24000, [0, 48, 96], [0.0, 2.002, 4.004], False),
+    ],
+)
+def test_sample_one_pass_recovers_pts_for_non_unit_rational_timebases(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    tb_num: int,
+    tb_den: int,
+    expected_pts: list[int],
+    expected_times: list[float],
+    include_raw_pts: bool,
+) -> None:
+    video = tmp_path / "ntsc.mp4"
+    video.write_bytes(b"synthetic video")
+    staging = tmp_path / "staging"
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd[0] == "ffprobe":
+            payload = {
+                "streams": [
+                    {
+                        "index": 0,
+                        "codec_type": "video",
+                        "codec_name": "h264",
+                        "width": 64,
+                        "height": 64,
+                        "time_base": f"{tb_num}/{tb_den}",
+                        "duration": "6.006",
+                    }
+                ]
+            }
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(payload), stderr="")
+        if cmd[0] == "ffmpeg":
+            for idx in range(len(expected_pts)):
+                _make_png(staging / f"s_{idx + 1:06d}.png", (64, 64))
+            lines = [f"[Parsed_showinfo_1 @ 0x1] config in time_base: {tb_num}/{tb_den}"]
+            for idx, (pts_val, sec_val) in enumerate(zip(expected_pts, expected_times)):
+                if include_raw_pts:
+                    lines.append(
+                        f"[Parsed_showinfo_1 @ 0x1] n: {idx} pts: {pts_val} pts_time:{sec_val:.6g}"
+                    )
+                else:
+                    lines.append(f"[Parsed_showinfo_1 @ 0x1] n: {idx} pts_time:{sec_val:.6g}")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="\n".join(lines))
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    frames = sample_one_pass(video, 2.0, staging)
+    assert [f.pts for f in frames] == expected_pts
+    for frame, expected_sec in zip(frames, expected_times):
+        assert frame.timebase_num == tb_num
+        assert frame.timebase_den == tb_den
+        assert frame.pts_time == pytest.approx(expected_sec, abs=1e-6)
+        assert (frame.pts * frame.timebase_num) / frame.timebase_den == pytest.approx(
+            frame.pts_time, abs=1e-9
+        )
+
+
+@pytest.mark.parametrize(
+    ("filter_tb", "expected_match"),
+    [
+        ("1/90000", "FILTER_TIMEBASE_MISMATCH"),
+        ("1001/24000", "FILTER_TIMEBASE_MISMATCH"),
+        ("0/30000", "INVALID_FILTER_TIMEBASE"),
+        ("bad", "INVALID_FILTER_TIMEBASE"),
+    ],
+)
+def test_sample_one_pass_refuses_filter_timebase_mismatch_or_malformed_filter_tb(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    filter_tb: str,
+    expected_match: str,
+) -> None:
+    video = tmp_path / "mismatch.mp4"
+    video.write_bytes(b"synthetic video")
+    staging = tmp_path / "staging"
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd[0] == "ffprobe":
+            payload = {
+                "streams": [
+                    {
+                        "index": 0,
+                        "codec_type": "video",
+                        "codec_name": "h264",
+                        "width": 64,
+                        "height": 64,
+                        "time_base": "1001/30000",
+                        "duration": "4.0",
+                    }
+                ]
+            }
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(payload), stderr="")
+        if cmd[0] == "ffmpeg":
+            _make_png(staging / "s_000001.png", (64, 64))
+            stderr = (
+                f"[Parsed_showinfo_1 @ 0x1] config in time_base: {filter_tb}\n"
+                "[Parsed_showinfo_1 @ 0x1] n: 0 pts: 0 pts_time:0\n"
+            )
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr=stderr)
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(ValueError, match=expected_match):
+        sample_one_pass(video, 2.0, staging)
+
+
+@pytest.mark.parametrize(
+    ("timing_line", "expected_match"),
+    [
+        ("n: 0 pts: -60 pts_time:2.002", "NEGATIVE_PTS"),
+        ("n: 0 pts: -60 pts_time:-2.002", "NEGATIVE_PTS"),
+        ("n: 0 pts_time:-0.033367", "NEGATIVE_PTS"),
+        ("n: 0 pts: NOPTS pts_time:0", "INVALID_PTS"),
+        ("n: 0 pts: 0 pts_time:NOPTS", "INVALID_PTS_TIME"),
+        ("n: 0 pts_time:0.05", "SAMPLE_PTS_ROUNDTRIP_FAILED"),
+        ("n: 0 pts: 61 pts_time:2.002", "SAMPLE_PTS_ROUNDTRIP_FAILED"),
+    ],
+)
+def test_sample_one_pass_refuses_negative_preroll_nopts_or_fractional_unaligned_pts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    timing_line: str,
+    expected_match: str,
+) -> None:
+    video = tmp_path / "bad_pts.mp4"
+    video.write_bytes(b"synthetic video")
+    staging = tmp_path / "staging"
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd[0] == "ffprobe":
+            payload = {
+                "streams": [
+                    {
+                        "index": 0,
+                        "codec_type": "video",
+                        "codec_name": "h264",
+                        "width": 64,
+                        "height": 64,
+                        "time_base": "1001/30000",
+                        "duration": "4.0",
+                    }
+                ]
+            }
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(payload), stderr="")
+        if cmd[0] == "ffmpeg":
+            _make_png(staging / "s_000001.png", (64, 64))
+            stderr = (
+                "[Parsed_showinfo_1 @ 0x1] config in time_base: 1001/30000\n"
+                f"[Parsed_showinfo_1 @ 0x1] {timing_line}\n"
+            )
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr=stderr)
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(ValueError, match=expected_match):
+        sample_one_pass(video, 2.0, staging)
+
+
+@pytest.mark.parametrize("bad_tb", ["", "1000", "0/1000", "1/0", "-1/1000", "1/2/3", "abc/1000", None])
+def test_probe_stream_refuses_malformed_or_missing_timebase(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, bad_tb: object
+) -> None:
+    video = tmp_path / "bad_tb.mp4"
+    video.write_bytes(b"synthetic video")
+
+    def fake_run(cmd, *args, **kwargs):
+        payload = {
+            "streams": [
+                {
+                    "index": 0,
+                    "codec_type": "video",
+                    "codec_name": "h264",
+                    "width": 64,
+                    "height": 64,
+                    "time_base": bad_tb,
+                }
+            ]
+        }
+        return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(payload), stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(ValueError, match="UNSUPPORTED_TIMEBASE"):
+        probe_stream(video)
+
+
+def test_probe_stream_and_sampler_bind_actual_video_stream_index_when_audio_is_zero(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    video = tmp_path / "audio_first.mp4"
+    video.write_bytes(b"synthetic audio+video")
+    staging = tmp_path / "staging"
+    recorded_ffmpeg_cmds: list[list[str]] = []
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd[0] == "ffprobe":
+            payload = {
+                "streams": [
+                    {
+                        "index": 0,
+                        "codec_type": "audio",
+                        "codec_name": "aac",
+                        "time_base": "1/48000",
+                    },
+                    {
+                        "index": 1,
+                        "codec_type": "video",
+                        "codec_name": "h264",
+                        "width": 128,
+                        "height": 72,
+                        "time_base": "1001/30000",
+                        "duration": "4.004",
+                    },
+                ]
+            }
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(payload), stderr="")
+        if cmd[0] == "ffmpeg":
+            recorded_ffmpeg_cmds.append(list(cmd))
+            _make_png(staging / "s_000001.png", (128, 72))
+            stderr = (
+                "[Parsed_showinfo_1 @ 0x1] config in time_base: 1001/30000\n"
+                "[Parsed_showinfo_1 @ 0x1] n: 0 pts: 60 pts_time:2.002\n"
+            )
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr=stderr)
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    info = probe_stream(video)
+    assert info.stream_index == 1
+    assert (info.timebase_num, info.timebase_den) == (1001, 30000)
+
+    frames = sample_one_pass(video, 2.0, staging)
+    assert len(frames) == 1
+    assert frames[0].pts == 60
+    assert frames[0].pts_time == pytest.approx(2.002, abs=1e-6)
+    assert len(recorded_ffmpeg_cmds) == 1
+    ffmpeg_cmd = recorded_ffmpeg_cmds[0]
+    map_idx = ffmpeg_cmd.index("-map")
+    assert ffmpeg_cmd[map_idx + 1] == "0:1"
+
+
+def test_probe_stream_and_sampler_multi_video_default_and_explicit_stream_selection(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    video = tmp_path / "multi_video.mp4"
+    video.write_bytes(b"synthetic multi-video")
+    staging = tmp_path / "staging"
+    recorded_ffmpeg_cmds: list[list[str]] = []
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd[0] == "ffprobe":
+            payload = {
+                "streams": [
+                    {
+                        "index": 1,
+                        "codec_type": "video",
+                        "codec_name": "h264",
+                        "width": 64,
+                        "height": 64,
+                        "time_base": "1/1000",
+                        "duration": "4.0",
+                    },
+                    {
+                        "index": 3,
+                        "codec_type": "video",
+                        "codec_name": "hevc",
+                        "width": 192,
+                        "height": 108,
+                        "time_base": "1001/24000",
+                        "duration": "4.004",
+                    },
+                ]
+            }
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(payload), stderr="")
+        if cmd[0] == "ffmpeg":
+            recorded_ffmpeg_cmds.append(list(cmd))
+            _make_png(staging / "s_000001.png", (192, 108))
+            stderr = (
+                "[Parsed_showinfo_1 @ 0x1] config in time_base: 1001/24000\n"
+                "[Parsed_showinfo_1 @ 0x1] n: 0 pts: 48 pts_time:2.002\n"
+            )
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr=stderr)
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    default_info = probe_stream(video)
+    assert default_info.stream_index == 1
+    assert (default_info.timebase_num, default_info.timebase_den) == (1, 1000)
+
+    explicit_info = probe_stream(video, stream_index=3)
+    assert explicit_info.stream_index == 3
+    assert explicit_info.codec == "hevc"
+    assert (explicit_info.timebase_num, explicit_info.timebase_den) == (1001, 24000)
+
+    frames = sample_one_pass(video, 2.0, staging, stream_index=3)
+    assert len(frames) == 1
+    assert frames[0].pts == 48
+    assert frames[0].pts_time == pytest.approx(2.002, abs=1e-6)
+    map_idx = recorded_ffmpeg_cmds[-1].index("-map")
+    assert recorded_ffmpeg_cmds[-1][map_idx + 1] == "0:3"
+
+    with pytest.raises(ValueError, match="STREAM_INDEX_NOT_FOUND"):
+        probe_stream(video, stream_index=2)
+
+
+@pytest.mark.parametrize(
+    ("streams_payload", "expected_match"),
+    [
+        ([{"codec_type": "video", "time_base": "1/1000", "width": 64, "height": 64}], "MISSING_STREAM_INDEX"),
+        ([{"index": None, "codec_type": "video", "time_base": "1/1000", "width": 64, "height": 64}], "MISSING_STREAM_INDEX"),
+        ([{"index": -1, "codec_type": "video", "time_base": "1/1000", "width": 64, "height": 64}], "INVALID_STREAM_INDEX"),
+        ([{"index": "0", "codec_type": "video", "time_base": "1/1000", "width": 64, "height": 64}], "INVALID_STREAM_INDEX"),
+        ([{"index": True, "codec_type": "video", "time_base": "1/1000", "width": 64, "height": 64}], "INVALID_STREAM_INDEX"),
+        (
+            [
+                {"index": 1, "codec_type": "video", "time_base": "1/1000", "width": 64, "height": 64},
+                {"index": 1, "codec_type": "video", "time_base": "1/1000", "width": 64, "height": 64},
+            ],
+            "INCONSISTENT_STREAM_INDEX",
+        ),
+    ],
+)
+def test_probe_stream_refuses_missing_invalid_or_inconsistent_stream_index(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    streams_payload: list[dict[str, object]],
+    expected_match: str,
+) -> None:
+    video = tmp_path / "bad_index.mp4"
+    video.write_bytes(b"synthetic video")
+
+    def fake_run(cmd, *args, **kwargs):
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=json.dumps({"streams": streams_payload}), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    with pytest.raises(ValueError, match=expected_match):
+        probe_stream(video)
+

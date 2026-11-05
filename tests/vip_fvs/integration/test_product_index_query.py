@@ -308,7 +308,14 @@ def test_product_cli_fake_dispatch_and_fail_closed_real_mode(monkeypatch, capsys
 
     def index_stub(*args, **kwargs):
         calls.append(("index", args, kwargs))
-        return {"generation_id": "g", "space_id": "s", "indexed": 1}
+        return {
+            "generation_id": "g",
+            "space_id": "s",
+            "indexed": 1,
+            "skipped": 0,
+            "reused": 0,
+            "failed": 0,
+        }
 
     def query_stub(*args, **kwargs):
         calls.append(("query", args, kwargs))
@@ -634,3 +641,99 @@ def test_index_local_loader_uses_pinned_authorization_when_path_is_replaced(
     assert loaded.source_path == source_a.resolve()
     assert len(received_paths) == 1
     assert str(received_paths[0]).startswith("/dev/fd/")
+
+
+def test_product_cli_index_local_exit_statuses_and_unchanged_query_commands(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    import vip_fvs.cli as cli
+    import vip_fvs.coordinator as coordinator
+
+    runtime = _runtime()
+    monkeypatch.setattr(cli, "_fake_runtime", lambda: runtime, raising=False)
+
+    cases = [
+        ({"indexed": 1, "skipped": 0, "reused": 0, "failed": 0}, 0),
+        ({"indexed": 0, "skipped": 1, "reused": 0, "failed": 0}, 0),
+        ({"indexed": 0, "skipped": 0, "reused": 1, "failed": 0}, 0),
+        ({"indexed": 0, "skipped": 0, "reused": 0, "failed": 1}, 1),
+        ({"indexed": 1, "skipped": 1, "reused": 0, "failed": 1}, 1),
+    ]
+    for counts, expected_rc in cases:
+        monkeypatch.setattr(
+            coordinator,
+            "index_local_source",
+            lambda *a, _counts=counts, **k: {
+                "operation": "index-local",
+                "generation_id": "gen-product",
+                "space_id": "space-product",
+                **_counts,
+            },
+            raising=False,
+        )
+        rc = cli.main(
+            [
+                "index-local",
+                "--source",
+                str(tmp_path / "source"),
+                "--index-root",
+                str(tmp_path / "index"),
+                "--fake-embedder",
+            ]
+        )
+        assert rc == expected_rc
+        lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+        assert len(lines) == 1
+        payload = json.loads(lines[0])
+        assert payload["failed"] == counts["failed"]
+        assert payload["runtime_mode"] == "fake"
+
+    # Upstream exception refusal returns nonzero with one JSON refusal line.
+    def raise_refusal(*args, **kwargs):
+        raise RuntimeError("UPSTREAM_INDEX_REFUSAL")
+
+    monkeypatch.setattr(coordinator, "index_local_source", raise_refusal, raising=False)
+    rc_err = cli.main(
+        [
+            "index-local",
+            "--source",
+            str(tmp_path / "source"),
+            "--index-root",
+            str(tmp_path / "index"),
+            "--fake-embedder",
+        ]
+    )
+    assert rc_err == 1
+    err_lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert len(err_lines) == 1
+    assert "UPSTREAM_INDEX_REFUSAL" in json.loads(err_lines[0])["error"]
+
+    # query-local remains exit code 0 when hits are empty.
+    monkeypatch.setattr(
+        coordinator,
+        "query_local_index",
+        lambda *a, **k: {
+            "generation_id": "gen-product",
+            "space_id": "space-product",
+            "query_count": 1,
+            "hits": [],
+        },
+        raising=False,
+    )
+    rc_query = cli.main(
+        [
+            "query-local",
+            "--query",
+            "pirouette",
+            "--index-root",
+            str(tmp_path / "index"),
+            "--fake-embedder",
+        ]
+    )
+    assert rc_query == 0
+    query_lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert len(query_lines) == 1
+    assert json.loads(query_lines[0])["hits"] == []
+

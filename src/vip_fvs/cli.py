@@ -1065,9 +1065,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                     engine=engine, top_k=args.top_k,
                 ))
                 result["operation"] = "query-multi"
+            if not isinstance(result, Mapping):
+                raise ValueError("INDEX_LOCAL_INVALID_SUMMARY_SHAPE")
             summary = dict(result)
             summary["runtime_mode"] = "fake" if runtime.fake else "real"
             print(json.dumps(summary, sort_keys=True, separators=(",", ":")))
+            if index_operation:
+                gen_id = summary.get("generation_id")
+                space_id = summary.get("space_id")
+                failed = summary.get("failed")
+                if (
+                    type(gen_id) is not str
+                    or not gen_id.strip()
+                    or type(space_id) is not str
+                    or not space_id.strip()
+                    or type(failed) is not int
+                    or failed != 0
+                ):
+                    return 1
+                positive_dispositions = 0
+                for disp_key in ("indexed", "skipped", "reused"):
+                    if disp_key in summary:
+                        disp_val = summary[disp_key]
+                        if type(disp_val) is not int or disp_val < 0:
+                            return 1
+                        positive_dispositions += disp_val
+                if positive_dispositions <= 0:
+                    return 1
             return 0
         if args.command in {"query-batch-synthetic", "query-three-arm-synthetic"}:
             from .batch_report import (

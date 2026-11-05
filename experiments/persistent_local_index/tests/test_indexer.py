@@ -499,3 +499,108 @@ def test_remove_location_uses_existing_writer_lock(index_root: Path, tmp_path: P
     with WriterLock(generation.lock):
         with pytest.raises(RuntimeError, match="CONCURRENT_WRITER"):
             indexer_module.remove_source_location(index_root, spec, source)
+
+
+def test_index_one_source_persists_nonzero_video_stream_index_and_non_unit_timebase(
+    index_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+    import subprocess
+    from PIL import Image
+    import persistent_local_index.media as media_module
+
+    source = tmp_path / "media" / "audio_then_video_ntsc.mp4"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"synthetic audio+video ntsc container")
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd[0] == "ffprobe":
+            payload = {
+                "streams": [
+                    {
+                        "index": 0,
+                        "codec_type": "audio",
+                        "codec_name": "aac",
+                        "time_base": "1/48000",
+                    },
+                    {
+                        "index": 1,
+                        "codec_type": "video",
+                        "codec_name": "h264",
+                        "width": 64,
+                        "height": 64,
+                        "time_base": "1001/30000",
+                        "duration": "6.006",
+                    },
+                ]
+            }
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(payload), stderr="")
+        if cmd[0] == "ffmpeg":
+            assert "-map" in cmd
+            assert cmd[cmd.index("-map") + 1] == "0:1"
+            out_pattern = Path(cmd[-1])
+            out_dir = out_pattern.parent
+            for idx, colour in enumerate(((220, 20, 20), (20, 220, 20), (20, 20, 220)), start=1):
+                Image.new("RGB", (64, 64), colour).save(
+                    out_dir / f"s_{idx:06d}.png", format="PNG"
+                )
+            stderr = (
+                "[Parsed_showinfo_1 @ 0x1] config in time_base: 1001/30000\n"
+                "[Parsed_showinfo_1 @ 0x1] n: 0 pts: 0 pts_time:0\n"
+                "[Parsed_showinfo_1 @ 0x1] n: 1 pts: 60 pts_time:2.002\n"
+                "[Parsed_showinfo_1 @ 0x1] n: 2 pts: 120 pts_time:4.004\n"
+            )
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr=stderr)
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr(media_module.subprocess, "run", fake_run)
+    spec = make_spec()
+    generation = open_or_create_generation(index_root, spec)
+    outcome = index_one_source(source, generation, spec, make_image_embedder())
+    assert outcome.disposition == "INDEXED"
+    assert outcome.samples_written == 3
+
+    conn = connect_db(generation)
+    try:
+        src_row = conn.execute(
+            "SELECT stream_index, timebase_num, timebase_den FROM sources WHERE source_sha256 = ?",
+            (outcome.source_sha256,),
+        ).fetchone()
+        sample_rows = conn.execute(
+            "SELECT frame_ordinal, pts, pts_time, timebase_num, timebase_den, timestamp_human "
+            "FROM samples WHERE source_sha256 = ? ORDER BY frame_ordinal",
+            (outcome.source_sha256,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert src_row is not None
+    assert src_row["stream_index"] == 1
+    assert (src_row["timebase_num"], src_row["timebase_den"]) == (1001, 30000)
+    assert [row["pts"] for row in sample_rows] == [0, 60, 120]
+    assert [row["pts_time"] for row in sample_rows] == pytest.approx([0.0, 2.002, 4.004])
+    assert all(
+        (row["timebase_num"], row["timebase_den"]) == (1001, 30000) for row in sample_rows
+    )
+
+
+def test_index_inputs_records_failed_count_when_stream_or_pts_refused(
+    index_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bad_source = tmp_path / "media" / "bad_stream.mp4"
+    bad_source.parent.mkdir(parents=True, exist_ok=True)
+    bad_source.write_bytes(b"corrupt stream index")
+
+    def refusing_probe(_path: Path):
+        raise ValueError("MISSING_STREAM_INDEX")
+
+    monkeypatch.setattr(indexer_module, "probe_stream", refusing_probe)
+    spec = make_spec()
+    summary = index_inputs([bad_source], index_root, spec, make_image_embedder())
+    assert summary.indexed == 0
+    assert summary.skipped == 0
+    assert summary.reused == 0
+    assert summary.failed == 1
+    assert summary.outcomes[0].disposition == "FAILED"
+    assert "MISSING_STREAM_INDEX" in (summary.outcomes[0].error or "")
+

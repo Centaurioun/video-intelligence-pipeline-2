@@ -405,3 +405,157 @@ def test_preview_real_cli_forwards_plan_bound_synthetic_context_before_adapter(
     assert seen["synthetic_opt_in"] is True
     assert seen["synthetic_preflight"] is context
     assert seen["synthetic_binding"] == bindings[0]
+
+
+@pytest.mark.parametrize(
+    ("stub_summary", "expected_rc"),
+    [
+        (
+            {
+                "operation": "index-local",
+                "generation_id": "gen-1",
+                "space_id": "space-1",
+                "indexed": 1,
+                "skipped": 0,
+                "reused": 0,
+                "failed": 0,
+            },
+            0,
+        ),
+        (
+            {
+                "operation": "index-local",
+                "generation_id": "gen-1",
+                "space_id": "space-1",
+                "indexed": 0,
+                "skipped": 1,
+                "reused": 0,
+                "failed": 0,
+            },
+            0,
+        ),
+        (
+            {
+                "operation": "index-local",
+                "generation_id": "gen-1",
+                "space_id": "space-1",
+                "indexed": 0,
+                "skipped": 0,
+                "reused": 1,
+                "failed": 0,
+            },
+            0,
+        ),
+        (
+            {
+                "operation": "index-local",
+                "generation_id": "gen-1",
+                "space_id": "space-1",
+                "indexed": 0,
+                "skipped": 0,
+                "reused": 0,
+                "failed": 1,
+            },
+            1,
+        ),
+        (
+            {
+                "operation": "index-local",
+                "generation_id": "gen-1",
+                "space_id": "space-1",
+                "indexed": 2,
+                "skipped": 1,
+                "reused": 1,
+                "failed": 1,
+            },
+            1,
+        ),
+        (
+            {
+                "operation": "index-local",
+                "generation_id": "gen-1",
+                "space_id": "space-1",
+                "indexed": 0,
+                "skipped": 0,
+                "reused": 0,
+                "failed": 0,
+            },
+            1,
+        ),
+        (
+            {
+                "operation": "index-local",
+                "generation_id": "gen-1",
+                "space_id": "space-1",
+                "indexed": 1,
+            },
+            1,
+        ),
+    ],
+)
+def test_index_local_cli_exit_code_reflects_disposition_and_failure_counts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    stub_summary: dict[str, object],
+    expected_rc: int,
+) -> None:
+    from vip_fvs import cli, coordinator
+
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"synthetic source")
+    monkeypatch.setattr(
+        coordinator,
+        "index_local_source",
+        lambda *args, **kwargs: dict(stub_summary),
+    )
+
+    rc = cli.main(
+        [
+            "index-local",
+            "--source",
+            str(source),
+            "--index-root",
+            str(tmp_path / "index"),
+            "--fake-embedder",
+        ]
+    )
+    assert rc == expected_rc
+    out_lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert len(out_lines) == 1
+    parsed = json.loads(out_lines[0])
+    assert parsed["runtime_mode"] == "fake"
+    assert parsed["generation_id"] == "gen-1"
+
+
+def test_index_local_cli_upstream_exception_refusal_returns_nonzero_with_single_json_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from vip_fvs import cli, coordinator
+
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"synthetic source")
+
+    def fail_upstream(*args, **kwargs):
+        raise ValueError("MISSING_STREAM_INDEX")
+
+    monkeypatch.setattr(coordinator, "index_local_source", fail_upstream)
+    rc = cli.main(
+        [
+            "index-local",
+            "--source",
+            str(source),
+            "--index-root",
+            str(tmp_path / "index"),
+            "--fake-embedder",
+        ]
+    )
+    assert rc != 0
+    out_lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert len(out_lines) == 1
+    parsed = json.loads(out_lines[0])
+    assert parsed["status"] == "refused"
+    assert "MISSING_STREAM_INDEX" in parsed["error"]
+
