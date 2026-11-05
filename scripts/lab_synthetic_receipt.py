@@ -17,6 +17,19 @@ from typing import Any
 
 SCHEMA_VERSION = "lab-synthetic-receipt.v1"
 WORKFLOW_PATH = ".github/workflows/vip-ai-studio-synthetic-ci.yml"
+LAB_REPOSITORY = "Centaurioun/video-intelligence-pipeline-2"
+EXPECTED_NODE_BASELINE_COUNT = 37
+EXPECTED_NODE_BASELINE_SHA256 = "8618d8d4e810dcb065ee4f5d79d3cb28b02d57e817ba845181b2f2b88ec6c374"
+_baseline_bytes = Path(__file__).with_name("lab_synthetic_expected_nodes.txt").read_bytes()
+_baseline_lines = _baseline_bytes.decode("utf-8").splitlines()
+if (
+    hashlib.sha256(_baseline_bytes).hexdigest() != EXPECTED_NODE_BASELINE_SHA256
+    or len(_baseline_lines) != EXPECTED_NODE_BASELINE_COUNT
+    or len(_baseline_lines) != len(set(_baseline_lines))
+    or any(not line.strip() for line in _baseline_lines)
+):
+    raise RuntimeError("pinned MEGA-17 node baseline is malformed or changed")
+EXPECTED_NODE_IDS = frozenset(_baseline_lines)
 LOCKFILE_PATH = "requirements/gate0.lock"
 EXPECTED_MODULES = {
     "tests.vip_lab.test_mega17_editorial_readiness",
@@ -38,19 +51,43 @@ def _git(*args: str) -> str:
     return subprocess.check_output(["git", *args], text=True).strip()
 
 
-def _parse_collection(path: Path) -> list[str]:
+def _runtime_identity() -> dict[str, str]:
+    try:
+        pytest_version = importlib.metadata.version("pytest")
+    except importlib.metadata.PackageNotFoundError:
+        pytest_version = "NOT_OBSERVED"
+    return {
+        "ref": os.environ.get("GITHUB_REF", _git("rev-parse", "--abbrev-ref", "HEAD")),
+        "run_id": os.environ.get("GITHUB_RUN_ID", "local"),
+        "job_id": os.environ.get(
+            "LAB_JOB_ID",
+            os.environ.get(
+                "GITHUB_JOB",
+                f"local-python-{sys.version_info.major}.{sys.version_info.minor}",
+            ),
+        ),
+        "python_version": sys.version.split()[0],
+        "pytest_version": pytest_version,
+    }
+
+
+def _parse_collection_text(content: str) -> list[str]:
     nodeids = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in content.splitlines():
         nodeid = line.strip()
-        if nodeid.startswith("tests/vip_lab/test_mega17_") and "::" in nodeid:
+        if "::" in nodeid:
             path_part, test_name = nodeid.split("::", 1)
             module = path_part.replace("/", ".").removesuffix(".py")
             nodeids.append(f"{module}::{test_name}")
     return sorted(nodeids)
 
 
-def _parse_junit(path: Path) -> tuple[list[str], dict[str, int]]:
-    root = ET.parse(path).getroot()
+def _parse_collection(path: Path) -> list[str]:
+    return _parse_collection_text(path.read_text(encoding="utf-8"))
+
+
+def _parse_junit_bytes(content: bytes) -> tuple[list[str], dict[str, int]]:
+    root = ET.fromstring(content)
     cases = list(root.iter("testcase"))
     executed: list[str] = []
     passed = failed = errors = skipped = 0
@@ -80,6 +117,10 @@ def _parse_junit(path: Path) -> tuple[list[str], dict[str, int]]:
     return sorted(executed), counts
 
 
+def _parse_junit(path: Path) -> tuple[list[str], dict[str, int]]:
+    return _parse_junit_bytes(path.read_bytes())
+
+
 def validate_receipt(receipt: Any) -> list[str]:
     """Return fail-closed receipt contract errors; empty means internally consistent."""
     if not isinstance(receipt, dict):
@@ -93,6 +134,10 @@ def validate_receipt(receipt: Any) -> list[str]:
         "evidence_errors",
     }
     errors = [f"missing required field: {key}" for key in sorted(required - receipt.keys())]
+    errors.extend(
+        f"unexpected cross-lane or unsupported field: {key}"
+        for key in sorted(receipt.keys() - required)
+    )
     if errors:
         return errors
     if receipt["schema_version"] != SCHEMA_VERSION:
@@ -101,8 +146,8 @@ def validate_receipt(receipt: Any) -> list[str]:
         errors.append("receipt identity must remain LAB synthetic only")
     if receipt["workflow_path"] != WORKFLOW_PATH:
         errors.append("workflow_path does not identify the LAB synthetic workflow")
-    if not isinstance(receipt["repository"], str) or not receipt["repository"].strip():
-        errors.append("repository must be a non-empty identity")
+    if receipt["repository"] != LAB_REPOSITORY:
+        errors.append("repository must identify the LAB repository exactly")
     if not isinstance(receipt["ref"], str) or not receipt["ref"].strip():
         errors.append("ref must be a non-empty identity")
     for key in ("commit_sha", "tree_sha", "workflow_blob_sha"):
@@ -130,7 +175,9 @@ def validate_receipt(receipt: Any) -> list[str]:
     if sorted(collected) != sorted(executed):
         errors.append("collected and executed node IDs differ (missing, extra, or deselected tests)")
     modules = {nodeid.split("::", 1)[0].replace("/", ".").removesuffix(".py") for nodeid in collected}
-    derived_suite_coverage_complete = modules == EXPECTED_MODULES
+    derived_suite_coverage_complete = (
+        modules == EXPECTED_MODULES and EXPECTED_NODE_IDS <= set(collected)
+    )
     if not isinstance(receipt["suite_coverage_complete"], bool):
         errors.append("suite_coverage_complete must be a boolean")
     elif receipt["suite_coverage_complete"] != derived_suite_coverage_complete:
@@ -209,10 +256,8 @@ def build_receipt(
     except OSError as exc:
         lockfile_digest = None
         evidence_errors.append(f"lockfile identity unavailable: {exc}")
-    try:
-        pytest_version = importlib.metadata.version("pytest")
-    except importlib.metadata.PackageNotFoundError:
-        pytest_version = "NOT_OBSERVED"
+    runtime_identity = _runtime_identity()
+    if runtime_identity["pytest_version"] == "NOT_OBSERVED":
         evidence_errors.append("pytest version unavailable")
     counts["collected"] = len(collected)
     counts["deselected"] = max(0, len(collected) - len(executed))
@@ -221,7 +266,9 @@ def build_receipt(
         nodeid.split("::", 1)[0].replace("/", ".").removesuffix(".py")
         for nodeid in collected
     }
-    complete_suite_coverage = modules == EXPECTED_MODULES
+    complete_suite_coverage = (
+        modules == EXPECTED_MODULES and EXPECTED_NODE_IDS <= set(collected)
+    )
     status = (
         "PASS"
         if exit_status == collection_exit_status == pytest_exit_status == 0
@@ -231,22 +278,21 @@ def build_receipt(
         and not evidence_errors
         else "FAIL"
     )
-    repository = os.environ.get("GITHUB_REPOSITORY", "Centaurioun/video-intelligence-pipeline-2")
-    ref = os.environ.get("GITHUB_REF", _git("rev-parse", "--abbrev-ref", "HEAD"))
+    repository = os.environ.get("GITHUB_REPOSITORY", LAB_REPOSITORY)
     receipt = {
         "schema_version": SCHEMA_VERSION,
         "lane_id": "lab-synthetic",
         "scope": "LAB_SYNTHETIC_ONLY",
         "repository": repository,
-        "ref": ref,
+        "ref": runtime_identity["ref"],
         "commit_sha": os.environ.get("GITHUB_SHA", _git("rev-parse", "HEAD")),
         "tree_sha": _git("rev-parse", "HEAD^{tree}"),
         "workflow_path": WORKFLOW_PATH,
         "workflow_blob_sha": workflow_blob,
-        "run_id": os.environ.get("GITHUB_RUN_ID", "local"),
-        "job_id": os.environ.get("LAB_JOB_ID", os.environ.get("GITHUB_JOB", f"local-python-{sys.version_info.major}.{sys.version_info.minor}")),
-        "python_version": sys.version.split()[0],
-        "pytest_version": pytest_version,
+        "run_id": runtime_identity["run_id"],
+        "job_id": runtime_identity["job_id"],
+        "python_version": runtime_identity["python_version"],
+        "pytest_version": runtime_identity["pytest_version"],
         "lockfile_sha256": lockfile_digest,
         "collected_node_ids": collected,
         "executed_node_ids": executed,
@@ -263,6 +309,53 @@ def build_receipt(
     return receipt
 
 
+def verify_receipt_evidence(receipt: Any, collection_path: Path, junit_path: Path) -> list[str]:
+    """Verify receipt claims against supplied collection and JUnit evidence bytes.
+
+    validate_receipt() is structural only; callers must use this function when
+    making claims tied to the actual uploaded evidence files.
+    """
+    errors = validate_receipt(receipt)
+    if errors:
+        return errors
+    try:
+        collection_bytes = collection_path.read_bytes()
+        junit_bytes = junit_path.read_bytes()
+        collected = _parse_collection_text(collection_bytes.decode("utf-8"))
+        executed, counts = _parse_junit_bytes(junit_bytes)
+        actual_commit = _git("rev-parse", "HEAD")
+        actual_tree = _git("rev-parse", "HEAD^{tree}")
+        actual_workflow_blob = _git("hash-object", WORKFLOW_PATH)
+        actual_lockfile_sha256 = _sha256(Path(LOCKFILE_PATH))
+    except (OSError, UnicodeError, ET.ParseError, ValueError) as exc:
+        return [f"evidence unavailable or malformed: {exc}"]
+    except subprocess.CalledProcessError as exc:
+        return [f"repository provenance unavailable: {exc}"]
+    for key, actual in (
+        ("commit_sha", actual_commit),
+        ("tree_sha", actual_tree),
+        ("workflow_blob_sha", actual_workflow_blob),
+        ("lockfile_sha256", actual_lockfile_sha256),
+    ):
+        if receipt[key] != actual:
+            errors.append(f"{key} does not match current repository evidence")
+    for key, actual in _runtime_identity().items():
+        if receipt[key] != actual:
+            errors.append(f"{key} does not match current workflow/runtime identity")
+    if hashlib.sha256(collection_bytes).hexdigest() != receipt["collection_sha256"]:
+        errors.append("collection_sha256 does not match supplied collection bytes")
+    if hashlib.sha256(junit_bytes).hexdigest() != receipt["junit_sha256"]:
+        errors.append("junit_sha256 does not match supplied JUnit bytes")
+    if collected != sorted(receipt["collected_node_ids"]):
+        errors.append("collection evidence node IDs do not match receipt")
+    if executed != sorted(receipt["executed_node_ids"]):
+        errors.append("JUnit evidence node IDs do not match receipt")
+    for key, value in counts.items():
+        if receipt["counts"].get(key) != value:
+            errors.append(f"counts.{key} does not match JUnit evidence")
+    return errors
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
@@ -275,6 +368,10 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--output", type=Path, required=True)
     validate = sub.add_parser("validate")
     validate.add_argument("receipt", type=Path)
+    verify = sub.add_parser("verify-evidence")
+    verify.add_argument("receipt", type=Path)
+    verify.add_argument("--collection", type=Path, required=True)
+    verify.add_argument("--junit", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "create":
         receipt = build_receipt(
@@ -289,12 +386,19 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, json.JSONDecodeError) as exc:
             print(f"invalid receipt: {exc}", file=sys.stderr)
             return 1
-        errors = validate_receipt(receipt)
+        errors = (
+            verify_receipt_evidence(receipt, args.collection, args.junit)
+            if args.command == "verify-evidence"
+            else validate_receipt(receipt)
+        )
     if errors:
         for error in errors:
             print(f"receipt contract error: {error}", file=sys.stderr)
         return 1
-    print("LAB synthetic receipt contract valid; this is not canonical-history evidence.")
+    if args.command == "verify-evidence":
+        print("LAB synthetic receipt structure and supplied evidence bytes verified; this is not canonical-history evidence.")
+    else:
+        print("LAB synthetic receipt structure valid; evidence bytes were not checked. This is not canonical-history evidence.")
     return 0
 
 

@@ -46,6 +46,12 @@ jobs:
       - name: Check Python syntax
         run: python -m compileall -q src experiments tests
 
+      - name: Run LAB receipt contract tests
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -m pytest -q tests/scripts/test_lab_synthetic_receipt.py
+
       - name: Run bounded Gate-1 and product-path synthetic regressions
         env:
           PYTHONPATH: src:experiments:scripts
@@ -598,6 +604,16 @@ jobs:
         if: always()
         run: python scripts/lab_synthetic_receipt.py validate "$RUNNER_TEMP/lab-synthetic-receipt.json"
 
+      - name: Verify LAB receipt against evidence bytes
+        if: always()
+        env:
+          LAB_JOB_ID: gate1-synthetic-${{ matrix.python-version }}
+        run: |
+          python scripts/lab_synthetic_receipt.py verify-evidence \
+            "$RUNNER_TEMP/lab-synthetic-receipt.json" \
+            --collection "$RUNNER_TEMP/mega17-collection.txt" \
+            --junit "$RUNNER_TEMP/lab-synthetic-junit.xml"
+
       - name: Enforce MEGA-17 receipt PASS status
         if: always()
         run: |
@@ -621,4 +637,5 @@ jobs:
           path: |
             ${{ runner.temp }}/lab-synthetic-receipt.json
             ${{ runner.temp }}/lab-synthetic-junit.xml
+            ${{ runner.temp }}/mega17-collection.txt
           if-no-files-found: warn

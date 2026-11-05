@@ -1,25 +1,26 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from scripts.lab_synthetic_receipt import build_receipt, validate_receipt
+from scripts.lab_synthetic_receipt import (
+    EXPECTED_NODE_IDS,
+    EXPECTED_NODE_BASELINE_COUNT,
+    LOCKFILE_PATH,
+    WORKFLOW_PATH,
+    _runtime_identity,
+    build_receipt,
+    validate_receipt,
+    verify_receipt_evidence,
+)
 
 
 def valid_receipt() -> dict[str, object]:
-    nodes = [
-        f"tests.vip_lab.{suite}::test_example"
-        for suite in (
-            "test_mega17_editorial_readiness",
-            "test_mega17_end_to_end",
-            "test_mega17_gate0_readiness",
-            "test_mega17_integration_readiness",
-            "test_mega17_release_readiness",
-            "test_mega17_source_readiness",
-        )
-    ]
+    nodes = sorted(EXPECTED_NODE_IDS)
     return {
         "schema_version": "lab-synthetic-receipt.v1",
         "lane_id": "lab-synthetic",
@@ -36,12 +37,12 @@ def valid_receipt() -> dict[str, object]:
         "pytest_version": "9.0.0",
         "lockfile_sha256": "d" * 64,
         "collected_node_ids": nodes,
-        "executed_node_ids": nodes,
+        "executed_node_ids": list(nodes),
         "suite_coverage_complete": True,
         "counts": {
-            "collected": 6,
-            "executed": 6,
-            "passed": 6,
+            "collected": len(nodes),
+            "executed": len(nodes),
+            "passed": len(nodes),
             "failed": 0,
             "errors": 0,
             "skipped": 0,
@@ -57,8 +58,137 @@ def valid_receipt() -> dict[str, object]:
     }
 
 
+def test_mega17_baseline_is_independently_pinned() -> None:
+    baseline = Path("scripts/lab_synthetic_expected_nodes.txt").read_bytes()
+    assert EXPECTED_NODE_BASELINE_COUNT == 37
+    assert len(EXPECTED_NODE_IDS) == 37
+    assert hashlib.sha256(baseline).hexdigest() == (
+        "8618d8d4e810dcb065ee4f5d79d3cb28b02d57e817ba845181b2f2b88ec6c374"
+    )
+
+
 def test_accepts_complete_lab_only_receipt() -> None:
-    assert validate_receipt(valid_receipt()) == []
+    receipt = valid_receipt()
+    receipt["collected_node_ids"] = sorted(EXPECTED_NODE_IDS)
+    receipt["executed_node_ids"] = sorted(EXPECTED_NODE_IDS)
+    receipt["counts"].update(collected=len(EXPECTED_NODE_IDS), executed=len(EXPECTED_NODE_IDS), passed=len(EXPECTED_NODE_IDS))
+    assert validate_receipt(receipt) == []
+
+
+def test_rejects_reduced_or_substituted_mega17_node_set() -> None:
+    receipt = valid_receipt()
+    receipt["collected_node_ids"] = sorted(EXPECTED_NODE_IDS)
+    receipt["executed_node_ids"] = sorted(EXPECTED_NODE_IDS)
+    receipt["counts"].update(collected=len(EXPECTED_NODE_IDS), executed=len(EXPECTED_NODE_IDS), passed=len(EXPECTED_NODE_IDS))
+    assert validate_receipt(receipt) == []
+
+    reduced = copy.deepcopy(receipt)
+    reduced["collected_node_ids"].remove(next(iter(EXPECTED_NODE_IDS)))
+    reduced["executed_node_ids"].remove(next(iter(EXPECTED_NODE_IDS)))
+    reduced["counts"].update(collected=len(EXPECTED_NODE_IDS) - 1, executed=len(EXPECTED_NODE_IDS) - 1, passed=len(EXPECTED_NODE_IDS) - 1)
+    assert validate_receipt(reduced)
+
+    substituted = copy.deepcopy(receipt)
+    substituted["collected_node_ids"][0] = substituted["collected_node_ids"][0].replace("test_", "test_replacement_", 1)
+    substituted["executed_node_ids"][0] = substituted["collected_node_ids"][0]
+    assert validate_receipt(substituted)
+
+
+def test_allows_additions_when_entire_pinned_baseline_remains() -> None:
+    receipt = valid_receipt()
+    added_node = "tests.vip_lab.test_mega17_end_to_end::test_new_additive_case"
+    receipt["collected_node_ids"].append(added_node)
+    receipt["executed_node_ids"].append(added_node)
+    receipt["counts"].update(
+        collected=len(EXPECTED_NODE_IDS) + 1,
+        executed=len(EXPECTED_NODE_IDS) + 1,
+        passed=len(EXPECTED_NODE_IDS) + 1,
+    )
+    assert validate_receipt(receipt) == []
+
+
+@pytest.mark.parametrize("repository", ["Centaurioun/video-intelligence-pipeline", "other/repo"])
+def test_rejects_cross_lane_repository_spoofing(repository: str) -> None:
+    receipt = valid_receipt()
+    receipt["repository"] = repository
+    assert validate_receipt(receipt)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("lane_id", "canonical-history"), ("scope", "CANONICAL_HISTORY"),
+     ("workflow_path", ".github/workflows/canonical-history-regressions.yml")],
+)
+def test_rejects_cross_lane_identity_fields(field: str, value: str) -> None:
+    receipt = valid_receipt()
+    receipt[field] = value
+    assert validate_receipt(receipt)
+
+
+def test_rejects_injected_cross_lane_identity_claim() -> None:
+    receipt = valid_receipt()
+    receipt["canonical_history_status"] = "PASS"
+    assert validate_receipt(receipt)
+
+
+def test_structural_validation_is_distinct_from_evidence_verification(tmp_path: Path) -> None:
+    receipt = valid_receipt()
+    receipt["collected_node_ids"] = sorted(EXPECTED_NODE_IDS)
+    receipt["executed_node_ids"] = sorted(EXPECTED_NODE_IDS)
+    receipt["counts"].update(collected=len(EXPECTED_NODE_IDS), executed=len(EXPECTED_NODE_IDS), passed=len(EXPECTED_NODE_IDS))
+    assert validate_receipt(receipt) == []
+
+    collection = tmp_path / "collection.txt"
+    collection.write_text("\n".join(f"{node.split('::')[0].replace('.', '/')}.py::{node.split('::', 1)[1]}" for node in EXPECTED_NODE_IDS) + "\n", encoding="utf-8")
+    cases = "".join(f'<testcase classname="{node.split("::")[0]}" name="{node.split("::", 1)[1]}" />' for node in EXPECTED_NODE_IDS)
+    junit = tmp_path / "junit.xml"
+    junit.write_text(f"<testsuite>{cases}</testsuite>", encoding="utf-8")
+    receipt["collection_sha256"] = __import__("hashlib").sha256(collection.read_bytes()).hexdigest()
+    receipt["junit_sha256"] = __import__("hashlib").sha256(junit.read_bytes()).hexdigest()
+    receipt["commit_sha"] = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    receipt["tree_sha"] = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
+    receipt["workflow_blob_sha"] = subprocess.check_output(["git", "hash-object", WORKFLOW_PATH], text=True).strip()
+    receipt["lockfile_sha256"] = hashlib.sha256(Path(LOCKFILE_PATH).read_bytes()).hexdigest()
+    receipt.update(_runtime_identity())
+    assert verify_receipt_evidence(receipt, collection, junit) == []
+
+    collection.write_text("tests/vip_lab/test_mega17_end_to_end.py::test_replacement\n", encoding="utf-8")
+    assert verify_receipt_evidence(receipt, collection, junit)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["commit_sha", "tree_sha", "workflow_blob_sha", "lockfile_sha256",
+     "ref", "run_id", "job_id", "python_version", "pytest_version"],
+)
+def test_evidence_verification_rejects_unbound_repository_provenance(field: str, tmp_path: Path) -> None:
+    receipt = valid_receipt()
+    collection = tmp_path / "collection.txt"
+    collection.write_text(
+        "\n".join(
+            f"{node.split('::')[0].replace('.', '/')}.py::{node.split('::', 1)[1]}"
+            for node in EXPECTED_NODE_IDS
+        ) + "\n",
+        encoding="utf-8",
+    )
+    junit = tmp_path / "junit.xml"
+    cases = "".join(
+        f'<testcase classname="{node.split("::")[0]}" name="{node.split("::", 1)[1]}" />'
+        for node in EXPECTED_NODE_IDS
+    )
+    junit.write_text(f"<testsuite>{cases}</testsuite>", encoding="utf-8")
+    receipt["collection_sha256"] = hashlib.sha256(collection.read_bytes()).hexdigest()
+    receipt["junit_sha256"] = hashlib.sha256(junit.read_bytes()).hexdigest()
+    receipt["commit_sha"] = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    receipt["tree_sha"] = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
+    receipt["workflow_blob_sha"] = subprocess.check_output(["git", "hash-object", WORKFLOW_PATH], text=True).strip()
+    receipt["lockfile_sha256"] = hashlib.sha256(Path(LOCKFILE_PATH).read_bytes()).hexdigest()
+    receipt.update(_runtime_identity())
+    receipt[field] = "0" * (64 if field == "lockfile_sha256" else 40)
+    assert verify_receipt_evidence(receipt, collection, junit)
+    collection.write_text("\n".join(f"{node.split('::')[0].replace('.', '/')}.py::{node.split('::', 1)[1]}" for node in EXPECTED_NODE_IDS) + "\n", encoding="utf-8")
+    junit.write_text("<testsuite><testcase classname='tests.vip_lab.test_fake' name='test_fake'/></testsuite>", encoding="utf-8")
+    assert verify_receipt_evidence(receipt, collection, junit)
 
 
 @pytest.mark.parametrize(
@@ -86,7 +216,7 @@ def test_rejects_missing_receipt_and_non_object_payload() -> None:
 
 def test_accepts_consistent_failed_execution_as_failure_evidence() -> None:
     receipt = valid_receipt()
-    receipt["counts"].update(passed=5, failed=1)
+    receipt["counts"].update(passed=len(EXPECTED_NODE_IDS) - 1, failed=1)
     receipt.update(exit_status=1, pytest_exit_status=1, status="FAIL")
     assert validate_receipt(receipt) == []
 
@@ -106,6 +236,9 @@ def test_workflow_keeps_python_matrix_six_suites_and_separate_artifact() -> None
         assert workflow.count(suite) == 1
     assert "name: lab-synthetic-${{ matrix.python-version }}" in workflow
     assert "canonical-history status is independent and unchanged" in workflow
+    assert "Run LAB receipt contract tests" in workflow
+    assert "tests/scripts/test_lab_synthetic_receipt.py" in workflow
+    assert "verify-evidence" in workflow
 
 
 def test_builder_does_not_claim_pass_when_one_meg17_suite_is_empty(tmp_path: Path) -> None:
