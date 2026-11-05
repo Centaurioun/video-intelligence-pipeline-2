@@ -136,14 +136,13 @@ Any merge/adoption decision remains separate and owner controlled. A next safe p
 - A separate exact-head check also had a targeted RED: a stale successful CodeScene result incorrectly mapped to `PASS` before head binding; after requiring the observed SHA to equal the requested current SHA, it maps to `NOT_OBSERVED`. A contradictory `open + draft + merged` PR tuple likewise had a targeted RED and now stays `UNRESOLVED`.
 - Existing six MEGA-17 test modules were also run without changing their selection: 37/37 passed locally on Python 3.11.9 and 37/37 on Python 3.14.9. The Python 3.14 task-local environment initially lacked NumPy and Pillow; after installing the routine prerequisites into that temporary environment (NumPy 2.5.4, Pillow 13.0.0), the same six-module command passed. An initial import attempt also required the repo's `src:experiments` paths in `PYTHONPATH`; no test expectation or workflow selection was changed.
 - These validator fixtures are synthetic and live only in the contract tests. The six actual hosted ZIP artifacts were separately downloaded and reconciled as described above.
-- An independent review is still required for the Task 5 candidate before reporting full acceptance. The final candidate review disposition is recorded in the delivery follow-up after exact-head review.
+- The helper validates **normalized** evidence records. It does not download or parse raw artifact ZIPs, parse raw JUnit/JSON, or compute ZIP digests; those source-level checks were performed from the downloaded files and GitHub metadata and are recorded above. Re-running the helper alone is not equivalent to replaying all six external artifact checks.
+- Exact-head read-only review of `958102d150acf71e74551fbf8c5fb578b31e33f0` found no material reconciliation defect and confirmed six digest and six node-set comparisons. It identified the normalized-input limitation above (P2) and the duplicate empty appendix heading, which this revision removes. The updated final candidate receives its own exact-head review before publication.
+- `gitleaks git` over the Task 5 commit reported no leaks. `scripts/verify-workspace.sh --feature-worktree` completed its checks but returned 26 repository-surface failures: the LAB base lacks multiple canonical audit, reference-pack, and prototype files required by that repository-wide verifier. The Task 5 changed-file list does not include any of those paths; this is retained as an ambient LAB workspace limitation, not reported as PASS.
 
 ## Appendix 1 — Exact node populations
 
 The lists below are transcribed from the independent owning baseline. C1's canonical historical manifest `prior_status` entries remain `UNRESOLVED`; their observed execution outcomes are in the downloaded Task 2 receipts, not written back into that manifest.
-
-### CANONICAL_HISTORY_33 — Task 1 oracle
-
 
 ### CANONICAL_HISTORY_33 — 33 exact node IDs
 

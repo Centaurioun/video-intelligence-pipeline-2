@@ -1,7 +1,8 @@
 """Fail-closed checks for normalized cross-repository test evidence slices.
 
 Inputs are normalized from independently fetched GitHub metadata, workflow
-receipts, artifact bytes and JUnit XML. This module does not fetch evidence.
+receipts, artifact bytes and JUnit XML. This module does not fetch evidence,
+parse raw receipts/JUnit, or compute artifact digests.
 """
 
 from typing import Any, Mapping, Sequence
