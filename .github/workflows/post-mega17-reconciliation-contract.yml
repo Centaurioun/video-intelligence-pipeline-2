@@ -10,6 +10,7 @@ on:
       - scripts/post_mega17_receipt_reconciliation.py
       - tests/contracts/post_mega17_receipt_reconciliation_expected_nodeids.txt
       - tests/contracts/test_post_mega17_receipt_reconciliation.py
+      - tests/contracts/test_post_mega17_reconciliation_workflow.py
 
 permissions:
   contents: read

@@ -78,6 +78,7 @@ def test_workflow_is_separate_and_scoped_to_relevant_pull_request_changes():
         "scripts/post_mega17_receipt_reconciliation.py",
         "tests/contracts/post_mega17_receipt_reconciliation_expected_nodeids.txt",
         "tests/contracts/test_post_mega17_receipt_reconciliation.py",
+        "tests/contracts/test_post_mega17_reconciliation_workflow.py",
     ):
         assert f"- {path}" in workflow
     assert "vip-ai-studio-synthetic-ci.yml" not in workflow
