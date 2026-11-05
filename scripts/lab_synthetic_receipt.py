@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "lab-synthetic-receipt.v1"
+SCHEMA_VERSION = "lab-synthetic-receipt.v2"
 WORKFLOW_PATH = ".github/workflows/vip-ai-studio-synthetic-ci.yml"
 LAB_REPOSITORY = "Centaurioun/video-intelligence-pipeline-2"
 EXPECTED_NODE_BASELINE_COUNT = 37
@@ -56,16 +56,39 @@ def _runtime_identity() -> dict[str, str]:
         pytest_version = importlib.metadata.version("pytest")
     except importlib.metadata.PackageNotFoundError:
         pytest_version = "NOT_OBSERVED"
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "local")
+    is_pull_request = event_name == "pull_request"
+    not_applicable = "NOT_OBSERVED" if is_pull_request else "NOT_APPLICABLE"
+    pr_base_ref = (os.environ.get("LAB_PR_BASE_REF") or not_applicable) if is_pull_request else "NOT_APPLICABLE"
+    pr_head_ref = (os.environ.get("LAB_PR_HEAD_REF") or not_applicable) if is_pull_request else "NOT_APPLICABLE"
+    pr_base_repository = (os.environ.get("LAB_PR_BASE_REPOSITORY") or not_applicable) if is_pull_request else "NOT_APPLICABLE"
+    pr_head_repository = (os.environ.get("LAB_PR_HEAD_REPOSITORY") or not_applicable) if is_pull_request else "NOT_APPLICABLE"
+    source_ref = (
+        f"refs/heads/{pr_head_ref}"
+        if is_pull_request and pr_head_ref not in {"NOT_OBSERVED", "NOT_APPLICABLE"}
+        else "NOT_OBSERVED" if is_pull_request
+        else os.environ.get("GITHUB_REF", _git("rev-parse", "--abbrev-ref", "HEAD"))
+    )
     return {
+        "event_name": event_name,
         "ref": os.environ.get("GITHUB_REF", _git("rev-parse", "--abbrev-ref", "HEAD")),
+        "source_ref": source_ref,
+        "pr_base_ref": pr_base_ref,
+        "pr_head_ref": pr_head_ref,
+        "pr_base_repository": pr_base_repository,
+        "pr_head_repository": pr_head_repository,
+        "pr_base_sha": (os.environ.get("LAB_PR_BASE_SHA") or not_applicable) if is_pull_request else "NOT_APPLICABLE",
+        "pr_head_sha": (os.environ.get("LAB_PR_HEAD_SHA") or not_applicable) if is_pull_request else "NOT_APPLICABLE",
+        "pr_merge_sha": (os.environ.get("LAB_PR_MERGE_SHA") or not_applicable) if is_pull_request else "NOT_APPLICABLE",
         "run_id": os.environ.get("GITHUB_RUN_ID", "local"),
-        "job_id": os.environ.get(
+        "job_key": os.environ.get(
             "LAB_JOB_ID",
             os.environ.get(
                 "GITHUB_JOB",
                 f"local-python-{sys.version_info.major}.{sys.version_info.minor}",
             ),
         ),
+        "github_job_id": os.environ.get("LAB_GITHUB_JOB_ID", "NOT_OBSERVED"),
         "python_version": sys.version.split()[0],
         "pytest_version": pytest_version,
     }
@@ -89,6 +112,24 @@ def _parse_collection(path: Path) -> list[str]:
 def _parse_junit_bytes(content: bytes) -> tuple[list[str], dict[str, int]]:
     root = ET.fromstring(content)
     cases = list(root.iter("testcase"))
+    for suite in root.iter():
+        if suite.tag not in {"testsuite", "testsuites"}:
+            continue
+        suite_cases = list(suite.iter("testcase"))
+        actual = {
+            "tests": len(suite_cases),
+            "failures": sum(case.find("failure") is not None for case in suite_cases),
+            "errors": sum(case.find("error") is not None for case in suite_cases),
+            "skipped": sum(case.find("skipped") is not None for case in suite_cases),
+        }
+        for key, observed in actual.items():
+            if key in suite.attrib:
+                try:
+                    declared = int(suite.attrib[key])
+                except ValueError as exc:
+                    raise ValueError(f"JUnit suite {key} counter is not an integer") from exc
+                if declared != observed:
+                    raise ValueError(f"JUnit suite {key} counter does not match testcases")
     executed: list[str] = []
     passed = failed = errors = skipped = 0
     for case in cases:
@@ -97,6 +138,9 @@ def _parse_junit_bytes(content: bytes) -> tuple[list[str], dict[str, int]]:
         if not classname or not name:
             raise ValueError("JUnit testcase is missing classname or name")
         executed.append(f"{classname}::{name}")
+        outcomes = sum(case.find(tag) is not None for tag in ("skipped", "failure", "error"))
+        if outcomes > 1:
+            raise ValueError("JUnit testcase has conflicting outcomes")
         if case.find("skipped") is not None:
             skipped += 1
         elif case.find("failure") is not None:
@@ -126,9 +170,12 @@ def validate_receipt(receipt: Any) -> list[str]:
     if not isinstance(receipt, dict):
         return ["receipt must be a JSON object"]
     required = {
-        "schema_version", "lane_id", "scope", "repository", "ref", "commit_sha",
-        "tree_sha", "workflow_path", "workflow_blob_sha", "run_id", "job_id",
-        "python_version", "pytest_version", "lockfile_sha256", "collected_node_ids",
+        "schema_version", "lane_id", "scope", "repository", "ref", "event_name",
+        "source_ref", "pr_base_ref", "pr_head_ref", "pr_base_repository", "pr_head_repository",
+        "pr_base_sha", "pr_head_sha",
+        "pr_merge_sha", "commit_sha",
+        "tree_sha", "workflow_path", "workflow_blob_sha", "run_id",
+        "job_key", "github_job_id", "python_version", "pytest_version", "lockfile_sha256", "collected_node_ids",
         "executed_node_ids", "suite_coverage_complete", "counts", "exit_status", "collection_exit_status",
         "pytest_exit_status", "status", "junit_sha256", "collection_sha256",
         "evidence_errors",
@@ -156,9 +203,42 @@ def validate_receipt(receipt: Any) -> list[str]:
     for key in ("lockfile_sha256", "junit_sha256", "collection_sha256"):
         if not isinstance(receipt[key], str) or not SHA256_RE.fullmatch(receipt[key]):
             errors.append(f"{key} must be a SHA-256 digest")
-    for key in ("run_id", "job_id", "python_version", "pytest_version"):
+    for key in ("run_id", "job_key", "python_version", "pytest_version"):
         if not isinstance(receipt[key], str) or not receipt[key].strip():
             errors.append(f"{key} must be a non-empty string")
+    if receipt["event_name"] == "pull_request":
+        for key in ("pr_base_ref", "pr_head_ref", "pr_base_repository", "pr_head_repository"):
+            if not isinstance(receipt[key], str) or not receipt[key].strip() or receipt[key].startswith("NOT_"):
+                errors.append(f"{key} must identify the pull request source")
+        repository_pattern = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+        for key in ("pr_base_repository", "pr_head_repository"):
+            if isinstance(receipt[key], str) and not repository_pattern.fullmatch(receipt[key]):
+                errors.append(f"{key} must be a full owner/repository identity")
+        if receipt["pr_base_repository"] != LAB_REPOSITORY:
+            errors.append("pull request base repository must remain the LAB repository")
+        for key in ("pr_base_sha", "pr_head_sha", "pr_merge_sha"):
+            if not isinstance(receipt[key], str) or not SHA1_RE.fullmatch(receipt[key]):
+                errors.append(f"{key} must be the observed pull request Git SHA")
+        if all(isinstance(receipt[key], str) and SHA1_RE.fullmatch(receipt[key]) for key in ("pr_base_sha", "pr_head_sha", "pr_merge_sha")):
+            if receipt["pr_base_sha"] == receipt["pr_head_sha"]:
+                errors.append("pull request base and head SHAs must remain distinct")
+            if receipt["pr_head_sha"] == receipt["pr_merge_sha"]:
+                errors.append("pull request head SHA must not be conflated with merge SHA")
+            if receipt["pr_merge_sha"] != receipt["commit_sha"]:
+                errors.append("pull request merge SHA must match the checked-out commit SHA")
+        if receipt["source_ref"] != f"refs/heads/{receipt['pr_head_ref']}":
+            errors.append("source_ref must identify the pull request head branch")
+    elif receipt["event_name"] in {"push", "workflow_dispatch", "local"}:
+        if any(receipt[key] != "NOT_APPLICABLE" for key in ("pr_base_ref", "pr_head_ref", "pr_base_repository", "pr_head_repository", "pr_base_sha", "pr_head_sha", "pr_merge_sha")):
+            errors.append("non-pull-request receipts must mark PR identity NOT_APPLICABLE")
+    else:
+        errors.append("event_name is not an observed supported workflow event")
+    if receipt["github_job_id"] != "NOT_OBSERVED" and (
+        not isinstance(receipt["github_job_id"], str)
+        or not receipt["github_job_id"].isdigit()
+        or receipt["github_job_id"].startswith("0")
+    ):
+        errors.append("github_job_id must be a numeric Actions job ID or NOT_OBSERVED")
 
     collected = receipt["collected_node_ids"]
     executed = receipt["executed_node_ids"]
@@ -190,6 +270,8 @@ def validate_receipt(receipt: Any) -> list[str]:
     if not isinstance(counts, dict) or count_keys - counts.keys():
         errors.append("counts must contain every execution count")
     else:
+        if counts.keys() - count_keys:
+            errors.append("counts contains unsupported execution counters")
         for key in count_keys:
             value = counts[key]
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
@@ -247,7 +329,9 @@ def build_receipt(
         junit_digest = None
         evidence_errors.append(f"JUnit evidence unavailable or malformed: {exc}")
     try:
-        workflow_blob = _git("hash-object", WORKFLOW_PATH)
+        workflow_blob = _git("rev-parse", f"HEAD:{WORKFLOW_PATH}")
+        if _git("hash-object", WORKFLOW_PATH) != workflow_blob:
+            evidence_errors.append("workflow file differs from checked-out Git blob")
     except subprocess.CalledProcessError:
         workflow_blob = ""
         evidence_errors.append("workflow blob identity unavailable")
@@ -259,6 +343,11 @@ def build_receipt(
     runtime_identity = _runtime_identity()
     if runtime_identity["pytest_version"] == "NOT_OBSERVED":
         evidence_errors.append("pytest version unavailable")
+    if runtime_identity["event_name"] == "pull_request" and any(
+        runtime_identity[key] == "NOT_OBSERVED"
+        for key in ("source_ref", "pr_base_ref", "pr_head_ref", "pr_base_repository", "pr_head_repository", "pr_base_sha", "pr_head_sha", "pr_merge_sha")
+    ):
+        evidence_errors.append("pull request identity unavailable")
     counts["collected"] = len(collected)
     counts["deselected"] = max(0, len(collected) - len(executed))
     clean = counts["failed"] == counts["errors"] == counts["skipped"] == counts["deselected"] == 0
@@ -285,12 +374,22 @@ def build_receipt(
         "scope": "LAB_SYNTHETIC_ONLY",
         "repository": repository,
         "ref": runtime_identity["ref"],
+        "event_name": runtime_identity["event_name"],
+        "source_ref": runtime_identity["source_ref"],
+        "pr_base_ref": runtime_identity["pr_base_ref"],
+        "pr_head_ref": runtime_identity["pr_head_ref"],
+        "pr_base_repository": runtime_identity["pr_base_repository"],
+        "pr_head_repository": runtime_identity["pr_head_repository"],
+        "pr_base_sha": runtime_identity["pr_base_sha"],
+        "pr_head_sha": runtime_identity["pr_head_sha"],
+        "pr_merge_sha": runtime_identity["pr_merge_sha"],
         "commit_sha": os.environ.get("GITHUB_SHA", _git("rev-parse", "HEAD")),
         "tree_sha": _git("rev-parse", "HEAD^{tree}"),
         "workflow_path": WORKFLOW_PATH,
         "workflow_blob_sha": workflow_blob,
         "run_id": runtime_identity["run_id"],
-        "job_id": runtime_identity["job_id"],
+        "job_key": runtime_identity["job_key"],
+        "github_job_id": runtime_identity["github_job_id"],
         "python_version": runtime_identity["python_version"],
         "pytest_version": runtime_identity["pytest_version"],
         "lockfile_sha256": lockfile_digest,
@@ -325,7 +424,8 @@ def verify_receipt_evidence(receipt: Any, collection_path: Path, junit_path: Pat
         executed, counts = _parse_junit_bytes(junit_bytes)
         actual_commit = _git("rev-parse", "HEAD")
         actual_tree = _git("rev-parse", "HEAD^{tree}")
-        actual_workflow_blob = _git("hash-object", WORKFLOW_PATH)
+        actual_workflow_blob = _git("rev-parse", f"HEAD:{WORKFLOW_PATH}")
+        actual_workflow_file = _git("hash-object", WORKFLOW_PATH)
         actual_lockfile_sha256 = _sha256(Path(LOCKFILE_PATH))
     except (OSError, UnicodeError, ET.ParseError, ValueError) as exc:
         return [f"evidence unavailable or malformed: {exc}"]
@@ -339,6 +439,8 @@ def verify_receipt_evidence(receipt: Any, collection_path: Path, junit_path: Pat
     ):
         if receipt[key] != actual:
             errors.append(f"{key} does not match current repository evidence")
+    if actual_workflow_file != actual_workflow_blob:
+        errors.append("workflow file differs from checked-out Git blob")
     for key, actual in _runtime_identity().items():
         if receipt[key] != actual:
             errors.append(f"{key} does not match current workflow/runtime identity")

@@ -50,6 +50,13 @@ jobs:
         env:
           PYTHONPATH: src:experiments:scripts
           PYTHONDONTWRITEBYTECODE: '1'
+          LAB_PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          LAB_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          LAB_PR_BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name }}
+          LAB_PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          LAB_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          LAB_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LAB_PR_MERGE_SHA: ${{ github.sha }}
         run: python -m pytest -q tests/scripts/test_lab_synthetic_receipt.py
 
       - name: Run bounded Gate-1 and product-path synthetic regressions
@@ -591,6 +598,13 @@ jobs:
         if: always()
         env:
           LAB_JOB_ID: gate1-synthetic-${{ matrix.python-version }}
+          LAB_PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          LAB_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          LAB_PR_BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name }}
+          LAB_PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          LAB_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          LAB_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LAB_PR_MERGE_SHA: ${{ github.sha }}
         run: |
           python scripts/lab_synthetic_receipt.py create \
             --collection "$RUNNER_TEMP/mega17-collection.txt" \
@@ -608,6 +622,13 @@ jobs:
         if: always()
         env:
           LAB_JOB_ID: gate1-synthetic-${{ matrix.python-version }}
+          LAB_PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          LAB_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          LAB_PR_BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name }}
+          LAB_PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          LAB_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          LAB_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LAB_PR_MERGE_SHA: ${{ github.sha }}
         run: |
           python scripts/lab_synthetic_receipt.py verify-evidence \
             "$RUNNER_TEMP/lab-synthetic-receipt.json" \
@@ -638,4 +659,4 @@ jobs:
             ${{ runner.temp }}/lab-synthetic-receipt.json
             ${{ runner.temp }}/lab-synthetic-junit.xml
             ${{ runner.temp }}/mega17-collection.txt
-          if-no-files-found: warn
+          if-no-files-found: error
