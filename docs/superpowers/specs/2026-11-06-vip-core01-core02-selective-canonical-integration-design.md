@@ -1,4 +1,4 @@
-# VIP — CORE-01 / CORE-02 selective Canonical integration design (PROPOSED)
+# VIP — CORE-01 / CORE-02 selective Canonical integration design (OWNER APPROVED)
 
 **Date:** 2026-11-06  
 **Design status:** OWNER APPROVED on 2026-11-06 (explicit conversational approval). DESIGN ONLY; implementation, source writes, merge and real-media/model/provider operations require separate authorization.  
