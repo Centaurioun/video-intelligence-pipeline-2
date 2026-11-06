@@ -1,7 +1,7 @@
 # VIP — CORE-01 stream provenance and semantic-location contract successor (PROPOSAL)
 
 **Date:** 2026-11-06
-**Status:** PROPOSED / OWNER_DECISION_PENDING — NOT IMPLEMENTATION AUTHORIZATION.
+**Status:** OWNER APPROVED 2026-11-06 (D1/D2/D3); narrowly authorized CORE-01 stream-provenance implementation and comparative synthetic test investigation only. No legacy V1 schema change, CORE-02 implementation, PR, or main merge.
 **Purpose:** independent GitHub source reconciliation of failed CORE-01 candidate and two bounded design decisions.
 **Scope:** Canonical selective CORE-01 and CORE-02 interface decisions only. Do not change existing approved design records, `main`, backups, application code, or worktrees based on this document.
 
@@ -89,4 +89,17 @@ Explicit design authorization must precede the new implementation scope. Existin
 - GitHub synthetic smoke 42193537310: https://github.com/Centaurioun/video-intelligence-pipeline/actions/runs/42193537310
 - Earlier approved design/plan branch: https://github.com/Centaurioun/video-intelligence-pipeline-2/tree/design/vip-core01-core02-selective-canonical-integration-20261106
 
-**Terminal: CORE01_STREAM_AND_INTERVAL_CONTRACT_SUCCESSOR_PROPOSED — OWNER_APPROVAL_PENDING.**
+**Terminal: CORE01_STREAM_AND_INTERVAL_CONTRACT_SUCCESSOR_OWNER_APPROVED — CANDIDATE_REMEDIATION_ONLY.**
+
+
+## 8. Owner approval and execution-scope receipt — 2026-11-06
+
+The Repository Owner explicitly replied **"onaylıyorum"** to the three decisions presented after the independent GitHub source review:
+
+- **D1 APPROVED:** Bounded addition of *persisted* selected video stream provenance to the `SampleMeta` → `SearchHit` → product retrieval path, including exact dependent `search.py`/test/call-site changes. The stream index must originate in independently verified persisted sample/source metadata; no inference from probe/request. This approval broadens CORE-01 candidate remediation only to necessary explicitly named provenance code paths and tests, not arbitrary index redesign.
+- **D2 APPROVED:** Keep existing `review_bundle.py` V1 semantics and the inherited `+1s` legacy behavior explicitly marked `BLOCKED_BY_CONTRACT` / nonbinding technical debt for now. Do not claim full CORE-01 closure; the new CORE-02 Report V1 will use typed nonbinding `POINT` under its separately controlled future implementation. No V1/V2 migration or Legacy API rewrite authorized here.
+- **D3 APPROVED:** Investigate the seven Python 3.14 full-suite failures against clean pinned Canonical `main`, same interpreter/dependencies/test command/fixture availability as the candidate. Classify as PRE_EXISTING/REGRESSION/ENVIRONMENT/UNRESOLVED only when supported by matched evidence. No unexplained failures may be silently ignored.
+
+**Implementation authorization boundary:** The owner approved this tightly scoped follow-up CORE-01 candidate remediation and synthetic/regression investigation. Use a clean, *new* isolated Canonical successor worktree and branch rooted at the exact observed candidate SHA after fresh Git/current-contract and owner-path checks. Reuse the existing verified native Codex worker only if its independent project/worktree/branch binding and exclusive writer ownership remain valid; otherwise use the repository-compliant fresh native worker bootstrap. Preserve dirty worktrees, Canonical and LAB `main`, and immutable backup repositories. A regular push of the successor candidate branch is in scope; PR creation, main merge, real/protected media, genuine model download/use, provider/cloud execution, production render/export, Gate promotion and broad schema migration remain **NOT AUTHORIZED**. The precise downstream task packet must list all additional shared source paths and tests, and must refuse any unapproved contract expansion.
+
+This owner decision changes the design's disposition only; no implementation, tests, code review or readiness certification was performed by recording it.
