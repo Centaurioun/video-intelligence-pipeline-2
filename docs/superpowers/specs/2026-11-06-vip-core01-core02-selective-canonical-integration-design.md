@@ -1,7 +1,7 @@
 # VIP — CORE-01 / CORE-02 selective Canonical integration design (PROPOSED)
 
 **Date:** 2026-11-06  
-**Design status:** PROPOSED — OWNER APPROVAL PENDING. NOT AN IMPLEMENTATION PLAN OR AUTHORIZATION.  
+**Design status:** OWNER APPROVED on 2026-11-06 (explicit conversational approval). DESIGN ONLY; implementation, source writes, merge and real-media/model/provider operations require separate authorization.  
 **Prepared by:** ChatGPT, following independent ChatGPT/Codex read-only comparison and verified reconciliation.  
 **Publication surface:** Separate LAB design branch, no change to either original `main` or backup.  
 **Target future repository:** `Centaurioun/video-intelligence-pipeline` (Canonical).  
@@ -177,7 +177,7 @@ LAB hosted 29 CORE-02 PASS per Python is a baseline for its own tree, **not** Ca
 
 ## 6. Proposed sequence and owner decision gates
 
-**Design gate now (this document):** Owner chooses or revises approach C and the contract decisions below; independent reviewer can challenge unresolved interfaces. No source implementation or writing-plans packet before design approval.
+**Design gate (this document):** OWNER APPROVED 2026-11-06. Approach C and the proposed initial scope are approved for implementation planning, not Canonical source implementation. Unresolved interface/consumer questions remain test/contract gates. No source implementation before separate authorization.
 
 **Then, after explicit design acceptance and a separate authorized code scope:** create a Canonical-owned implementation plan with isolated clean worktree, tests-first CORE-01 timing changes where needed, CORE-02 additive report/query seam, targeted Canonical regressions, independent code review and immutable-SHA hosted CI. Do not write directly to Canonical `main`, import whole LAB or touch dirty existing worktrees.
 
@@ -215,4 +215,9 @@ Primary source paths:
 - LAB `docs/ai-studio-tasks/MEGA_CORE_01_TEMPORAL_STREAM_AND_CLI_CORRECTNESS.md`, `MEGA_CORE_02_QUERY_DRIVEN_SEMANTIC_REPORT_V1.md`, `src/vip_fvs/{cli.py,core_analysis.py,core_report.py,real_source_service.py}`, `experiments/persistent_local_index/media.py` and three CORE-02 test files at pinned SHA.
 - Reviews: `docs/reviews/2026-11-06_CHATGPT_INDEPENDENT_MAIN_COMPARISON.md`, `2026-11-06_CODEX_INDEPENDENT_MAIN_COMPARISON.md`, and `2026-11-06_CHATGPT_CODEX_MAIN_COMPARISON_RECONCILIATION.md` on their respective LAB read-only report branches.
 
-**Terminal marker: VIP_CANONICAL_SELECTIVE_INTEGRATION_DESIGN_PROPOSED — OWNER_SIGNOFF_PENDING.**
+**Terminal marker: VIP_CANONICAL_SELECTIVE_INTEGRATION_DESIGN_OWNER_APPROVED — IMPLEMENTATION_NOT_AUTHORIZED.**
+
+
+## 8. Owner approval receipt — 2026-11-06
+
+The repository Owner explicitly approved the proposed selective CORE-01/CORE-02 architecture in the conversation after reviewing the GitHub-published design proposal. Scope: proceed to detailed implementation planning under the existing project methodology. This receipt does not approve Canonical code changes, Git main/branch merge, protected media or model execution, cloud/provider operations, Gate promotion, or production export. Preserve the originally proposed alternatives and unresolved contract questions above as historical design evidence. Approval recorded only in this LAB design-document branch; canonical current-state handoff is not modified.
