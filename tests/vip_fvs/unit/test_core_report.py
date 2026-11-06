@@ -241,6 +241,23 @@ def test_report_digest_self_verification_and_tamper_rejection(tmp_path: Path) ->
     assert exc_info.value.code == "REPORT_DIGEST_MISMATCH"
 
 
+def test_top_k_saturated_total_eligibility_can_be_not_observed(tmp_path: Path) -> None:
+    report = _sample_report_Fixtures(tmp_path, with_matches=True)
+    report["total_eligible_matches"] = NOT_OBSERVED
+    report["artifact"]["report_digest"] = compute_core_report_digest(report)
+    validate_core_semantic_report(report)
+
+
+def test_report_rejects_near_equal_scores_in_wrong_order(tmp_path: Path) -> None:
+    report = _sample_report_Fixtures(tmp_path, with_matches=True)
+    report["matches"][0]["score"] = 0.5
+    report["matches"][1]["score"] = 0.5000000000004
+    report["artifact"]["report_digest"] = compute_core_report_digest(report)
+    with pytest.raises(CoreReportError) as exc_info:
+        validate_core_semantic_report(report)
+    assert exc_info.value.code == "REPORT_MATCHES_NOT_SORTED"
+
+
 def test_point_semantic_location_rejects_degenerate_or_fabricated_intervals(
     tmp_path: Path,
 ) -> None:
@@ -310,6 +327,37 @@ def test_fake_embedder_cannot_be_labeled_as_real(tmp_path: Path) -> None:
     with pytest.raises(CoreReportError) as exc_info:
         validate_core_semantic_report(bad)
     assert exc_info.value.code == "REPORT_FAKE_EMBEDDER_MISLABELED_AS_REAL"
+
+
+def test_real_mode_may_keep_inference_evidence_not_observed(tmp_path: Path) -> None:
+    report = _sample_report_Fixtures(tmp_path, with_matches=True)
+    report["runtime_mode"] = "REAL"
+    report["model"].update({
+        "runtime_mode": "REAL",
+        "runtime_identity": "local-runtime",
+        "model_family": "siglip",
+        "model_identity": "local-model",
+        "authentic_inference_observed": False,
+    })
+    report["evidence_availability"]["authentic_model_inference"] = NOT_OBSERVED
+    report["source"]["snapshot"] = {
+        "snapshot_id": "f" * 32,
+        "snapshot_path": "/tmp/snap/source.mp4",
+        "snapshot_sha256": "a" * 64,
+        "source_byte_count": 4096,
+        "source_revision_id": "rev-001",
+    }
+    report["authority"] = {
+        "authorization_mode": "OWNER_PILOT_AUTHORIZATION",
+        "authorization_id": "auth-001",
+        "authorization_record_digest": "1" * 64,
+        "policy_digest": "2" * 64,
+        "scope_digest": "3" * 64,
+        "local_only": True,
+        "development_source_auth_enforcement": "DISABLED_BY_OWNER",
+    }
+    report["artifact"]["report_digest"] = compute_core_report_digest(report)
+    validate_core_semantic_report(report)
 
 
 def test_atomic_publication_no_clobber_and_path_confinement(tmp_path: Path) -> None:

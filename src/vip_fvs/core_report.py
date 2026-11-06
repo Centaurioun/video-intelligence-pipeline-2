@@ -219,7 +219,7 @@ def build_core_semantic_report(
     run_id: str,
     runtime_mode: str,
     top_k: int,
-    total_eligible_matches: int,
+    total_eligible_matches: int | str,
     source: Mapping[str, Any],
     authority: Mapping[str, Any],
     model: Mapping[str, Any],
@@ -248,7 +248,9 @@ def build_core_semantic_report(
                 merged_limitations.append(item)
 
     evidence_availability = {
-        "authentic_model_inference": OBSERVED if runtime_mode == "REAL" else NOT_OBSERVED,
+        "authentic_model_inference": (
+            OBSERVED if model.get("authentic_inference_observed") is True else NOT_OBSERVED
+        ),
         "source_native_interval_refinement": (
             OBSERVED if refinement_observed else NOT_OBSERVED
         ),
@@ -354,10 +356,12 @@ def validate_core_semantic_report(report: Mapping[str, Any]) -> None:
         raise CoreReportError("REPORT_INVALID_TOP_K", "top_k must be an integer in [1, 1000]")
 
     total_eligible = report.get("total_eligible_matches")
-    if not _is_non_bool_int(total_eligible) or total_eligible < 0:
+    if total_eligible != NOT_OBSERVED and (
+        not _is_non_bool_int(total_eligible) or total_eligible < 0
+    ):
         raise CoreReportError(
             "REPORT_INVALID_TOTAL_ELIGIBLE_MATCHES",
-            "total_eligible_matches must be a non-negative integer",
+            "total_eligible_matches must be a non-negative integer or NOT_OBSERVED",
         )
 
     returned_count = report.get("returned_candidate_count")
@@ -366,7 +370,7 @@ def validate_core_semantic_report(report: Mapping[str, Any]) -> None:
             "REPORT_INVALID_RETURNED_COUNT",
             "returned_candidate_count must be an integer in [0, top_k]",
         )
-    if total_eligible < returned_count:
+    if total_eligible != NOT_OBSERVED and total_eligible < returned_count:
         raise CoreReportError(
             "REPORT_INVALID_MATCH_COUNTS",
             "total_eligible_matches cannot be less than returned_candidate_count",
@@ -713,12 +717,25 @@ def validate_core_semantic_report(report: Mapping[str, Any]) -> None:
             "REPORT_FAKE_EMBEDDER_MISLABELED_AS_REAL",
             "Fake/synthetic embedder evidence must never be labeled as REAL runtime_mode",
         )
-    expected_authentic = runtime_mode == "REAL"
-    if model.get("authentic_inference_observed") is not expected_authentic:
+    authentic_observed = model.get("authentic_inference_observed")
+    if not isinstance(authentic_observed, bool):
         raise CoreReportError(
             "REPORT_AUTHENTIC_INFERENCE_FLAG_MISMATCH",
-            "model.authentic_inference_observed must match runtime_mode == 'REAL'",
+            "model.authentic_inference_observed must be a boolean backed by runtime evidence",
         )
+    if authentic_observed and runtime_mode != "REAL":
+        raise CoreReportError(
+            "REPORT_AUTHENTIC_INFERENCE_FLAG_MISMATCH",
+            "Synthetic runtime cannot report authentic model inference",
+        )
+    evidence_availability = report.get("evidence_availability")
+    if isinstance(evidence_availability, Mapping):
+        expected_inference_availability = OBSERVED if authentic_observed else NOT_OBSERVED
+        if evidence_availability.get("authentic_model_inference") != expected_inference_availability:
+            raise CoreReportError(
+                "REPORT_AUTHENTIC_INFERENCE_EVIDENCE_MISMATCH",
+                "Authentic model inference availability must match observed runtime evidence",
+            )
 
     # Validate index section
     index = report.get("index")
@@ -995,12 +1012,12 @@ def validate_core_semantic_report(report: Mapping[str, Any]) -> None:
 
         # Ordering check
         if prev_score is not None:
-            if score_f > prev_score + 1e-12:
+            if score_f > prev_score:
                 raise CoreReportError(
                     "REPORT_MATCHES_NOT_SORTED",
                     "matches must be ordered by non-increasing score",
                 )
-            if abs(score_f - prev_score) <= 1e-12 and prev_tie_key is not None:
+            if score_f == prev_score and prev_tie_key is not None:
                 if (pts, row_id) < prev_tie_key:
                     raise CoreReportError(
                         "REPORT_MATCHES_TIE_BREAK_INVALID",

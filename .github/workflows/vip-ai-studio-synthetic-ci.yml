@@ -75,6 +75,16 @@ jobs:
             tests/vip_fvs/integration/test_product_index_query.py \
             tests/vip_fvs/integration/test_multi_source_retrieval.py
 
+      - name: Run CORE-02 query-driven semantic report tests
+        env:
+          PYTHONPATH: src:experiments:scripts
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m pytest -q \
+            tests/vip_fvs/unit/test_core_report.py \
+            tests/vip_fvs/unit/test_core_analysis.py \
+            tests/vip_fvs/integration/test_core_analyze_local_cli.py
+
       - name: Run AI Studio three-profile acceptance tests (when delivered)
         if: hashFiles('tests/vip_fvs/integration/test_three_profile_product_path.py') != ''
         env:

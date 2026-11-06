@@ -60,6 +60,22 @@ def _run_cli_in_process(argv: list[str]) -> tuple[int, dict, str]:
     return exit_code, payload, stderr_buf.getvalue()
 
 
+def test_cli_unexpected_exception_does_not_echo_sensitive_details(tmp_path: Path) -> None:
+    source_path = tmp_path / "secret-error.mp4"
+    _make_source_file(source_path)
+    secret = "Bearer sentinel-secret-token"
+    with mock.patch("vip_fvs.core_analysis.analyze_local_video", side_effect=RuntimeError(secret)):
+        code, payload, _ = _run_cli_in_process([
+            "analyze-local", "--source", str(source_path), "--query", "test",
+            "--index-root", str(tmp_path / "idx"), "--output-root", str(tmp_path / "out"),
+            "--attempt-id", "att-secret", "--source-revision-id", "rev-secret",
+            "--fake-embedder", "--selected-stream-index", "1",
+        ])
+    assert code == 1
+    assert payload["error_code"] == "UNEXPECTED_ANALYSIS_FAILURE"
+    assert secret not in json.dumps(payload)
+
+
 def test_cli_analyze_local_positive_zero_match_and_no_clobber(tmp_path: Path) -> None:
     source_path = tmp_path / "source_video.mp4"
     _make_source_file(source_path, b"cli-integration-video-bytes-v1")
@@ -128,7 +144,7 @@ def test_cli_analyze_local_positive_zero_match_and_no_clobber(tmp_path: Path) ->
     assert summary["result_kind"] == "MATCHES_FOUND"
     assert summary["top_k"] == 5
     assert summary["returned_candidate_count"] == 5
-    assert summary["total_eligible_matches"] == 6
+    assert summary["total_eligible_matches"] == "NOT_OBSERVED"
     assert report_path.is_file()
 
     saved_bytes = report_path.read_bytes()

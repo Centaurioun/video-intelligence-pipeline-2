@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
+import inspect
 import json
 import math
 from pathlib import Path
@@ -556,29 +557,38 @@ def _invoke_engine_index_source(
 ) -> dict[str, int]:
     """Call engine.index_source using either the 4-arg SemanticIndexEngine protocol or keyword form."""
     image_embedder = getattr(runtime, "image_embedder", None)
+    method = engine.index_source
+    positional = (source_path, index_root, spec, image_embedder)
+    keyword = {"source_path": source_path, "index_root": index_root, "runtime": runtime}
     try:
-        raw_summary = engine.index_source(
-            source_path, index_root, spec, image_embedder
-        )
+        signature = inspect.signature(method)
+    except (TypeError, ValueError):
+        signature = None
+    if signature is not None and not _signature_accepts(signature, positional, {}):
+        if _signature_accepts(signature, (), keyword):
+            raw_summary = method(**keyword)
+        else:
+            raw_summary = method(*positional)
+    else:
+        raw_summary = method(*positional)
+    values = (
+        {key: raw_summary.get(key) for key in ("indexed", "skipped", "reused", "failed")}
+        if isinstance(raw_summary, Mapping)
+        else {key: getattr(raw_summary, key, None) for key in ("indexed", "skipped", "reused", "failed")}
+    )
+    if any(not _is_non_bool_int(value) or value < 0 for value in values.values()):
+        raise CoreAnalysisRefusal("INDEX_SUMMARY_INVALID", "Index engine returned missing or invalid disposition counts")
+    if not any(values[key] > 0 for key in ("indexed", "skipped", "reused", "failed")):
+        raise CoreAnalysisRefusal("INDEX_SUMMARY_INVALID", "Index engine returned no source disposition")
+    return values  # type: ignore[return-value]
+
+
+def _signature_accepts(signature: inspect.Signature, args: tuple[Any, ...], kwargs: dict[str, Any]) -> bool:
+    try:
+        signature.bind(*args, **kwargs)
     except TypeError:
-        raw_summary = engine.index_source(
-            source_path=source_path,
-            index_root=index_root,
-            runtime=runtime,
-        )
-    if isinstance(raw_summary, Mapping):
-        return {
-            "indexed": int(raw_summary.get("indexed", 0)),
-            "skipped": int(raw_summary.get("skipped", 0)),
-            "reused": int(raw_summary.get("reused", 0)),
-            "failed": int(raw_summary.get("failed", 0)),
-        }
-    return {
-        "indexed": int(getattr(raw_summary, "indexed", 0)),
-        "skipped": int(getattr(raw_summary, "skipped", 0)),
-        "reused": int(getattr(raw_summary, "reused", 0)),
-        "failed": int(getattr(raw_summary, "failed", 0)),
-    }
+        return False
+    return True
 
 
 def _invoke_engine_query(
@@ -592,18 +602,21 @@ def _invoke_engine_query(
 ) -> list[Any]:
     """Call engine.query using either the SemanticIndexEngine protocol or keyword form."""
     text_embedder = getattr(runtime, "text_embedder", None)
+    method = engine.query
+    positional = (index_root, spec, [query_text], text_embedder)
+    positional_kwargs = {"top_k": top_k}
+    keyword = {"index_root": index_root, "generation_id": str(spec.generation_id), "runtime": runtime, "query_text": query_text, "top_k": top_k}
     try:
-        raw_result = engine.query(
-            index_root, spec, [query_text], text_embedder, top_k=top_k
-        )
-    except TypeError:
-        raw_result = engine.query(
-            index_root=index_root,
-            generation_id=str(spec.generation_id),
-            runtime=runtime,
-            query_text=query_text,
-            top_k=top_k,
-        )
+        signature = inspect.signature(method)
+    except (TypeError, ValueError):
+        signature = None
+    if signature is not None and not _signature_accepts(signature, positional, positional_kwargs):
+        if _signature_accepts(signature, (), keyword):
+            raw_result = method(**keyword)
+        else:
+            raw_result = method(*positional, **positional_kwargs)
+    else:
+        raw_result = method(*positional, **positional_kwargs)
     if isinstance(raw_result, Mapping):
         hits = raw_result.get(query_text)
         if hits is None and len(raw_result) == 1:
@@ -1223,30 +1236,34 @@ def analyze_local_video(request: CoreAnalysisRequest) -> CoreAnalysisOutcome:
     # 5. Measured source probe (ffprobe)
     probe_runner = request.probe_fn or probe_real_source
     try:
+        canonical_kwargs = {
+            "executable": request.probe_executable,
+            "timeout_seconds": DEFAULT_PROBE_TIMEOUT_SECONDS,
+            "selected_stream_index": effective_stream_index,
+            "source_revision_id": resolved_source_revision_id,
+            "policy_identity": "vip_fvs.core_analyze_local.v1",
+            "source_locator": source_locator_str,
+            "snapshot_evidence": snapshot_record.as_evidence() if snapshot_record is not None else None,
+        }
+        legacy_kwargs = {
+            "source_path": execution_source_path,
+            "source_revision_id": resolved_source_revision_id,
+            "probe_executable": request.probe_executable,
+            "selected_stream_index": effective_stream_index,
+            "source_locator": source_locator_str,
+            "snapshot_evidence": snapshot_record.as_evidence() if snapshot_record is not None else None,
+        }
         try:
-            probe = probe_runner(
-                execution_source_path,
-                executable=request.probe_executable,
-                timeout_seconds=DEFAULT_PROBE_TIMEOUT_SECONDS,
-                selected_stream_index=effective_stream_index,
-                source_revision_id=resolved_source_revision_id,
-                policy_identity="vip_fvs.core_analyze_local.v1",
-                source_locator=source_locator_str,
-                snapshot_evidence=(
-                    snapshot_record.as_evidence() if snapshot_record is not None else None
-                ),
-            )
-        except TypeError:
-            probe = probe_runner(
-                source_path=execution_source_path,
-                source_revision_id=resolved_source_revision_id,
-                probe_executable=request.probe_executable,
-                selected_stream_index=effective_stream_index,
-                source_locator=source_locator_str,
-                snapshot_evidence=(
-                    snapshot_record.as_evidence() if snapshot_record is not None else None
-                ),
-            )
+            probe_signature = inspect.signature(probe_runner)
+        except (TypeError, ValueError):
+            probe_signature = None
+        if probe_signature is not None and not _signature_accepts(probe_signature, (execution_source_path,), canonical_kwargs):
+            if _signature_accepts(probe_signature, (), legacy_kwargs):
+                probe = probe_runner(**legacy_kwargs)
+            else:
+                probe = probe_runner(execution_source_path, **canonical_kwargs)
+        else:
+            probe = probe_runner(execution_source_path, **canonical_kwargs)
     except (ProbeFailure, MeasuredProbeRefusal) as exc:
         raise CoreAnalysisRefusal(str(exc), f"Source probe failed: {exc}") from exc
 
@@ -1299,6 +1316,31 @@ def analyze_local_video(request: CoreAnalysisRequest) -> CoreAnalysisOutcome:
         if request.runtime is not None
         else _build_default_runtime(request)
     )
+    default_runtime_used = request.runtime is None
+    embedder_calls = {"image": 0, "text": 0}
+    engine_runtime = runtime
+    if default_runtime_used:
+        from types import SimpleNamespace
+
+        image_embedder = getattr(runtime, "image_embedder", None)
+        text_embedder = getattr(runtime, "text_embedder", None)
+
+        def tracked_image_embedder(paths: Any) -> Any:
+            embedder_calls["image"] += 1
+            return image_embedder(paths)
+
+        def tracked_text_embedder(texts: Any) -> Any:
+            embedder_calls["text"] += 1
+            return text_embedder(texts)
+
+        engine_runtime = SimpleNamespace(
+            semantic_space=getattr(runtime, "semantic_space", None),
+            runtime_identity=getattr(runtime, "runtime_identity", None),
+            fake=getattr(runtime, "fake", False),
+            fake_embedder=getattr(runtime, "fake_embedder", False),
+            image_embedder=tracked_image_embedder,
+            text_embedder=tracked_text_embedder,
+        )
     space = getattr(runtime, "semantic_space", None)
     if space is None:
         raise CoreAnalysisRefusal(
@@ -1396,7 +1438,7 @@ def analyze_local_video(request: CoreAnalysisRequest) -> CoreAnalysisOutcome:
             source_path=execution_source_path,
             index_root=resolved_index_root,
             spec=spec,
-            runtime=runtime,
+            runtime=engine_runtime,
         )
     except CoreAnalysisRefusal:
         raise
@@ -1489,7 +1531,7 @@ def analyze_local_video(request: CoreAnalysisRequest) -> CoreAnalysisOutcome:
                 index_root=resolved_index_root,
                 spec=spec,
                 query_text=normalized_query_text,
-                runtime=runtime,
+                runtime=engine_runtime,
                 top_k=request.top_k,
             )
         except CoreAnalysisRefusal:
@@ -1615,7 +1657,7 @@ def analyze_local_video(request: CoreAnalysisRequest) -> CoreAnalysisOutcome:
         validated_candidates.append(
             {
                 "row_id": int(hit_row_id),
-                "score": round(float(hit_score), 6),
+                "score": float(hit_score),
                 "_raw_score": float(hit_score),
                 "pts": int(hit_pts),
                 "display_timestamp": display_ts,
@@ -1625,7 +1667,7 @@ def analyze_local_video(request: CoreAnalysisRequest) -> CoreAnalysisOutcome:
         )
 
     validated_candidates.sort(
-        key=lambda item: (-round(item["_raw_score"], 12), item["pts"], item["row_id"])
+        key=lambda item: (-item["_raw_score"], item["pts"], item["row_id"])
     )
     selected_candidates = validated_candidates[: request.top_k]
 
@@ -1634,7 +1676,7 @@ def analyze_local_video(request: CoreAnalysisRequest) -> CoreAnalysisOutcome:
     elif len(validated_candidates) < request.top_k:
         total_eligible_matches = len(validated_candidates)
     else:
-        total_eligible_matches = max(len(validated_candidates), source_sample_count)
+        total_eligible_matches = NOT_OBSERVED
 
     matches_payload: list[dict[str, Any]] = []
     refinement_observed = False
@@ -1805,7 +1847,12 @@ def analyze_local_video(request: CoreAnalysisRequest) -> CoreAnalysisOutcome:
         "semantic_space_id": space_id_str,
         "runtime_identity": runtime_identity,
         "runtime_mode": runtime_mode,
-        "authentic_inference_observed": runtime_mode == "REAL",
+        "authentic_inference_observed": bool(
+            runtime_mode == "REAL"
+            and default_runtime_used
+            and request.engine is None
+            and embedder_calls["text"] > 0
+        ),
     }
 
     index_section: dict[str, Any] = {

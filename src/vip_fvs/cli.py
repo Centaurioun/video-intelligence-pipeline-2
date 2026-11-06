@@ -1125,7 +1125,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "result_kind": exc.result_kind,
                 "error_code": exc.code,
                 "errors": [exc.code],
-                "message": exc.detail,
+                "message": exc.code,
             }
             print(json.dumps(refusal_payload, sort_keys=True, separators=(",", ":")))
             return 1
@@ -1139,8 +1139,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "stage_status": "FAILED",
                 "result_kind": "FAILED",
                 "error_code": "UNEXPECTED_ANALYSIS_FAILURE",
-                "errors": [str(exc)],
-                "message": str(exc),
+                "errors": ["UNEXPECTED_ANALYSIS_FAILURE"],
+                "message": "Analysis failed; diagnostic details were withheld.",
             }
             print(json.dumps(failure_payload, sort_keys=True, separators=(",", ":")))
             return 1

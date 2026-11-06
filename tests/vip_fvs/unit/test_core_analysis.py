@@ -64,6 +64,8 @@ from vip_fvs.core_analysis import (
     CoreAnalysisRefusal,
     CoreAnalysisRequest,
     analyze_local_video,
+    _invoke_engine_index_source,
+    _invoke_engine_query,
 )
 from vip_fvs.core_report import (
     NOT_OBSERVED,
@@ -518,6 +520,98 @@ def test_deterministic_tie_breaking_on_equal_scores(tmp_path: Path) -> None:
         (2, 3000),
         (4, 9000),
     ]
+
+
+def test_near_equal_scores_keep_exact_score_order(tmp_path: Path) -> None:
+    source_path = tmp_path / "near-ties.mp4"
+    _make_source_file(source_path)
+    engine = _SqliteBackedStubEngine(
+        sample_rows=[(1, 3000, 0.5000000000003), (2, 9000, 0.5000000000004)],
+        stream_index=1,
+        timebase=(1, 90000),
+    )
+    outcome = analyze_local_video(CoreAnalysisRequest(
+        source_path=source_path, query="near tie", index_root=tmp_path / "idx",
+        output_root=tmp_path / "out", attempt_id="att-near-tie",
+        source_revision_id="rev-near-tie", top_k=2, fake_embedder=True,
+        selected_stream_index=1, runtime=_make_stub_runtime(), engine=engine,
+        probe_fn=_make_probe_fn(selected_stream_index=1, timebase_num=1, timebase_den=90000),
+    ))
+    assert [m["row_id"] for m in outcome.report["matches"]] == [2, 1]
+
+
+def test_index_summary_without_disposition_is_refused(tmp_path: Path) -> None:
+    source_path = tmp_path / "empty-summary.mp4"
+    _make_source_file(source_path)
+    engine = _SqliteBackedStubEngine(stream_index=1)
+    engine.index_source = lambda *_args, **_kwargs: {}  # type: ignore[method-assign]
+    with pytest.raises(CoreAnalysisRefusal, match="INDEX_SUMMARY_INVALID"):
+        analyze_local_video(CoreAnalysisRequest(
+            source_path=source_path, query="query", index_root=tmp_path / "idx",
+            output_root=tmp_path / "out", attempt_id="att-empty-summary",
+            source_revision_id="rev-empty-summary", fake_embedder=True,
+            selected_stream_index=1, runtime=_make_stub_runtime(), engine=engine,
+            probe_fn=_make_probe_fn(selected_stream_index=1),
+        ))
+
+
+def test_index_summary_rejects_malformed_counts() -> None:
+    class Engine:
+        def __init__(self, summary: Any) -> None:
+            self.summary = summary
+        def index_source(self, *_args: Any, **_kwargs: Any) -> Any:
+            return self.summary
+
+    for summary in (
+        {"indexed": True, "skipped": 0, "reused": 0, "failed": 0},
+        {"indexed": -1, "skipped": 0, "reused": 0, "failed": 0},
+        {"indexed": 0, "skipped": 0, "reused": 0, "failed": 0},
+    ):
+        with pytest.raises(CoreAnalysisRefusal, match="INDEX_SUMMARY_INVALID"):
+            _invoke_engine_index_source(
+                Engine(summary), source_path=Path("synthetic"),
+                index_root=Path("index"), spec=object(), runtime=object(),
+            )
+
+
+def test_engine_internal_typeerror_is_not_retried() -> None:
+    class Engine:
+        calls = 0
+        def index_source(self, *args: Any, **kwargs: Any) -> Any:
+            self.calls += 1
+            raise TypeError("backend bug")
+    engine = Engine()
+    with pytest.raises(TypeError, match="backend bug"):
+        _invoke_engine_index_source(engine, source_path=Path("x"), index_root=Path("i"), spec=object(), runtime=object())
+    assert engine.calls == 1
+
+    class QueryEngine:
+        calls = 0
+        def query(self, *args: Any, **kwargs: Any) -> Any:
+            self.calls += 1
+            raise TypeError("query backend bug")
+    query_engine = QueryEngine()
+    with pytest.raises(TypeError, match="query backend bug"):
+        _invoke_engine_query(query_engine, index_root=Path("i"), spec=SimpleNamespace(generation_id="g"), query_text="q", runtime=object(), top_k=1)
+    assert query_engine.calls == 1
+
+
+def test_probe_internal_typeerror_is_not_retried(tmp_path: Path) -> None:
+    source_path = tmp_path / "probe-typeerror.mp4"
+    _make_source_file(source_path)
+    calls: list[int] = []
+    def probe(*_args: Any, **_kwargs: Any) -> Any:
+        calls.append(1)
+        raise TypeError("probe backend bug")
+    with pytest.raises(TypeError, match="probe backend bug"):
+        analyze_local_video(CoreAnalysisRequest(
+            source_path=source_path, query="query", index_root=tmp_path / "idx",
+            output_root=tmp_path / "out", attempt_id="att-probe-typeerror",
+            source_revision_id="rev-probe-typeerror", fake_embedder=True,
+            selected_stream_index=1, runtime=_make_stub_runtime(),
+            engine=_SqliteBackedStubEngine(stream_index=1), probe_fn=probe,
+        ))
+    assert calls == [1]
 
 
 def test_audio_first_stream_misbinding_and_unverified_search_hit_rejected(
