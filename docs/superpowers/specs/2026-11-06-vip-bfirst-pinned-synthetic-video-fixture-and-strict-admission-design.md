@@ -127,7 +127,7 @@ Each stage needs its own exact, reviewed packet, fresh isolated worktree, verifi
 
 ### Stage B — register reviewed fixture (separate owner authorization required)
 
-After Stage A is independently reviewed and the artifact identity is pinned, authorize a closed manifest entry and unit/adversarial tests only. A different worker/path owner owns policy registration. Exact exclusive paths: `src/vip_fvs/trusted_fixture_manifest.py` and `tests/vip_fvs/unit/test_trusted_fixture_manifest.py`. Tests pin exact workflow revision/run/artifact ID/archive digest (if provided)/extracted MP4 digest/size/expiry, prove authorization-before-read, distinguish policy `MATCHED` from opened-file `MEASURED` identity, and preserve occurrence `NOT_OBSERVED`. No CLI, decoder, or CI workflow changes in this stage.
+After Stage A is independently reviewed and the artifact identity is pinned, authorize a closed manifest entry and unit/adversarial tests only. A different worker/path owner owns policy registration. Exact exclusive paths: `src/vip_fvs/trusted_fixture_manifest.py` and `tests/vip_fvs/unit/test_trusted_fixture_manifest.py`. Tests pin exact workflow revision/run/artifact ID/archive digest/extracted MP4 digest/size/expiry, prove authorization-before-read, distinguish policy `MATCHED` from opened-file `MEASURED` identity, and preserve occurrence `NOT_OBSERVED`. The archive digest is mandatory: if the artifact mechanism lacks an independently verified archive digest, refuse with `BLOCKED_TRUST_ANCHOR`. No CLI, decoder, or CI workflow changes in this stage.
 
 ### Stage C — strict CLI integration (separate owner authorization required)
 
