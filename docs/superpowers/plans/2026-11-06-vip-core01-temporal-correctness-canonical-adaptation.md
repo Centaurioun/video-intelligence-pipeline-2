@@ -19,7 +19,7 @@
 - Keep canonical `src/vip_fvs/bounded_admission.py`, `_bounded_admission_fs.py`, `source_snapshot.py`, `semantic_index.py`, `real_source_probe.py` and `src/gate3/**` intact.
 - Source PTS is an integer bound to absolute selected ffprobe stream index and a positive rational timebase. Never derive VFR frames as nominal FPS × seconds; sample timestamps are not exact event boundaries.
 - Preserve evidence classes `MEASURED`, `MATCHED`, `VISUALLY_OBSERVED`, `AUDIO_OBSERVED`, `EDITORIAL_INFERENCE`; `NOT_OBSERVED` is an availability state, not evidence class.
-- Existing Canal/Codex `AGENTS.md` / portfolio dispatch / exclusive writer / shared contract rules govern implementation. No artificial parallelism across these tightly coupled shared files. TDD: test RED observed, minimal GREEN, refactor, review, verified commit.
+- Existing Canonical `AGENTS.md` / portfolio dispatch / exclusive writer / shared contract rules govern implementation. No artificial parallelism across these tightly coupled shared files. TDD: test RED observed, minimal GREEN, refactor, review, verified commit.
 
 ## Review Focus
 
