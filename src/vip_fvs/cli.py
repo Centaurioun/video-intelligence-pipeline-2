@@ -597,6 +597,102 @@ def _parser() -> argparse.ArgumentParser:
     query_three_arm_syn.add_argument("--weights-sha256", default=None)
     query_three_arm_syn.add_argument("--device", default=None)
     query_three_arm_syn.add_argument("--model-profile-json", default=None)
+
+    analyze_local = subparsers.add_parser(
+        "analyze-local",
+        help="run unified single-video query-driven local semantic analysis and publish Report V1",
+    )
+    analyze_local.add_argument("--source", default=None, help="local video path to analyze")
+    analyze_local.add_argument("--query", default=None, help="natural-language text query")
+    analyze_local.add_argument("--index-root", default=None, help="local semantic index root")
+    analyze_local.add_argument("--output-root", default=None, help="allowed output root directory")
+    analyze_local.add_argument(
+        "--report-path",
+        "--report",
+        dest="report_path",
+        default=None,
+        help="explicit JSON report path inside --output-root (defaults to <output-root>/semantic-report.json)",
+    )
+    analyze_local.add_argument(
+        "--attempt-id",
+        default=None,
+        help="explicit attempt identifier (never invented)",
+    )
+    analyze_local.add_argument(
+        "--source-revision-id",
+        default=None,
+        help="source occurrence/revision identifier",
+    )
+    analyze_local.add_argument(
+        "--pilot-authorization",
+        default=None,
+        help="explicit owner pilot authorization JSON (required in real mode)",
+    )
+    analyze_local.add_argument("--model-root", default=None, help="local model asset directory")
+    analyze_local.add_argument("--model-identity", default=None, help="expected model identity")
+    analyze_local.add_argument("--model-revision", default=None, help="expected frozen model revision")
+    analyze_local.add_argument("--weights-sha256", default=None, help="expected weights SHA-256")
+    analyze_local.add_argument("--device", choices=("cpu", "mps"), default="cpu")
+    analyze_local.add_argument(
+        "--model-profile-json",
+        default=None,
+        help="closed synthetic profile JSON (only with --fake-embedder)",
+    )
+    analyze_local.add_argument(
+        "--source-snapshot-root",
+        default=None,
+        help="private immutable source snapshot store root",
+    )
+    analyze_local.add_argument(
+        "--max-source-bytes",
+        type=int,
+        default=None,
+        help="maximum allowed bytes for a single source snapshot",
+    )
+    analyze_local.add_argument(
+        "--max-store-bytes",
+        type=int,
+        default=None,
+        help="maximum allowed total bytes for the snapshot store",
+    )
+    analyze_local.add_argument(
+        "--preverified-snapshot-id",
+        default=None,
+        help="optional preverified 32-hex snapshot ID",
+    )
+    analyze_local.add_argument(
+        "--selected-stream-index",
+        type=int,
+        default=None,
+        help="optional explicit absolute ffprobe video stream index",
+    )
+    analyze_local.add_argument(
+        "--probe-executable",
+        "--ffprobe-executable",
+        "--ffprobe",
+        dest="probe_executable",
+        default="/usr/bin/ffprobe",
+        help="explicit local ffprobe executable path",
+    )
+    analyze_local.add_argument(
+        "--top-k",
+        type=int,
+        default=5,
+        help="maximum number of ranked candidates to return (1..1000, default 5)",
+    )
+    analyze_local.add_argument(
+        "--fake-embedder",
+        action="store_true",
+        default=False,
+        help="explicit synthetic-only execution flag (never a silent fallback)",
+    )
+    analyze_local.add_argument(
+        "--refinement-artifact",
+        dest="refinement_artifact_path",
+        default=None,
+        help="optional validated source-native refinement artifact JSON",
+    )
+    _add_synthetic_admission_arguments(analyze_local)
     return parser
 
 
@@ -974,6 +1070,80 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Parse ``argv``, run the slice, and emit exactly one JSON summary."""
 
     args = _parser().parse_args(argv)
+    if args.command == "analyze-local":
+        from .core_analysis import (
+            CoreAnalysisRefusal,
+            CoreAnalysisRequest,
+            analyze_local_video,
+        )
+        from .core_report import (
+            ANALYSIS_KIND_SEMANTIC_RETRIEVAL,
+            CORE_REPORT_KIND,
+            CORE_REPORT_SCHEMA_VERSION,
+        )
+
+        try:
+            outcome = analyze_local_video(
+                CoreAnalysisRequest(
+                    source_path=args.source or "",
+                    query=args.query if args.query is not None else "",
+                    index_root=args.index_root or "",
+                    output_root=args.output_root or "",
+                    report_path=args.report_path,
+                    attempt_id=args.attempt_id,
+                    source_revision_id=args.source_revision_id,
+                    top_k=args.top_k,
+                    fake_embedder=bool(args.fake_embedder),
+                    pilot_authorization_path=args.pilot_authorization,
+                    model_root=args.model_root,
+                    model_identity=args.model_identity,
+                    model_revision=args.model_revision,
+                    weights_sha256=args.weights_sha256,
+                    device=args.device,
+                    model_profile_json=args.model_profile_json,
+                    source_snapshot_root=args.source_snapshot_root,
+                    max_source_bytes=args.max_source_bytes,
+                    max_store_bytes=args.max_store_bytes,
+                    preverified_snapshot_id=args.preverified_snapshot_id,
+                    selected_stream_index=args.selected_stream_index,
+                    probe_executable=args.probe_executable,
+                    refinement_artifact_path=args.refinement_artifact_path,
+                    synthetic_attestation_paths=getattr(args, "synthetic_attestation", None),
+                    synthetic_binding_paths=getattr(args, "synthetic_binding", None),
+                )
+            )
+            print(json.dumps(outcome.summary, sort_keys=True, separators=(",", ":")))
+            return 0 if outcome.summary.get("stage_status") == "SUCCEEDED" else 1
+        except CoreAnalysisRefusal as exc:
+            refusal_payload = {
+                "command": "analyze-local",
+                "schema_version": CORE_REPORT_SCHEMA_VERSION,
+                "report_kind": CORE_REPORT_KIND,
+                "analysis_kind": ANALYSIS_KIND_SEMANTIC_RETRIEVAL,
+                "attempt_id": args.attempt_id,
+                "stage_status": exc.stage_status,
+                "result_kind": exc.result_kind,
+                "error_code": exc.code,
+                "errors": [exc.code],
+                "message": exc.detail,
+            }
+            print(json.dumps(refusal_payload, sort_keys=True, separators=(",", ":")))
+            return 1
+        except Exception as exc:
+            failure_payload = {
+                "command": "analyze-local",
+                "schema_version": CORE_REPORT_SCHEMA_VERSION,
+                "report_kind": CORE_REPORT_KIND,
+                "analysis_kind": ANALYSIS_KIND_SEMANTIC_RETRIEVAL,
+                "attempt_id": args.attempt_id,
+                "stage_status": "FAILED",
+                "result_kind": "FAILED",
+                "error_code": "UNEXPECTED_ANALYSIS_FAILURE",
+                "errors": [str(exc)],
+                "message": str(exc),
+            }
+            print(json.dumps(failure_payload, sort_keys=True, separators=(",", ":")))
+            return 1
     try:
         synthetic_preflight, admission_bindings = _load_cli_synthetic_preflight(args)
         if args.command == "prepare-real":
