@@ -1,0 +1,165 @@
+# VIP B-first A2 FFmpeg / FFprobe tool-identity preflight design
+
+**Date:** 2026-11-07 (Europe/Istanbul)
+
+**Status:** DESIGN ONLY — no Canonical source change, producer push, runner execution, tool invocation, media, artifact, or repository-setting change.
+**Disposition:** `A2_BLOCKED_TOOL_IDENTITY`; `A3_NOT_RUN`. This report proposes a separately authorized, media-free identity preflight (Strategy B) as the least complex defensible next step. It does not amend or extend the existing Stage A operational authorization.
+
+## 1. Decision and evidence labels
+
+The existing record remains `A2_BLOCKED_TOOL_IDENTITY`. **No independently verified pair of exact FFmpeg and FFprobe executable-byte SHA-256 digests for the intended GitHub-hosted `ubuntu-24.04` producer environment was found in the records reviewed for this design.** The new report does not invent hashes or authorize measuring them.
+
+Use these claim labels throughout:
+
+- **VERIFIED** — observed in an exact pinned Git object, an official source, or a current read-only source inspected for this report. The boundary of the observation is stated.
+- **REPORTED** — stated by a prior worker/audit but not independently reproduced from the underlying system in this report.
+- **INFERENCE** — reasoned conclusion from identified observations, not a direct measurement.
+- **NOT_OBSERVED** — evidence is absent or the relevant operation has not occurred.
+
+### Current state
+
+| Claim | Class | Basis and limit |
+|---|---|---|
+| Existing owner approval is conditional on the specified A1–A3 Stage A sequence; it does not authorize unspecified future runs. | VERIFIED | Pinned owner authorization [af8b1de…](https://github.com/Centaurioun/video-intelligence-pipeline-2/blob/af8b1de7286095e8ed86a3fb11e08006cdcdf8ec/docs/decisions/2026-11-07_VIP_BFIRST_B2_STAGE_A_OWNER_OPERATIONAL_AUTHORIZATION.md), full text independently fetched from the exact ref. |
+| The execution plan authorizes documentation only for this future work; it explicitly does not authorize tool probing, FFmpeg/FFprobe execution, a new preflight workflow/run, an additional push, artifact operations, or administrative variable/ruleset changes. | VERIFIED | Pinned plan [c7761a2…](https://github.com/Centaurioun/video-intelligence-pipeline-2/blob/c7761a274a432e658df4aee366b50bc900a985a4/docs/superpowers/plans/2026-11-06-vip-bfirst-b2-stage-a-issuance-workflow-execution-plan.md), full text independently fetched from the exact ref. |
+| A1 local source/test results and the earlier effective ruleset/variable observations are `REPORTED` by the closure audit; the audit records that the A1 commit/ref and privileged variable readback could not be independently reproduced through its GitHub connector. | VERIFIED as a statement in the audit; underlying A1 CI/system facts remain REPORTED | Pinned [closure review 319da4f…](https://github.com/Centaurioun/video-intelligence-pipeline-2/blob/319da4f0e6f7deffd76483792d3c244b63b0b6ab/docs/reviews/2026-11-07-vip-bfirst-b2-stage-a-a1-a2-tool-identity-closure-review.md). The locally available A1 commit object was read-only inspected; this does not make it a remotely auditable GitHub commit. |
+| The A1 producer source requires externally preapproved executable hashes and measures actual executable bytes before running tools. Its identity routine then invokes each binary with `-version`; production later invokes FFmpeg and FFprobe for generation/probing. | VERIFIED | Canonical local commit `413d032e5635e4d8670e5565856f7fcfcfaca3ff`, `tests/vip_fvs/fixtures/generated_video/build_pinned_video.py`; its parent adds `.github/workflows/bfirst-pinned-video-issuance.yml`. Canonical worktree is dirty and was not modified. |
+| A1 exact hosted-runner executable hashes, versions, package/build provenance, `mpeg4` encoder capability, and successful media measurements exist. | NOT_OBSERVED | No authorized issuance run has occurred; the closure review preserves `A2_BLOCKED_TOOL_IDENTITY` and `A3_NOT_RUN`. |
+| The intended runner label `ubuntu-24.04` fixes one executable-byte set for future runs. | FALSE as an inference from the label; the label alone does not pin bytes | Official runner-image project documents weekly image updates, labels, per-run image identification, and the `Set up job` log as the source for the deployed image version. The current Ubuntu 24.04 inventory does not list FFmpeg or FFprobe in its software or apt-package inventory. See [runner-images README](https://github.com/actions/runner-images) and [Ubuntu 24.04 inventory](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md). |
+
+## 2. Search result: exact executable-byte evidence is unavailable
+
+### What an adequate existing receipt would have to prove
+
+Strategy A is eligible only if an already-existing, independently reviewable record binds **both** tools to the intended issuer environment and includes, at minimum:
+
+1. The authenticated GitHub Actions run/repository, workflow source SHA, ref/event/attempt, job ID, runner label, and observed `ImageOS` plus `ImageVersion`.
+2. The absolute path selected for each executable and its resolved target path; file type/size; SHA-256 computed over the exact executable bytes; and enough provenance to establish how those bytes arrived on that runner.
+3. Package name, architecture, exact installed version/build/revision and repository/package origin where applicable. Tool-reported version/build configuration is useful corroboration but is not a byte identity.
+4. A reviewer independent of the producer who has checked the run/log/artifact provenance and separately authorized expected values **before** the producer invokes either executable.
+5. Explicit scope/expiry and a declared runner threat model. A hash read out of the first A2 producer run and approved afterward does not satisfy preapproval.
+
+No such complete record was found. The pinned closure review reports that the two intended digest variables were absent at its check, while acknowledging that privileged Actions-variable readback was not independently available to that reviewer. We preserve that distinction: the variable absence is **REPORTED**, not newly verified here.
+
+### Why adjacent evidence does not qualify
+
+| Candidate evidence | What it can establish | Why it does not supply the required A2 digest pair |
+|---|---|---|
+| `runs-on: ubuntu-24.04` | **VERIFIED:** workflow selects that runner label. | The label selects an image family, not a permanent VM snapshot or executable-byte identity. Image deployments roll forward; record the actual `ImageVersion` from the run. |
+| Runner image release/readme, software inventory, `ImageVersion` | **VERIFIED:** public image source describes image versions and installed software. The current readme says image `20261101.360.1`; neither FFmpeg nor FFprobe appears in the listed software or apt package inventory. | Inventory omission does not prove the tools are absent: they may be supplied by other image/runtime mechanisms. Conversely, the inventory does not bind any path or hash. It is not an executable-byte attestation. The public image version also is not an exact hash of each file installed on the runner. |
+| Ubuntu Noble package version | **VERIFIED:** Ubuntu package search lists `ffmpeg` `7:6.1.1-3ubuntu5` for Noble across amd64 and other architectures at the time checked. | A package-catalog version is not evidence that the GitHub runner installed that package or version. It also does not alone report hashes of the extracted `/usr/bin/ffmpeg` and `/usr/bin/ffprobe` files. A `.deb` archive digest identifies the archive bytes; executable-file SHA-256 is a distinct digest over extracted bytes. A candidate could be established from an authenticated exact package and extraction, but that would still need proof that those files are the runner's exact binaries and build. See [Ubuntu package search](https://packages.ubuntu.com/ffmpeg). |
+| FFmpeg upstream source tag/tarball or build version | Source/release lineage or build intent. | Does not bind compiler, configure flags, linked libraries, downstream patches, build reproducibility, or resulting executable bytes. Source hash is not executable hash. |
+| Local Mac FFmpeg/FFprobe hashes in historical Canonical preview records | **VERIFIED:** prior local evidence includes tool digest fields (for example `9f5ddd…` and `0ecd5e…`) under a Mac-local preview authorization. | Those are old, local, non-production preview records with Mac-specific environment/path context, not measurements of the intended Linux hosted runner. They are not transferable preapprovals. Their recorded context does not identify the exact Ubuntu executable bytes. |
+| A1 producer's `ffmpeg -version` / `ffprobe -version` strings | If run, reports version/build text from those processes. | **NOT_OBSERVED** for A1 hosted execution. Version strings are not unique byte hashes and are obtained by executing the tools. They cannot provide a pre-run expected hash. |
+| Digest printed by the first production run | Would be a producer claim about its own current executable. | Self-reported output cannot establish an independently approved trust anchor. Approving it retrospectively would reverse the explicit preapproval boundary and would make the same runner both claimant and authority. |
+
+**Conclusion — Strategy A:** `NOT_AVAILABLE_ON_REVIEWED_EVIDENCE`. Continue no-push/no-run. If a qualifying prior receipt is discovered later, an independent reviewer may reassess it against the exact A2 final producer SHA, environment, time window, and expected-digest variables. Do not use A as a presumption.
+
+## 3. Relevant workflow/source behavior and required identity distinction
+
+The A1 workflow is `push`-only on `feature/vip-bfirst-video-issuance-20261106`, uses narrow paths, requests `contents: read` and `actions: read`, and selects `ubuntu-24.04`. The source resolves `ffmpeg` and `ffprobe` from `PATH`, hashes executable file contents and compares them to externally configured `BFIRST_B2_APPROVED_FFMPEG_SHA256` / `BFIRST_B2_APPROVED_FFPROBE_SHA256`, then runs the tools. The workflow's expected producer SHA variable binds run/ref/workflow identity; it is a **source identity control**, not a tool identity control. It must not be conflated with the two tool SHA variables.
+
+For any future A2 run, record these separately:
+
+- **Runner selection:** literal YAML label `ubuntu-24.04` (selection intent).
+- **Observed image:** `ImageOS`, `ImageVersion`, architecture/OS/kernel from the actual job setup context/log (runtime observation). The image readme or release is corroboration, not the run's identity.
+- **Executable location:** the command found on `PATH`, canonical resolved absolute path, and exact file stat/type/size. Guard against changing the file between hash and invocation; hash and execute the same resolved regular file. `ffmpeg` and `ffprobe` are separate files and require separate hashes.
+- **Executable identity:** SHA-256 of each actual executable byte stream. It is not package SHA, source archive SHA, job SHA, artifact ZIP digest, or MP4 digest.
+- **Build/provenance:** executable version/configuration, owning package and version/architecture/revision, package origin and package archive provenance where observable. These explain provenance but do not replace executable hash equality.
+- **Capability:** `mpeg4` encoder availability and successful fixed-output validation are measured only by a separately authorized producer execution. A version string or package name alone cannot prove the desired encoder is compiled and functional.
+- **Workflow identity:** repository, event, ref, workflow_ref, `github.sha`, `github.workflow_sha`, and `run_attempt`. The existing expected-source-SHA gate checks these only. Branch/path filters select a run and are not independent authorization.
+
+The exact SHA-256 comparison must happen before any FFmpeg or FFprobe process starts. A missing, malformed, unresolved, changed, mismatched, unreadable, non-regular, or unapproved executable is a hard failure; no package installation, alternate executable, retry, reissue, or fallback is allowed by the current Stage A packet. If identity checks pass, actual `mpeg4` output, stream count/type, dimensions, duration, frame rate/count, PTS/timebase, decode, output byte limit, artifact member set and artifact identities remain their own measured gates. This design does not reinterpret media measurements or the preserved temporal-contract boundary.
+
+## 4. Strategies
+
+### A — Reuse an existing independently verified receipt
+
+**Disposition:** Not currently supported. Search found no existing authenticated receipt with exact FFmpeg and FFprobe file-byte hashes for the intended GitHub-hosted Ubuntu issuer. The A1 closure review specifically calls for this search and states that runner version/hash/capability remain `NOT_OBSERVED`.
+
+**Reopen only if:** a separately sourced, independently reviewed prior record supplies both hashes, actual runner image evidence, resolved paths, executable/package provenance, approval-before-use evidence, and bounded scope/expiry. Confirm that exact candidate hashes are already independently approved and remain valid for this producer run. Version-only manifests and values copied from the A1 workflow's eventual own output do not qualify.
+
+### B — Separately authorized media-free tool-identity preflight (recommended)
+
+**Disposition:** Least complex defensible discovery/closure step, if separately approved. It uses one carefully bounded GitHub-hosted run to measure the installed tool files without running the tools or touching media. Its result is a **candidate** identity record, not a guarantee that a subsequent hosted producer receives the same bits.
+
+#### Proposed bounded implementation and trigger
+
+1. **Repository/source:** Canonical `Centaurioun/video-intelligence-pipeline`; new dedicated branch `design/bfirst-a2-tool-identity-preflight-20261107`, based on a newly reverified Canonical read-only source SHA that the future owner packet names. Do not change Canonical `main`. The new workflow must be its own exact reviewed source path, for example `.github/workflows/bfirst-tool-identity-preflight.yml`, and the packet must name its exact final commit SHA and tree before any branch update.
+2. **Trigger:** one normal non-force push of exactly that reviewed commit to the new branch, with `push` event restricted to that exact ref and the one workflow path. The push itself automatically executes the preflight; therefore the future authorization must explicitly authorize **that one push and the one automatic Actions run**. Do not use `workflow_dispatch` for an unpublished feature workflow: GitHub requires its workflow to exist on the default branch for that event, which would expand scope to `main`. Do not add a trigger to the issuance workflow or use the production issuance branch.
+3. **Independent expected-source gate:** before any checkout or read of the runner tool files, an inline first step checks repository, `push` event, exact branch/ref, exact `workflow_ref`, `github.sha`, `github.workflow_sha`, `run_attempt == 1`, and equality to a separately configured non-secret Actions variable such as `BFIRST_B2_TOOL_PREFLIGHT_EXPECTED_SHA`. An authorized administrator sets and independently reads that variable back to the exact reviewed commit SHA before the push. Mismatch or unavailable readback means no push. The variable binds workflow source; it is not itself a trust claim about tool hashes. Effective create/update actor/ref controls for the preflight branch must be independently established before the one push, and never inferred from a `main` ruleset or the source-SHA variable.
+4. **Permissions:** set workflow/job token permissions to `{}` (no `GITHUB_TOKEN` scopes), with no secrets, no environment approvals relied upon, no `actions: write`, no artifact upload, no API calls, no checkout action, and no external network. Use only context values provided by the runner and inline reviewed read-only script/commands. If repository policy requires a permission that creates additional access, stop and seek an amended packet.
+5. **Finite runtime and resources:** one job; `timeout-minutes: 5` (or a lower owner-approved limit); one runner, no matrix, no retry, no concurrency fan-out, no package installation/update, no cache, no container pull, and no media or arbitrary input files. No FFmpeg/FFprobe process invocation, including `-version`, `-encoders`, `-buildconf`, or probing. A small fixed read of executable bytes for SHA-256 is permitted only after explicit owner approval. Limit file reads and output to the two binaries plus bounded package/image metadata; do not write files except runner-managed log/summary output. CPU/egress are confined to this short metadata/hash job under the live resource policy; any missing executable or unexpected resource need fails closed.
+6. **Measured observations:** literal requested label; `ImageOS`, `ImageVersion`, architecture/kernel and UTC timestamp; resolved command path for each tool; canonical target path; file type, size and SHA-256; owning package and package version/architecture/source/revision from read-only package metadata (e.g. `dpkg-query`); relevant package origin/provenance facts available locally; read-only binary-format/build metadata if safely extractable without executing the program; any ambiguity such as alternatives, symlink indirection, unowned files, missing package data, or different tools at multiple `PATH` locations. Record `mpeg4 support = NOT_OBSERVED` because proving runtime capability requires an actual tool invocation/generation. No claim of immutable image or future runner continuity.
+7. **Output:** a bounded textual job summary only (no artifact), containing the observations, expected preflight source SHA, run URL/ID, numeric job ID if independently obtained from permitted log/API evidence, event/ref/attempt, and explicit limitations. The runner itself does not self-approve its hash. If a durable receipt is considered necessary, include its exact destination/retention/read scope in the new authorization; do not silently add an upload.
+8. **Independent review and approval:** a different read-only reviewer, in a separate native thread, independently checks the exact workflow SHA/tree and source, trigger and branch controls, live run/ref/event/workflow SHA/attempt/image evidence, raw job logs, paths, file hashes and package claims. Reviewer records any missing or unverifiable property as `NOT_OBSERVED`. Before using the result, the Repository Owner separately approves the two exact hashes, scope (Canonical issuer workflow and intended runner family/image), approval date, expiry/review deadline, threat model, and failure behavior. An authorized administrator then sets and reads back `BFIRST_B2_APPROVED_FFMPEG_SHA256` and `BFIRST_B2_APPROVED_FFPROBE_SHA256` to those exact approved values. No tool hash is populated from an unreviewed log.
+9. **One separate authorization for future A2:** after that review/approval, obtain a new bounded A2 authorization naming the exact existing final producer SHA/tree, approved hash values, image/expiry scope, all existing A2 actor/ref and expected-producer-SHA gates, one `push` and its automatic run, one synthetic output, and one artifact upload. The existing A1–A3 authorization permits one production issuance push/run; it does not include this additional preflight push/run. This proposal adds no operational authority.
+
+#### Fail-closed rules and limits
+
+- Any missing/multiple/unresolved executable, unexpected file type/size/package, invalid or absent image metadata, permission/error, hash read failure, unexpected command/path, wrong workflow context, or incomplete evidence => stop and record `BLOCKED`; no execution, upload, or automatic repair.
+- Preflight does not call FFmpeg/FFprobe and therefore does not establish runtime `-version` output, `mpeg4` encoder availability, generation/decode behavior, media properties, or capability. Those remain `NOT_OBSERVED` until the separately authorized A2 job performs its own pre-execution hash comparison and subsequent bounded production checks.
+- The next hosted job can land on a different image revision or have different files even under the same `ubuntu-24.04` label. A preflight SHA is only a **candidate external expected digest**. The A2 producer must independently re-resolve and hash the exact binaries before executing them, and compare against owner/admin-approved external values. Any drift fails closed; do not turn a mismatch into a retry or reissue.
+- Even matching hashes across two hosted jobs establish byte equality under the declared honest-runner observation model; they do not prove GitHub's host is uncompromised, immutable, or resistant to same-service operator tampering. `ImageVersion`, package provenance and independent review strengthen the record but do not transform the standard hosted label into an immutable runner pin.
+- If no trustworthy process-level external approval path can be provided for the preflight run and its measurements, B does not close A2; stop at design and reconsider C or an owner-selected trust service.
+
+### C — Independently pinned authenticated tool distribution/container
+
+**Disposition:** Stronger potential continuity than a moving hosted image, but materially more design and trust surface. It is not a silent substitute under Stage A.
+
+An independently built and authenticated OCI image or tool bundle could package FFmpeg and FFprobe with exact executable hashes, package/build provenance, architecture, `mpeg4` configuration, digest-addressed immutable reference, signature/attestation verification, and documented update/revocation procedure. The producer would pull or access that pinned digest and reverify both executable bytes before use. A container base/tag without a digest is not a pin; a pinned image digest by itself does not prove source/build authenticity, included executables, publisher trust, or vulnerability status.
+
+This route introduces new source/build ownership, toolchain and base-image trust, signing-key and revocation policy, artifact hosting and retention, credential/network/pull permissions, container-runtime setup, OS/library compatibility, and additional egress. It may require a tool-image build and registry publication before the producer, each with its own exact SHA, provenance review, permissions, and authorization. It can reduce drift between preflight and producer if both consume the same immutable authenticated distribution; it still cannot guarantee the host runtime or protect against a compromised runner, and the producer must verify what it actually executes. Select C only if B cannot provide an accepted trust chain or if reproducibility is a stronger requirement worth this extra supply-chain and maintenance burden.
+
+## 5. Recommendation
+
+**Recommend B**, after the existing external-reference search yields no qualifying receipt (Strategy A remains `NOT_AVAILABLE_ON_REVIEWED_EVIDENCE`). B is the least complex strategy that can produce externally reviewable, exact executable-byte measurements without executing tools or handling media. It requires a new, explicit owner/admin authorization for the preflight's source path, branch actor/ref controls, exact expected source SHA, a one-time push-triggered run, token permissions, finite limits, output method, reviewer, hash approval and expiry. **It does not authorize the preflight now.**
+
+Preserve the following status until any future independent evidence changes it:
+
+- A1 producer candidate: `A1_REPORTED_LOCALLY_VERIFIED_NOT_REMOTE_AUDITABLE` (as stated by the pinned closure review).
+- A2: `A2_BLOCKED_TOOL_IDENTITY`.
+- A3: `A3_NOT_RUN`.
+- `STRICT_ANALYZE_LOCAL_VIDEO_NOT_OBSERVED`.
+- `CORE01_LEGACY_INTERVAL_BLOCKED_BY_CONTRACT`.
+
+No A2 issuance push, FFmpeg/FFprobe invocation, generated media, upload/download, tool installation, ruleset/variable mutation, Gate promotion, Canonical merge, or Stage B/C is authorized by this design.
+
+## 6. Exact bounded future authorization packet proposed
+
+An owner/admin decision may authorize **only** this next preflight step, using a packet that names each item below. Anything unspecified stays prohibited:
+
+> **Authorize one read-only, media-free FFmpeg/FFprobe executable-identity preflight** in `Centaurioun/video-intelligence-pipeline` from a newly verified exact Canonical source base. Permit one reviewed workflow source file at `.github/workflows/bfirst-tool-identity-preflight.yml`, one unique branch `design/bfirst-a2-tool-identity-preflight-20261107`, and one exact reviewed commit SHA/tree. Permit one ordinary non-force push of that commit, which itself triggers exactly one `push`-event GitHub Actions run on `ubuntu-24.04`, exact branch and exact workflow path. Before pushing, require independently verified effective branch/ref actor controls and an administrator-set/read-back `BFIRST_B2_TOOL_PREFLIGHT_EXPECTED_SHA` equal to the reviewed commit. Require a first step that validates repository/event/ref/workflow_ref/source SHA/workflow SHA/attempt before checkout or tool-file inspection. Require workflow/job token permissions `{}`, no secrets, no checkout/action dependencies, no API calls, uploads, downloads, caches, package installs, network egress, artifacts, matrix, retry or manual dispatch. Bound the job to one runner and one attempt with `timeout-minutes: 5`; perform no media access and do not invoke either binary in any form. Permit only bounded read-only resolution/stat/hash of the two selected executable files and local package/image metadata. Emit only a bounded textual job summary with explicit image, path, executable-byte SHA-256, package/build facts, and all unavailable fields marked `NOT_OBSERVED`; `mpeg4` capability remains `NOT_OBSERVED`. Require an independent read-only reviewer on the exact workflow SHA and actual run record. No preflight result authorizes A2, sets approved tool variables, changes Canonical main, or triggers another workflow. Stop on any mismatch, missing identity/provenance, or scope expansion. After review, obtain a separate owner approval of the exact two hashes and expiry before an authorized admin sets and reads back the A2 approved digest variables. A further exact-SHA A2 authorization remains mandatory before the single production push/run and artifact upload already described in the owner authorization.
+
+This is a **proposed packet**, not an approval request answered by implication. The owner may reject B or choose a separately scoped C design.
+
+## 7. Sources and uncertainty register
+
+### Pinned project evidence
+
+- Owner authorization, LAB `af8b1de7286095e8ed86a3fb11e08006cdcdf8ec`: [source](https://github.com/Centaurioun/video-intelligence-pipeline-2/blob/af8b1de7286095e8ed86a3fb11e08006cdcdf8ec/docs/decisions/2026-11-07_VIP_BFIRST_B2_STAGE_A_OWNER_OPERATIONAL_AUTHORIZATION.md).
+- Stage A plan, LAB `c7761a274a432e658df4aee366b50bc900a985a4`: [source](https://github.com/Centaurioun/video-intelligence-pipeline-2/blob/c7761a274a432e658df4aee366b50bc900a985a4/docs/superpowers/plans/2026-11-06-vip-bfirst-b2-stage-a-issuance-workflow-execution-plan.md).
+- A1/A2 closure review, LAB `319da4f0e6f7deffd76483792d3c244b63b0b6ab`: [source](https://github.com/Centaurioun/video-intelligence-pipeline-2/blob/319da4f0e6f7deffd76483792d3c244b63b0b6ab/docs/reviews/2026-11-07-vip-bfirst-b2-stage-a-a1-a2-tool-identity-closure-review.md).
+- A1 producer source, Canonical `413d032e5635e4d8670e5565856f7fcfcfaca3ff`: [source](https://github.com/Centaurioun/video-intelligence-pipeline/blob/413d032e5635e4d8670e5565856f7fcfcfaca3ff/tests/vip_fvs/fixtures/generated_video/build_pinned_video.py). **Note:** this SHA is locally present and was read-only inspected; the closure review reports GitHub did not resolve it and it is not a verified remote commit/ref.
+- A1 workflow, Canonical parent implementation commit `b2d07a51a3a2d3a2b9592980b3a7d041cc83b355`: [source](https://github.com/Centaurioun/video-intelligence-pipeline/blob/b2d07a51a3a2d3a2b9592980b3a7d041cc83b355/.github/workflows/bfirst-pinned-video-issuance.yml). Its local object and branch are not evidence that GitHub received a producer push.
+- Historical local preview authorization tool digests are in Canonical's [2026-09-21 preview authorization record](https://github.com/Centaurioun/video-intelligence-pipeline/blob/3bfcc2ba221b36df6773e630b44479ec961d630a/docs/agent-runs/run-20260921-preview-debug-v1/preview-authorization-v2-review-only.json); their local Mac/preview scope makes them inapplicable to this Linux issuer.
+
+### Primary platform/package references
+
+- GitHub-hosted runner image names, label behavior, update cadence and per-run image-version lookup: [actions/runner-images README](https://github.com/actions/runner-images) and [GitHub-hosted runners documentation](https://docs.github.com/en/actions/concepts/runners/github-hosted-runners).
+- Current Ubuntu 24.04 image and installed software/apt package inventory: [Ubuntu2404-Readme.md](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md). The observed readme is mutable and is corroborative current public documentation, not the source for a particular past/future job's binary bytes.
+- Ubuntu Noble FFmpeg package version/catalog information: [packages.ubuntu.com/ffmpeg](https://packages.ubuntu.com/ffmpeg). Package catalog facts do not prove the GitHub runner installed that package or that a particular executable has a particular hash.
+- GitHub trigger semantics and `github.workflow_sha` / context fields: [events that trigger workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events), [workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax), and [contexts reference](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts), as cited in the pinned Stage A plan.
+
+### Open uncertainties
+
+- **NOT_OBSERVED:** whether the exact intended hosted runner has FFmpeg/FFprobe on `PATH`, and whether one or multiple candidates resolve.
+- **NOT_OBSERVED:** its eventual `ImageVersion`, `ImageOS`, architecture, package ownership/version/revision and binary hashes.
+- **NOT_OBSERVED:** whether the executable hashes repeat on a later hosted job, whether a future runner receives the same image, or whether current package/build metadata matches the expected workflow.
+- **NOT_OBSERVED:** `mpeg4` encoder availability and valid 64×64/10-second/4-fps/40-frame output under the eventual tools; no binary was invoked.
+- **NOT_OBSERVED:** privileged current Actions variable values or a new preflight branch's effective actor/ref policy. Earlier claims are preserved as `REPORTED` in the closure review.
+- **INFERENCE:** an exact digest match checked in the actual A2 producer immediately before tool invocation is the narrowest useful control under the standard hosted-runner threat model; it detects tool-byte drift but does not make the hosted image immutable or independently attest the host.
+
+## 8. Self-review / execution boundary
+
+This report is design documentation only. It preserves the existing records and recommends no source or workflow mutation. No FFmpeg/FFprobe process was executed, no media was created/read, no Actions workflow was launched, and no artifact or repository setting was touched. The only future operation described is the bounded packet in §6, which needs its own explicit owner/admin authorization.
